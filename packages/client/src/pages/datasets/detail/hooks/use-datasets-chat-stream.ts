@@ -11,6 +11,7 @@ import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getApiBaseUrl } from "@/utils/api";
+import { getErrorMessage } from "@/utils/error";
 
 const STOP_FINALIZE_DELAY_MS = 350;
 const USAGE_HYDRATE_RETRY_INTERVAL_MS = 1000;
@@ -230,6 +231,7 @@ export function useDatasetsChatStream(
     },
     onError: (error) => {
       console.error("Error streaming datasets chat", error);
+      const message = getErrorMessage(error, "对话失败，请稍后重试");
       setStatusOverride("error");
       setChatMessages((prev) => {
         if (prev.length === 0) return prev;
@@ -243,11 +245,17 @@ export function useDatasetsChatStream(
               ...(lastMessage.parts || []),
               {
                 type: "data-error",
-                data: error?.message || "Unknown error",
+                data: message,
               },
             ],
           };
+          return updated;
         }
+        updated.push({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          parts: [{ type: "data-error", data: message }],
+        });
         return updated;
       });
     },
