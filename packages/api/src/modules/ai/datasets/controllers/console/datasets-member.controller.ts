@@ -1,6 +1,7 @@
 import { TEAM_ROLE } from "@buildingai/constants/shared/team-role.constants";
 import { type UserPlayground } from "@buildingai/db";
 import { MemberApplicationStatus } from "@buildingai/db/entities";
+import { BuildFileUrl } from "@buildingai/decorators";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { ConsoleController } from "@common/decorators/controller.decorator";
@@ -27,6 +28,7 @@ export class DatasetsMemberConsoleController {
 
     @Get(":datasetId/members")
     @Permissions({ code: "list", name: "成员列表", description: "分页查询知识库成员" })
+    @BuildFileUrl(["***.avatar"])
     async listMembers(@Param("datasetId") datasetId: string, @Query() query: ListMembersDto) {
         const dataset = await this.datasetsService.findOneById(datasetId);
         if (!dataset) throw HttpErrorFactory.notFound("知识库不存在");
