@@ -1,4 +1,8 @@
-import { type UploadFileResult, uploadInitFile } from "@buildingai/services/shared";
+import {
+  type UploadFileParams,
+  type UploadFileResult,
+  uploadInitFile,
+} from "@buildingai/services/shared";
 import { useConfigStore } from "@buildingai/stores";
 import { cn } from "@buildingai/ui/lib/utils";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -43,6 +47,7 @@ export interface ImageUploadProps extends VariantProps<typeof imageUploadVariant
   disabled?: boolean;
   accept?: string;
   maxSize?: number;
+  params?: UploadFileParams;
   placeholder?: React.ReactNode;
   onChange?: (url: string | undefined, result?: UploadFileResult) => void;
   onUploadStart?: () => void;
@@ -61,6 +66,7 @@ function ImageUpload({
   disabled,
   accept = "image/*",
   maxSize = 5 * 1024 * 1024,
+  params,
   placeholder,
   onChange,
   onUploadStart,
@@ -84,6 +90,7 @@ function ImageUpload({
     accept,
     maxSize,
     maxFiles: 1,
+    params,
     onUploadStart: () => onUploadStart?.(),
     onUploadSuccess: (file, result) => {
       const url = result.url;
@@ -107,7 +114,7 @@ function ImageUpload({
       try {
         setIsInitUploading(true);
         onUploadStart?.();
-        const result = await uploadInitFile(file);
+        const result = await uploadInitFile(file, params);
         setInternalValue(result.url);
         onChange?.(result.url, result);
       } catch (err) {
@@ -116,7 +123,7 @@ function ImageUpload({
         setIsInitUploading(false);
       }
     },
-    [maxSize, onChange, onUploadStart, onUploadError],
+    [maxSize, onChange, onUploadStart, onUploadError, params],
   );
 
   const handleInitInputChange = React.useCallback(

@@ -90,7 +90,7 @@ export class UploadController extends BaseController {
         }
 
         // Save file (request.user will be null for public routes)
-        return this.uploadService.saveUploadedFile(file, req, dto.description);
+        return this.uploadService.saveUploadedFile(file, req, dto.description, dto.extensionId);
     }
 
     /**

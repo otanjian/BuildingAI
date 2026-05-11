@@ -3,6 +3,7 @@ import axios, { type AxiosProgressEvent } from "axios";
 
 import { apiHttpClient } from "../base";
 import {
+    resolveUploadFileParams,
     uploadFile,
     type UploadFileParams,
     type UploadFileResult,
@@ -117,7 +118,12 @@ export async function getUploadSignature(
     size: number,
     extensionId?: string,
 ): Promise<SignatureResult> {
-    return apiHttpClient.post<SignatureResult>("/upload/signature", { name, size, extensionId });
+    const resolvedParams = resolveUploadFileParams(extensionId ? { extensionId } : undefined);
+    return apiHttpClient.post<SignatureResult>("/upload/signature", {
+        name,
+        size,
+        extensionId: resolvedParams?.extensionId,
+    });
 }
 
 export async function uploadToOSS(
@@ -178,13 +184,18 @@ export async function uploadFileAuto(
     params?: UploadFileParams,
     options?: UploadRequestOptions,
 ): Promise<UploadFileResult> {
+    const resolvedParams = resolveUploadFileParams(params);
     const storageConfig = await getActiveStorageConfig();
 
     if (storageConfig.storageType === "local") {
-        return uploadFile(file, params, options);
+        return uploadFile(file, resolvedParams, options);
     }
 
-    const signatureResult = await getUploadSignature(file.name, file.size, params?.extensionId);
+    const signatureResult = await getUploadSignature(
+        file.name,
+        file.size,
+        resolvedParams?.extensionId,
+    );
 
     if (!isCloudSignatureResult(signatureResult)) {
         throw new Error("No signature");
@@ -212,8 +223,8 @@ export async function uploadFileAuto(
         size: file.size,
         extension: signatureResult.metadata.extension,
         type: signatureResult.metadata.mimeType,
-        description: params?.description,
-        extensionId: params?.extensionId,
+        description: resolvedParams?.description,
+        extensionId: resolvedParams?.extensionId,
         path: signatureResult.fullPath,
     });
 }
@@ -223,11 +234,12 @@ export async function uploadFilesAuto(
     params?: UploadFileParams,
     options?: UploadRequestOptions,
 ): Promise<UploadFileResult[]> {
+    const resolvedParams = resolveUploadFileParams(params);
     const storageConfig = await getActiveStorageConfig();
 
     if (storageConfig.storageType === "local") {
-        return uploadFiles(files, params, options);
+        return uploadFiles(files, resolvedParams, options);
     }
 
-    return Promise.all(files.map((file) => uploadFileAuto(file, params)));
+    return Promise.all(files.map((file) => uploadFileAuto(file, resolvedParams, options)));
 }

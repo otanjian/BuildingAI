@@ -20,18 +20,42 @@ export type UploadRequestOptions = {
     onUploadProgress?: (event: AxiosProgressEvent) => void;
 };
 
+function inferExtensionIdFromLocation(): string | undefined {
+    if (typeof window === "undefined") {
+        return undefined;
+    }
+
+    const pathname = window.location.pathname || "";
+    const match = pathname.match(/(?:^|\/)extension\/([^/]+)/);
+    return match?.[1] || undefined;
+}
+
+export function resolveUploadFileParams(params?: UploadFileParams): UploadFileParams | undefined {
+    const extensionId = params?.extensionId || inferExtensionIdFromLocation();
+
+    if (!params && !extensionId) {
+        return undefined;
+    }
+
+    return {
+        ...params,
+        ...(extensionId ? { extensionId } : {}),
+    };
+}
+
 export async function uploadFile(
     file: File,
     params?: UploadFileParams,
     options?: UploadRequestOptions,
 ): Promise<UploadFileResult> {
+    const resolvedParams = resolveUploadFileParams(params);
     const formData = new FormData();
     formData.append("file", file);
-    if (params?.description) {
-        formData.append("description", params.description);
+    if (resolvedParams?.description) {
+        formData.append("description", resolvedParams.description);
     }
-    if (params?.extensionId) {
-        formData.append("extensionId", params.extensionId);
+    if (resolvedParams?.extensionId) {
+        formData.append("extensionId", resolvedParams.extensionId);
     }
 
     return apiHttpClient.post<UploadFileResult>("/upload/file", formData, {
@@ -47,15 +71,16 @@ export async function uploadFiles(
     params?: UploadFileParams,
     options?: UploadRequestOptions,
 ): Promise<UploadFileResult[]> {
+    const resolvedParams = resolveUploadFileParams(params);
     const formData = new FormData();
     files.forEach((file) => {
         formData.append("files", file);
     });
-    if (params?.description) {
-        formData.append("description", params.description);
+    if (resolvedParams?.description) {
+        formData.append("description", resolvedParams.description);
     }
-    if (params?.extensionId) {
-        formData.append("extensionId", params.extensionId);
+    if (resolvedParams?.extensionId) {
+        formData.append("extensionId", resolvedParams.extensionId);
     }
 
     return apiHttpClient.post<UploadFileResult[]>("/upload/files", formData, {
@@ -75,10 +100,14 @@ export async function uploadInitFile(
     params?: UploadFileParams,
     options?: UploadRequestOptions,
 ): Promise<UploadFileResult> {
+    const resolvedParams = resolveUploadFileParams(params);
     const formData = new FormData();
     formData.append("file", file);
-    if (params?.description) {
-        formData.append("description", params.description);
+    if (resolvedParams?.description) {
+        formData.append("description", resolvedParams.description);
+    }
+    if (resolvedParams?.extensionId) {
+        formData.append("extensionId", resolvedParams.extensionId);
     }
 
     return apiHttpClient.post<UploadFileResult>("/upload/init-file", formData, {
