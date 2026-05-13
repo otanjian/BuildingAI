@@ -1,5 +1,4 @@
-import { useConfigStore } from "@buildingai/stores";
-import { useAuthStore } from "@buildingai/stores";
+import { useAuthStore, useConfigStore } from "@buildingai/stores";
 import type { PromptInputMessage } from "@buildingai/ui/components/ai-elements/prompt-input";
 import { EditorContentRenderer } from "@buildingai/ui/components/editor";
 import {

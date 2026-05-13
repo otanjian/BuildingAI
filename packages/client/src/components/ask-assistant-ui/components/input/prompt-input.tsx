@@ -34,7 +34,14 @@ import {
   Square,
   X,
 } from "lucide-react";
-import type { ClipboardEvent, FormEvent, KeyboardEvent, ReactNode, RefObject } from "react";
+import type {
+  ClipboardEvent,
+  FocusEvent,
+  FormEvent,
+  KeyboardEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import { memo, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -62,6 +69,7 @@ export interface PromptInputProps {
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
   ) => void | Promise<void>;
+  onTextareaFocus?: (event: FocusEvent<HTMLTextAreaElement>) => void;
   onStop?: () => void;
   globalDrop?: boolean;
   multiple?: boolean;
@@ -141,6 +149,7 @@ const PromptInputInner = memo(
     textareaRef,
     status,
     onStop,
+    onTextareaFocus,
     globalDrop,
     multiple,
     onSubmit,
@@ -367,6 +376,7 @@ const PromptInputInner = memo(
         <AIPromptInputBody>
           <AIPromptInputTextarea
             ref={textareaRef}
+            onFocus={onTextareaFocus}
             onKeyDown={handleTextareaKeyDown}
             onPaste={handlePaste}
           />
@@ -503,6 +513,7 @@ export const PromptInput = memo((props: PromptInputProps) => {
     textareaRef,
     status = "ready",
     onSubmit,
+    onTextareaFocus,
     onStop,
     globalDrop,
     multiple,
@@ -521,6 +532,7 @@ export const PromptInput = memo((props: PromptInputProps) => {
         textareaRef={textareaRef}
         status={status}
         onSubmit={onSubmit}
+        onTextareaFocus={onTextareaFocus}
         onStop={onStop}
         globalDrop={globalDrop}
         multiple={multiple}
