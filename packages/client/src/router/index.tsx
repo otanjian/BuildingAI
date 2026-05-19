@@ -3,7 +3,7 @@ import GlobalError from "@buildingai/ui/components/exception/global-error";
 import NotFoundPage from "@buildingai/ui/components/exception/not-found-page";
 import MainLayout from "@buildingai/ui/layouts/main/index";
 import DefaultLayout from "@buildingai/ui/layouts/styles/default/index";
-import { createBrowserRouter } from "react-router-dom";
+import { createBrowserRouter, Navigate, useSearchParams } from "react-router-dom";
 
 import AgentsIndexPage from "@/pages/agents";
 import AgentChatPage from "@/pages/agents/detail/chat";
@@ -22,10 +22,18 @@ import InstallPage from "@/pages/install";
 import ConsoleLayout from "../layouts/console";
 import DynamicHomePage from "../pages";
 import AppIframePage from "../pages/apps/[identifier]";
+import { AppEmbeddedChatProvider } from "../providers/app-embedded-chat-provider";
 import ChatPage from "../pages/chat";
+import EmbedChatPage from "../pages/chat/embed";
 import { LoginPage } from "../pages/login";
 import { OAuthCallbackPage } from "../pages/login/oauth-callback";
 import AlipayReturnPage from "../pages/payment/alipay-return";
+
+function RedirectLegacyEmbedChat() {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  return <Navigate to={query ? `/embed/chat?${query}` : "/embed/chat"} replace />;
+}
 
 export const router = createBrowserRouter([
   {
@@ -47,6 +55,18 @@ export const router = createBrowserRouter([
       {
         path: "/payment/alipay-return",
         element: <AlipayReturnPage />,
+      },
+      {
+        path: "/embed/chat",
+        element: (
+          <AuthGuard>
+            <EmbedChatPage />
+          </AuthGuard>
+        ),
+      },
+      {
+        path: "/chat/embed",
+        element: <RedirectLegacyEmbedChat />,
       },
       {
         path: "/agents/:id/configuration",
@@ -117,7 +137,9 @@ export const router = createBrowserRouter([
             path: "/apps/:identifier/*",
             element: (
               <AuthGuard>
-                <AppIframePage />
+                <AppEmbeddedChatProvider>
+                  <AppIframePage />
+                </AppEmbeddedChatProvider>
               </AuthGuard>
             ),
           },

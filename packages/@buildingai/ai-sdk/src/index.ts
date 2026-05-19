@@ -71,6 +71,8 @@ export {
     type TongYiProviderSettings,
     volcengine,
     type VolcengineProviderSettings,
+    volcengineCoding,
+    type VolcengineCodingProviderSettings,
     wenxin,
     type WenXinProviderSettings,
     x,

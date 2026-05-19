@@ -12,6 +12,21 @@ import {
     useNavigate,
 } from "react-router-dom";
 
+/** Strip extension URL prefix so parent /apps/:id routes receive relative paths only. */
+export function normalizeExtensionPathForParent(pathname: string, base: string): string {
+    const baseWithSlash = base.startsWith("/") ? base : `/${base}`;
+    const normalizedBase = baseWithSlash.replace(/\/+$/, "");
+    const path = pathname.replace(/\/+$/, "") || "/";
+    if (path === normalizedBase) {
+        return "/";
+    }
+    if (path.startsWith(`${normalizedBase}/`)) {
+        const rest = path.slice(normalizedBase.length);
+        return rest || "/";
+    }
+    return pathname;
+}
+
 export type RouteOption = {
     base: string;
     routes?: RouteObject[];
@@ -28,7 +43,8 @@ export type RouteOption = {
  * - Extension → Parent: posts navigation message on route change
  * - Parent → Extension: listens for navigation commands from parent
  */
-function ParentFrameSync() {
+function createParentFrameSync(base: string) {
+    return function ParentFrameSync() {
     const location = useLocation();
     const navigate = useNavigate();
     const isParentNavigatingRef = useRef(false);
@@ -44,13 +60,13 @@ function ParentFrameSync() {
         window.parent.postMessage(
             {
                 type: "extension-navigate",
-                path: location.pathname,
+                path: normalizeExtensionPathForParent(location.pathname, base),
                 search: location.search,
                 hash: location.hash,
             },
             "*",
         );
-    }, [location.pathname, location.search, location.hash]);
+    }, [location.pathname, location.search, location.hash, base]);
 
     // Parent → Extension: handle browser back/forward from parent
     useEffect(() => {
@@ -59,43 +75,57 @@ function ParentFrameSync() {
         const handleMessage = (event: MessageEvent) => {
             if (event.data?.type !== "parent-navigate") return;
 
-            const path = event.data.path ?? "/";
+            const rawPath = event.data.path ?? "/";
             const search = event.data.search ?? "";
             const hash = event.data.hash ?? "";
-            const target = `${path}${search}${hash}`;
-            const current = `${location.pathname}${location.search}${location.hash}`;
+            const pathname =
+                rawPath === "/" || rawPath === ""
+                    ? "/"
+                    : rawPath.startsWith("/")
+                      ? rawPath
+                      : `/${rawPath}`;
+            const targetPath = normalizeExtensionPathForParent(location.pathname, base);
 
-            if (target !== current) {
+            if (pathname !== targetPath || search !== location.search || hash !== location.hash) {
                 isParentNavigatingRef.current = true;
-                navigate(target, { replace: true });
+                navigate({ pathname, search, hash }, { replace: true });
             }
         };
 
         window.addEventListener("message", handleMessage);
         return () => window.removeEventListener("message", handleMessage);
-    }, [location.pathname, location.search, location.hash, navigate]);
+    }, [location.pathname, location.search, location.hash, navigate, base]);
 
     return <Outlet />;
+    };
 }
 
-function ExtensionNotFoundPage() {
+function createExtensionNotFoundPage(base: string) {
+    return function ExtensionNotFoundPage() {
     const location = useLocation();
 
     useEffect(() => {
         if (window.parent === window) return;
 
+        const path = normalizeExtensionPathForParent(location.pathname, base);
+        // Only notify parent for non-root 404s (parent maps root to /apps/:id which must not 404).
+        if (path === "/" || path === "") {
+            return;
+        }
+
         window.parent.postMessage(
             {
                 type: "extension-not-found",
-                path: location.pathname,
+                path,
                 search: location.search,
                 hash: location.hash,
             },
             "*",
         );
-    }, [location.pathname, location.search, location.hash]);
+    }, [location.pathname, location.search, location.hash, base]);
 
     return <NotFoundPage />;
+    };
 }
 
 /**
@@ -105,6 +135,8 @@ function ExtensionNotFoundPage() {
  */
 export function defineRouteOption(option: RouteOption) {
     const { routes = [], consoleRoutes = [], consoleMenus = [], identifier } = option;
+    const ParentFrameSync = createParentFrameSync(option.base);
+    const ExtensionNotFoundPage = createExtensionNotFoundPage(option.base);
 
     return createBrowserRouter(
         [

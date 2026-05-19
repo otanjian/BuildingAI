@@ -16,6 +16,10 @@ export { siliconflow, type SiliconFlowProviderSettings } from "./siliconflow";
 export { spark, type SparkProviderSettings } from "./spark";
 export { tongyi, type TongYiProviderSettings } from "./tongyi";
 export { volcengine, type VolcengineProviderSettings } from "./volcengine";
+export {
+    volcengineCoding,
+    type VolcengineCodingProviderSettings,
+} from "./volcengine-coding";
 export { wenxin, type WenXinProviderSettings } from "./wenxin";
 export { x, type XProviderSettings } from "./x";
 export { zhipuai, type ZhipuAIProviderSettings } from "./zhipuai";

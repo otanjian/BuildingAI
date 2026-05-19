@@ -443,7 +443,15 @@ async function addExtensionToConfig(info) {
  * Insert extension record into database
  * @param {Object} info - Extension info
  */
-async function insertExtensionToDatabase(info) {
+async function insertExtensionToDatabase(info, options = {}) {
+    const {
+        type = 1,
+        isLocal = true,
+        enabled = true,
+        icon = "/static/extensions/default.png",
+        author,
+    } = options;
+
     // Dynamically import dotenv to load environment variables
     const dotenvPath = path.join(rootDir, ".env");
     if (await fs.pathExists(dotenvPath)) {
@@ -463,50 +471,201 @@ async function insertExtensionToDatabase(info) {
         database: process.env.DB_DATABASE || "buildingai",
     });
 
+    const authorJson = JSON.stringify(
+        author ?? {
+            avatar: "",
+            name: typeof info.author === "string" ? info.author : "",
+            homepage: "",
+        },
+    );
+
     try {
         await client.connect();
 
-        // Check if extension already exists in database
         const checkResult = await client.query("SELECT id FROM extension WHERE identifier = $1", [
             info.identifier,
         ]);
+        const exists = checkResult.rows.length > 0;
 
-        if (checkResult.rows.length > 0) {
-            Logger.warning("Database", `Extension ${info.identifier} already exists in database`);
-            return;
-        }
-
-        // Insert extension record
-        const insertQuery = `
+        const upsertQuery = `
             INSERT INTO extension (
-                name, identifier, version, description, type, 
-                support_terminal, is_local, status, author, 
-                created_at, updated_at
+                name, identifier, version, description, icon, type,
+                support_terminal, is_local, status, author,
+                alias_show, created_at, updated_at
             ) VALUES (
-                $1, $2, $3, $4, $5, 
-                $6, $7, $8, $9, 
-                NOW(), NOW()
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9::plugin_status_enum, $10,
+                true, NOW(), NOW()
             )
+            ON CONFLICT (identifier) DO UPDATE SET
+                name = EXCLUDED.name,
+                version = EXCLUDED.version,
+                description = EXCLUDED.description,
+                icon = EXCLUDED.icon,
+                type = EXCLUDED.type,
+                is_local = EXCLUDED.is_local,
+                status = EXCLUDED.status,
+                author = EXCLUDED.author,
+                updated_at = NOW()
         `;
 
         const values = [
             info.name,
             info.identifier,
             info.version,
-            info.description,
-            1, // ExtensionType.APPLICATION
-            JSON.stringify([1]), // ExtensionSupportTerminal.WEB
-            true, // isLocal
-            1, // ExtensionStatus.ENABLED
-            JSON.stringify({
-                avatar: "",
-                name: info.author || "",
-                homepage: "",
-            }),
+            info.description ?? "",
+            icon,
+            type,
+            JSON.stringify([1]),
+            isLocal,
+            enabled ? "1" : "0",
+            authorJson,
         ];
 
-        await client.query(insertQuery, values);
-        Logger.success("Database", `Extension ${info.identifier} inserted successfully`);
+        await client.query(upsertQuery, values);
+        Logger.success(
+            "Database",
+            exists
+                ? `Extension ${info.identifier} updated in database`
+                : `Extension ${info.identifier} inserted into database`,
+        );
+    } finally {
+        await client.end();
+    }
+}
+
+/**
+ * Sync extensions from extensions.json into the database (for local dev apps).
+ */
+export async function syncExtensions() {
+    if (!(await fs.pathExists(EXTENSIONS_CONFIG_PATH))) {
+        throw new Error(`extensions.json not found: ${EXTENSIONS_CONFIG_PATH}`);
+    }
+
+    const config = await fs.readJson(EXTENSIONS_CONFIG_PATH);
+    const sections = [
+        { key: "applications", type: 1 },
+        { key: "functionals", type: 2 },
+    ];
+
+    let synced = 0;
+    for (const { key, type } of sections) {
+        const entries = config[key] ?? {};
+        for (const extConfig of Object.values(entries)) {
+            const manifest = extConfig?.manifest;
+            if (!manifest?.identifier) {
+                continue;
+            }
+
+            await insertExtensionToDatabase(
+                {
+                    identifier: manifest.identifier,
+                    name: manifest.name,
+                    version: manifest.version ?? "0.0.1",
+                    description: manifest.description ?? "",
+                },
+                {
+                    type,
+                    isLocal: extConfig.isLocal ?? true,
+                    enabled: extConfig.enabled ?? true,
+                    author: manifest.author,
+                },
+            );
+            synced++;
+        }
+    }
+
+    await syncWebMenuExtensions();
+    Logger.success("Extensions", `Synced ${synced} extension(s) from extensions.json`);
+}
+
+/**
+ * Sync enabled application extensions into the front-end sidebar menu (decorate/menu-config).
+ */
+async function syncWebMenuExtensions() {
+    if (!(await fs.pathExists(EXTENSIONS_CONFIG_PATH))) {
+        return;
+    }
+
+    const extensionsConfig = await fs.readJson(EXTENSIONS_CONFIG_PATH);
+    const enabledManifests = Object.values(extensionsConfig.applications ?? {})
+        .filter((ext) => ext?.enabled && ext?.manifest?.identifier)
+        .map((ext) => ext.manifest);
+
+    if (enabledManifests.length === 0) {
+        return;
+    }
+
+    const dotenvPath = path.join(rootDir, ".env");
+    if (await fs.pathExists(dotenvPath)) {
+        const dotenv = await import("dotenv");
+        dotenv.config({ path: dotenvPath });
+    }
+
+    const { default: pg } = await import("pg");
+    const { Client } = pg;
+
+    const client = new Client({
+        host: process.env.DB_HOST || "localhost",
+        port: Number(process.env.DB_PORT) || 5432,
+        user: process.env.DB_USERNAME || "postgres",
+        password: process.env.DB_PASSWORD || "postgres",
+        database: process.env.DB_DATABASE || "buildingai",
+    });
+
+    try {
+        await client.connect();
+
+        const result = await client.query(
+            `SELECT value FROM config WHERE key = $1 AND "group" = $2`,
+            ["menu-config", "decorate"],
+        );
+
+        if (result.rows.length === 0) {
+            Logger.warning(
+                "Menu",
+                "menu-config not found in database; configure layout in console after first seed",
+            );
+            return;
+        }
+
+        const menuConfig = JSON.parse(result.rows[0].value);
+        menuConfig.groups = menuConfig.groups ?? [];
+
+        let appsGroup = menuConfig.groups.find((group) => group.id === "group_default_apps");
+        if (!appsGroup) {
+            appsGroup = { id: "group_default_apps", title: "应用", items: [] };
+            menuConfig.groups.push(appsGroup);
+        }
+
+        const extensionItems = enabledManifests.map((manifest) => ({
+            id: `menu_group_extension_${manifest.identifier.replace(/-/g, "_")}`,
+            icon: "puzzle",
+            title: manifest.name,
+            link: {
+                label: manifest.name,
+                path: `/apps/${manifest.identifier}`,
+                type: "extension",
+                query: {},
+                component: null,
+                target: "_self",
+            },
+        }));
+
+        const nonExtensionItems = (appsGroup.items ?? []).filter(
+            (item) => item?.link?.type !== "extension",
+        );
+        appsGroup.items = [...nonExtensionItems, ...extensionItems];
+
+        await client.query(
+            `UPDATE config SET value = $1, updated_at = NOW() WHERE key = $2 AND "group" = $3`,
+            [JSON.stringify(menuConfig), "menu-config", "decorate"],
+        );
+
+        Logger.success(
+            "Menu",
+            `Updated sidebar apps menu with ${extensionItems.length} extension(s)`,
+        );
     } finally {
         await client.end();
     }

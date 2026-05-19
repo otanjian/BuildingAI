@@ -72,12 +72,12 @@
             "title": "应用",
             "items": [
                 {
-                    "id": "menu_group_extension_demo",
+                    "id": "menu_group_extension_mrp_governance",
                     "icon": "puzzle",
-                    "title": "Blog",
+                    "title": "MRP 数据治理",
                     "link": {
-                        "label": "Blog",
-                        "path": "/apps/simple-blog",
+                        "label": "MRP 数据治理",
+                        "path": "/apps/mrp-governance",
                         "type": "extension",
                         "query": {},
                         "component": null,

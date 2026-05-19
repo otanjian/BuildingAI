@@ -6,6 +6,7 @@ import path from "path";
 import { defineConfig } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
+const apiTarget = process.env.VITE_DEVELOP_APP_BASE_URL || "http://localhost:4090";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -30,6 +31,13 @@ export default defineConfig({
     open: true,
     port: 4091,
     strictPort: true,
+    proxy: {
+      "/extension": { target: apiTarget, changeOrigin: true },
+      "/api": { target: apiTarget, changeOrigin: true },
+      "/consoleapi": { target: apiTarget, changeOrigin: true },
+      "/web": { target: apiTarget, changeOrigin: true },
+      "/mrp-governance": { target: apiTarget, changeOrigin: true },
+    },
     hmr: host
       ? {
           protocol: "ws",

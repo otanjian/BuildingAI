@@ -1,5 +1,7 @@
 export type { ChatProps } from "./chat";
 export { Chat } from "./chat";
+export type { StandardChatSidebarProps } from "./standard-chat-sidebar";
+export { StandardChatSidebar } from "./standard-chat-sidebar";
 export type { PromptInputHiddenTool, PromptInputProps } from "./components/input/prompt-input";
 export { PromptInput } from "./components/input/prompt-input";
 export type { SuggestionData, SuggestionsProps } from "./components/input/suggestions";

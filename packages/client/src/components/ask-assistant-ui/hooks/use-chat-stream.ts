@@ -6,9 +6,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ChatStatus, FileUIPart, UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { validate as isUUID } from "uuid";
 
+import {
+  isAppsEmbeddedChatPath,
+  isEmbedChatPath,
+  resolveChatThreadId,
+} from "../libs/embed-chat";
 import { getApiBaseUrl } from "@/utils/api";
 
 /** Delay before running post-stop side effects, giving backend time to persist usage. */
@@ -83,9 +88,17 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     prevThreadIdRef,
   } = options;
 
-  const { id: currentThreadId } = useParams<{ id: string }>();
+  const { id: routeId } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const isEmbedChat = isEmbedChatPath(location.pathname);
+  const isAppsEmbeddedChat = isAppsEmbeddedChatPath(location.pathname);
+  const currentThreadId = resolveChatThreadId(
+    location.pathname,
+    routeId,
+    searchParams.get("conversationId"),
+  );
   const token = useAuthStore((state) => state.auth.token);
   const queryClient = useQueryClient();
 
@@ -138,7 +151,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
 
       const conversationId = conversationIdRef.current;
-      if (conversationId) {
+      if (conversationId && isUUID(conversationId)) {
         void getConversationInfo(conversationId)
           .then((info) => {
             queryClient.setQueryData(["conversation", conversationId], info);
@@ -250,13 +263,37 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         conversationIdRef.current = newConversationId;
 
         if (isNewConversation) {
-          const targetPath = location.pathname.startsWith("/chat")
-            ? `/chat/${newConversationId}`
-            : `/c/${newConversationId}`;
+          let targetPath: string;
+          if (isEmbedChat) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set("conversationId", newConversationId);
+            nextParams.delete("prompt");
+            nextParams.delete("modelId");
+            nextParams.delete("mcp");
+            targetPath = `/embed/chat?${nextParams.toString()}`;
+          } else if (isAppsEmbeddedChat) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.set("conversationId", newConversationId);
+            const qs = nextParams.toString();
+            targetPath = `${location.pathname}${qs ? `?${qs}` : ""}${location.hash}`;
+          } else if (location.pathname.startsWith("/chat")) {
+            targetPath = `/chat/${newConversationId}`;
+          } else {
+            targetPath = `/c/${newConversationId}`;
+          }
           navigate(targetPath, { replace: true });
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
         }
         onThreadCreated?.();
+      }
+
+      if (data.type === "data-conversation-title" && data.data && conversationIdRef.current) {
+        const title = String(data.data);
+        queryClient.setQueryData(
+          ["conversation", conversationIdRef.current],
+          (prev: { title?: string } | undefined) => (prev ? { ...prev, title } : prev),
+        );
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
       }
 
       if (

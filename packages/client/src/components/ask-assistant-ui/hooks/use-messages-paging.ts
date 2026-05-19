@@ -2,7 +2,9 @@ import { type HttpError } from "@buildingai/http";
 import { getConversationMessages, useConversationMessagesQuery } from "@buildingai/services/web";
 import type { UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+
+import { isEmbedChatPath, resolveChatThreadId } from "../libs/embed-chat";
 
 export interface UseMessagesPagingReturn {
   isLoadingMessages: boolean;
@@ -23,7 +25,14 @@ export function useMessagesPaging({
   lastMessageDbIdRef,
   getDbMessageId,
 }: UseMessagesPagingOptions): UseMessagesPagingReturn {
-  const { id: currentThreadId } = useParams<{ id: string }>();
+  const { id: routeId } = useParams<{ id: string }>();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const currentThreadId = resolveChatThreadId(
+    location.pathname,
+    routeId,
+    searchParams.get("conversationId"),
+  );
   const navigate = useNavigate();
   const pageSize = 20;
 
@@ -37,10 +46,10 @@ export function useMessagesPaging({
   );
 
   useEffect(() => {
-    if ((error as HttpError)?.status === 404) {
+    if ((error as HttpError)?.status === 404 && !isEmbedChatPath(location.pathname)) {
       navigate("/", { replace: true });
     }
-  }, [error, navigate]);
+  }, [error, location.pathname, navigate]);
 
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);

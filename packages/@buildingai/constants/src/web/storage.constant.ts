@@ -38,5 +38,7 @@ export const STORAGE_KEYS = {
     USER_TIMEZONE: "__user_timezone__",
     /** Files list */
     FILES_LIST: "__files_list__",
+    /** One-shot chat bootstrap payload (extension → platform chat) */
+    PENDING_CHAT_REQUEST: "__pending_chat_request__",
 } as const;
 export type StorageKeys = keyof typeof STORAGE_KEYS;

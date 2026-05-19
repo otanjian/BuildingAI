@@ -1,0 +1,63 @@
+schema: spec-driven
+
+# Project context injected when generating proposal / design / tasks / specs
+context: |
+  ## Project
+
+  BuildingAI monorepo — AI platform with NestJS API, React client, pnpm workspace, and runtime extensions under `extensions/`.
+
+  ## Tech stack
+
+  ### Monorepo
+  - Package manager: pnpm (workspace)
+  - Node: >=22.20.x <23
+  - Orchestration: Turbo
+
+  ### Backend (`packages/api`, `packages/core`, `packages/@buildingai/*`)
+  - NestJS, TypeORM, PostgreSQL
+  - Extension SDK: `packages/@buildingai/extension-sdk`
+  - Follow patterns in `skills/project-architecture/SKILL.md`
+
+  ### Frontend (`packages/client`, `packages/@buildingai/web/*`)
+  - React + TypeScript + Vite
+  - Shared UI: `@buildingai/ui`
+
+  ### Extensions
+  - Plugins live under `extensions/<name>/` (API + web)
+  - Active product example: `extensions/mrp-governance` (MRP data governance, ERP MCP, AI checks)
+  - Product requirements: `docs/mrp.md`, `docs/mrp-ai.md`
+
+  ## Conventions
+
+  - Code-facing text (comments, logs, errors, identifiers): English
+  - Git: Conventional Commits; branch `feature/<change-name>` per OpenSpec change
+  - One OpenSpec change = one capability; kebab-case names (`add-`, `fix-`, `refactor-`)
+  - OpenSpec root: `openspec/` (not `skills/openspec/`)
+
+  ## Skills to consult by task type
+
+  - Project layout / imports: `skills/project-architecture/SKILL.md`
+  - AI SDK features: `skills/ai-sdk/SKILL.md`
+  - UI work: `skills/frontend-design/SKILL.md`
+  - PostgreSQL schema: `skills/postgresql-table-design/SKILL.md`
+
+  ## MRP governance domain (when touching `extensions/mrp-governance`)
+
+  - ERP data via MCP; quality rules in `docs/mrp.md`
+  - Persist check results per `docs/mrp-ai.md` table design
+  - Dashboard and rule flows: `extensions/mrp-governance/src/web/`
+
+rules:
+  proposal:
+    - Keep under 500 words
+    - Include "Why now" and "Non-goals"
+    - Use business language; technical detail belongs in design.md
+  design:
+    - List rejected alternatives with rationale
+    - For extension work: cite paths under `extensions/` and API contracts
+    - Note DB/migration impact when applicable
+  tasks:
+    - Tasks sized 30–60 minutes, independently verifiable
+    - Include lint/typecheck/test or manual verification steps
+  specs:
+    - Prefer Given-When-Then; avoid implementation detail

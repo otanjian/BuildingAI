@@ -16,6 +16,7 @@ import {
     spark,
     tongyi,
     volcengine,
+    volcengineCoding,
     wenxin,
     x,
     zhipuai,
@@ -42,6 +43,7 @@ class ProviderRegistry {
         this.register("siliconflow", siliconflow, "硅基流动");
         this.register("tongyi", tongyi, "阿里云通义千问");
         this.register("volcengine", volcengine, "火山引擎豆包");
+        this.register("volcengine-coding", volcengineCoding, "火山引擎 Ark Coding（OpenAI 兼容）");
         this.register("hunyuan", hunyuan, "腾讯混元");
         this.register("wenxin", wenxin, "百度文心一言");
         this.register("spark", spark, "讯飞星火大模型");

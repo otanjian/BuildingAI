@@ -7,7 +7,13 @@ import type {
 import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { validate as isUUID } from "uuid";
+
 import { apiHttpClient } from "../base";
+
+function isValidConversationId(conversationId: string | undefined | null): conversationId is string {
+    return Boolean(conversationId?.trim() && isUUID(conversationId.trim()));
+}
 
 export type PaginationParams = {
     page?: number;
@@ -145,16 +151,20 @@ export function useConversationQuery(
     conversationId: string,
     options?: QueryOptionsUtil<ConversationRecord>,
 ): UseQueryResult<ConversationRecord, unknown> {
+    const validId = isValidConversationId(conversationId) ? conversationId : "";
     return useQuery<ConversationRecord>({
-        queryKey: ["conversation", conversationId],
+        queryKey: ["conversation", validId],
         queryFn: () =>
-            apiHttpClient.get<ConversationRecord>(`/ai-conversations/${conversationId}/info`),
-        enabled: !!conversationId,
+            apiHttpClient.get<ConversationRecord>(`/ai-conversations/${validId}/info`),
+        enabled: !!validId && options?.enabled !== false,
         ...options,
     });
 }
 
 export async function getConversationInfo(conversationId: string): Promise<ConversationRecord> {
+    if (!isValidConversationId(conversationId)) {
+        throw new Error("Invalid conversation id");
+    }
     return apiHttpClient.get<ConversationRecord>(`/ai-conversations/${conversationId}/info`);
 }
 

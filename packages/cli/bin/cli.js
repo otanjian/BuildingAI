@@ -5,7 +5,11 @@ import { Command } from "commander";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { createExtension, releaseExtension } from "../src/commands/extension.js";
+import {
+    createExtension,
+    releaseExtension,
+    syncExtensions,
+} from "../src/commands/extension.js";
 import {
     deleteApi,
     flushLogs,
@@ -100,5 +104,17 @@ program
     .command("extension:release")
     .description("Release an extension to releases directory")
     .action(releaseExtension);
+
+program
+    .command("extension:sync")
+    .description("Register local extensions from extensions.json into the database")
+    .action(async () => {
+        try {
+            await syncExtensions();
+        } catch (error) {
+            console.error(error instanceof Error ? error.message : error);
+            process.exit(1);
+        }
+    });
 
 program.parse();

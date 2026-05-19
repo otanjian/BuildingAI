@@ -1735,6 +1735,35 @@
             ]
         },
         {
+            "provider": "volcengine-coding",
+            "label": "火山引擎 Coding",
+            "icon_url": "",
+            "supported_model_types": ["llm"],
+            "models": [
+                {
+                    "model": "ark-code-latest",
+                    "label": "ark-code-latest",
+                    "model_type": "llm",
+                    "features": [
+                        "agent-thought",
+                        "tool-call",
+                        "multi-tool-call",
+                        "stream-tool-call"
+                    ],
+                    "model_properties": {
+                        "context_size": 256000,
+                        "max_tokens": 32000,
+                        "max_completion_tokens": 32000,
+                        "mode": "chat"
+                    },
+                    "thinking": false,
+                    "enableThinkingParam": false,
+                    "deprecated": false,
+                    "icon_url": ""
+                }
+            ]
+        },
+        {
             "provider": "anthropic",
             "label": "Anthropic",
             "icon_url": "",

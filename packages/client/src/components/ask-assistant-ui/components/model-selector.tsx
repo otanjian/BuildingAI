@@ -6,8 +6,10 @@ import {
   ModelSelector as AIModelSelector,
   ModelSelectorContent as AIModelSelectorContent,
   ModelSelectorEmpty as AIModelSelectorEmpty,
+  ModelSelectorGroup as AIModelSelectorGroup,
   ModelSelectorInput as AIModelSelectorInput,
   ModelSelectorItem as AIModelSelectorItem,
+  ModelSelectorList as AIModelSelectorList,
   ModelSelectorName as AIModelSelectorName,
   ModelSelectorTrigger as AIModelSelectorTrigger,
 } from "@buildingai/ui/components/ai-elements/model-selector";
@@ -17,7 +19,6 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { CommandShortcut } from "@buildingai/ui/components/ui/command";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { cn } from "@buildingai/ui/lib/utils";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Activity,
   Braces,
@@ -33,16 +34,11 @@ import {
   Wrench,
   XIcon,
 } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { ProviderIcon } from "../../provider-icons";
 import { convertProvidersToModels } from "../libs/provider-converter";
 import type { Model } from "../types";
-
-const GROUP_ROW_HEIGHT = 28;
-const MODEL_ROW_HEIGHT = 44;
-const VIRTUAL_LIST_OVERSCAN = 5;
-const CONTAINER_HEIGHT = 288;
 
 function compareProviderGroups(a: ModelData[], b: ModelData[]): number {
   const orderA = a[0]?.providerSortOrder;
@@ -91,10 +87,6 @@ export interface ModelSelectorProps {
   className?: string;
 }
 
-type Row =
-  | { type: "group"; key: string; chef: string }
-  | { type: "model"; key: string; model: ModelData };
-
 interface ModelRowItemProps {
   model: ModelData;
   isSelected: boolean;
@@ -115,7 +107,6 @@ const ModelRowItem = ({
     ? `${model.billingRule.power} 积分 / 1K Tokens`
     : "免费";
 
-  // 获取需要的会员等级名称
   const requiredMembershipNames = model.membershipLevel
     ?.map((id) => membershipLevels?.find((level) => level.id === id)?.name)
     .filter(Boolean)
@@ -123,9 +114,12 @@ const ModelRowItem = ({
 
   const content = (
     <AIModelSelectorItem
-      onSelect={() => !isDisabled && onSelect(model.id)}
-      value={`${model.name} ${model.id}`}
+      value={model.id}
+      keywords={[model.name, model.chef, model.id]}
       disabled={isDisabled}
+      onSelect={() => {
+        if (!isDisabled) onSelect(model.id);
+      }}
       className={cn(isDisabled && "cursor-not-allowed opacity-50")}
     >
       <ProviderIcon provider={model.chefSlug} iconUrl={model.iconUrl} />
@@ -198,23 +192,15 @@ export const ModelSelector = ({
 }: ModelSelectorProps) => {
   const [innerOpen, setInnerOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const parentRef = useRef<HTMLDivElement | null>(null);
   const isOpen = open ?? innerOpen;
 
-  // 获取当前用户的会员等级ID
   const userMembershipLevelId = useAuthStore((state) => state.auth.userInfo?.membershipLevel?.id);
 
-  /**
-   * 检查模型是否因会员限制而被禁用
-   * 如果模型设置了 membershipLevel 且用户会员等级不在允许列表中，则禁用
-   */
   const isModelDisabledByMembership = useCallback(
     (model: ModelData): boolean => {
-      // 如果模型没有设置会员限制，则所有用户可用
       if (!model.membershipLevel || model.membershipLevel.length === 0) {
         return false;
       }
-      // 如果用户没有会员等级，或者用户的会员等级不在允许列表中，则禁用
       if (!userMembershipLevelId || !model.membershipLevel.includes(userMembershipLevelId)) {
         return true;
       }
@@ -274,7 +260,7 @@ export const ModelSelector = ({
     });
   }, [resolvedModels, normalizedQuery]);
 
-  const rows = useMemo<Row[]>(() => {
+  const groupedModels = useMemo(() => {
     if (filteredModels.length === 0) return [];
 
     const byChef = new Map<string, ModelData[]>();
@@ -287,37 +273,10 @@ export const ModelSelector = ({
       }
     }
 
-    const sortedChefs = Array.from(byChef.keys()).sort((chefA, chefB) =>
-      compareProviderGroups(byChef.get(chefA)!, byChef.get(chefB)!),
-    );
-
-    const out: Row[] = [];
-    for (const chef of sortedChefs) {
-      const list = byChef.get(chef);
-      if (!list?.length) continue;
-      out.push({ type: "group", key: `group:${chef}`, chef });
-      for (const m of list) {
-        out.push({ type: "model", key: `model:${m.id}`, model: m });
-      }
-    }
-    return out;
+    return Array.from(byChef.entries())
+      .sort(([, modelsA], [, modelsB]) => compareProviderGroups(modelsA, modelsB))
+      .map(([chef, models]) => ({ chef, models }));
   }, [filteredModels]);
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: (index) => (rows[index]?.type === "group" ? GROUP_ROW_HEIGHT : MODEL_ROW_HEIGHT),
-    overscan: VIRTUAL_LIST_OVERSCAN,
-  });
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const rafId = requestAnimationFrame(() => {
-      parentRef.current?.scrollTo({ top: 0 });
-      setTimeout(() => virtualizer.measure(), 0);
-    });
-    return () => cancelAnimationFrame(rafId);
-  }, [isOpen, normalizedQuery, virtualizer]);
 
   return (
     <AIModelSelector open={isOpen} onOpenChange={setOpen}>
@@ -390,57 +349,26 @@ export const ModelSelector = ({
           onValueChange={setQuery}
         />
 
-        <div
-          ref={parentRef}
-          className="no-scrollbar max-h-72 scroll-py-1 overflow-x-hidden overflow-y-auto outline-none"
-          style={{ height: `${CONTAINER_HEIGHT}px` }}
-        >
-          {rows.length === 0 ? (
+        <AIModelSelectorList>
+          {groupedModels.length === 0 ? (
             <AIModelSelectorEmpty>暂无可用的模型</AIModelSelectorEmpty>
           ) : (
-            <div
-              style={{
-                height: `${virtualizer.getTotalSize()}px`,
-                width: "100%",
-                position: "relative",
-              }}
-            >
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const row = rows[virtualRow.index];
-                if (!row) return null;
-
-                return (
-                  <div
-                    key={virtualRow.key}
-                    data-index={virtualRow.index}
-                    ref={virtualizer.measureElement}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                  >
-                    {row.type === "group" ? (
-                      <div className="text-muted-foreground px-2 py-1.5 text-xs font-medium">
-                        {row.chef}
-                      </div>
-                    ) : (
-                      <ModelRowItem
-                        model={row.model}
-                        isSelected={resolvedSelectedModelId === row.model.id}
-                        isDisabled={isModelDisabledByMembership(row.model)}
-                        onSelect={handleModelSelect}
-                        membershipLevels={membershipLevelsData}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            groupedModels.map(({ chef, models: chefModels }) => (
+              <AIModelSelectorGroup key={chef} heading={chef}>
+                {chefModels.map((model) => (
+                  <ModelRowItem
+                    key={model.id}
+                    model={model}
+                    isSelected={resolvedSelectedModelId === model.id}
+                    isDisabled={isModelDisabledByMembership(model)}
+                    onSelect={handleModelSelect}
+                    membershipLevels={membershipLevelsData}
+                  />
+                ))}
+              </AIModelSelectorGroup>
+            ))
           )}
-        </div>
+        </AIModelSelectorList>
       </AIModelSelectorContent>
     </AIModelSelector>
   );

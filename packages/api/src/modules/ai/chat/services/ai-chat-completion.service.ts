@@ -60,6 +60,7 @@ import { AiModelService } from "../../model/services/ai-model.service";
 import { ChatBillingHandler } from "../handlers/chat-billing.handler";
 import { ChatTitleHandler } from "../handlers/chat-title.handler";
 import type { ChatCompletionParams, UIMessage } from "../types/chat.types";
+import { buildConversationTitleFromText } from "../utils/build-conversation-title";
 import { AiChatsMessageService } from "./ai-chat-message.service";
 import { AiChatRecordService } from "./ai-chat-record.service";
 import { ChatConfigService } from "./chat-config.service";
@@ -134,9 +135,13 @@ export class ChatCompletionService {
 
         try {
             if (isNew) {
+                const initialTitle =
+                    params.title?.trim() ||
+                    buildConversationTitleFromText(this.extractTitleSourceText(params.messages)) ||
+                    undefined;
                 conversationId = (
                     await this.aiChatRecordService.createConversation(params.userId, {
-                        title: params.title,
+                        title: initialTitle,
                     })
                 ).id;
             }
@@ -353,6 +358,7 @@ export class ChatCompletionService {
                                                 fullText,
                                                 params,
                                                 conversationId,
+                                                writer,
                                             });
                                         if (extraTokens > 0) {
                                             totalUsage.totalTokens =
@@ -757,6 +763,25 @@ export class ChatCompletionService {
         return lastUser ? extractTextFromParts(lastUser.parts ?? []).fullText : "";
     }
 
+    /** Prefer the first substantive user message for conversation titles. */
+    private extractTitleSourceText(messages: UIMessage[]): string {
+        const userMessages = messages.filter((m) => m.role === "user");
+        for (const message of userMessages) {
+            const text = extractTextFromParts(
+                (message.parts ?? []) as Array<{ type?: unknown; text?: string }>,
+            ).fullText.trim();
+            if (text.length >= 4) return text;
+        }
+        return userMessages.length > 0
+            ? extractTextFromParts(
+                  (userMessages[userMessages.length - 1].parts ?? []) as Array<{
+                      type?: unknown;
+                      text?: string;
+                  }>,
+              ).fullText.trim()
+            : "";
+    }
+
     private async applyPostProcessingUsage(params: {
         needTitle: boolean;
         chatConfig: {
@@ -769,50 +794,62 @@ export class ChatCompletionService {
         fullText: string | undefined;
         conversationId: string;
         params: ChatCompletionParams;
+        writer?: DataWriter;
     }): Promise<{ extraTokens: number; extraPower: number }> {
-        const { needTitle, chatConfig, messages, finished, fullText, conversationId } = params;
+        const { needTitle, chatConfig, messages, finished, fullText, conversationId, writer } =
+            params;
         const { params: chatParams } = params;
         let extraTokens = 0;
         let extraPower = 0;
 
-        if (needTitle && chatConfig.titleModelId) {
-            const firstUserMsg = messages.find((m) => m.role === "user");
-            if (firstUserMsg) {
-                const firstUserText = extractTextFromParts(
-                    (firstUserMsg.parts ?? []) as Array<{ type?: unknown; text?: string }>,
-                ).fullText;
-                const titleModel = await this.getLanguageModelByModelId(chatConfig.titleModelId);
-                if (titleModel) {
-                    const { title, usageTokens } = await this.chatTitleHandler.generateTitle(
-                        firstUserText,
-                        titleModel.model,
-                        titleModel.providerId,
-                    );
+        if (needTitle) {
+            const firstUserText = this.extractTitleSourceText(messages);
+            if (firstUserText) {
+                    let title: string | null = null;
+                    const titleModelId = chatConfig.titleModelId ?? chatParams.modelId;
+                    const titleModel = await this.getLanguageModelByModelId(titleModelId);
+                    if (titleModel) {
+                        const generated = await this.chatTitleHandler.generateTitle(
+                            firstUserText,
+                            titleModel.model,
+                            titleModel.providerId,
+                        );
+                        title = generated.title;
+                        if (generated.usageTokens && generated.usageTokens > 0) {
+                            extraTokens += generated.usageTokens;
+                        }
+                        if (chatParams.userId && titleModel.billingRule) {
+                            try {
+                                const power = await this.chatBillingHandler.deductForTitleGeneration(
+                                    chatParams.userId,
+                                    conversationId,
+                                    titleModel.billingRule,
+                                );
+                                if (power > 0) extraPower += power;
+                            } catch (err) {
+                                this.logger.warn(
+                                    `Chat title billing error: ${this.getErrorMsg(err)}`,
+                                );
+                            }
+                        }
+                    }
+
+                    if (!title) {
+                        title = buildConversationTitleFromText(firstUserText);
+                    }
+
                     if (title) {
                         await this.aiChatRecordService.updateConversation(
                             conversationId,
                             chatParams.userId,
-                            {
-                                title,
-                            },
+                            { title },
                         );
+                        writer?.write({
+                            type: "data-conversation-title",
+                            data: title,
+                            transient: true,
+                        } as { type: `data-${string}`; data: unknown });
                     }
-                    if (usageTokens && usageTokens > 0) {
-                        extraTokens += usageTokens;
-                    }
-                    if (chatParams.userId && titleModel.billingRule) {
-                        try {
-                            const power = await this.chatBillingHandler.deductForTitleGeneration(
-                                chatParams.userId,
-                                conversationId,
-                                titleModel.billingRule,
-                            );
-                            if (power > 0) extraPower += power;
-                        } catch (err) {
-                            this.logger.warn(`Chat title billing error: ${this.getErrorMsg(err)}`);
-                        }
-                    }
-                }
             }
         }
 

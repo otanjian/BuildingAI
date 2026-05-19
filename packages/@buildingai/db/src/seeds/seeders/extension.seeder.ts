@@ -111,8 +111,11 @@ export class ExtensionSeeder extends BaseSeeder {
 
             this.logSuccess("zhparser segmentation configuration and full-text index initialized");
         } catch (error) {
-            this.logError(`zhparser initialization failed: ${error.message}`);
-            throw error;
+            // zhparser is optional for local dev (e.g. macOS without the extension installed).
+            // Knowledge-base retrieval falls back when Chinese full-text search is unavailable.
+            this.logError(
+                `zhparser initialization skipped: ${error.message}. Chinese full-text search will be unavailable until zhparser is installed.`,
+            );
         }
     }
 

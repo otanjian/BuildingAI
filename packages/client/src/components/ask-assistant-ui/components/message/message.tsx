@@ -29,6 +29,7 @@ import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useOptionalAssistantContext } from "../../context";
 import { useSmoothText } from "../../hooks/use-smooth-text";
 import { convertUIMessageToMessage } from "../../libs/message-converter";
+import { isReasoningPartStreaming } from "../../libs/reasoning-streaming";
 import { InlineCitation } from "../tools/inline-citation";
 import type { KnowledgeReferenceItem } from "../tools/knowledge-references";
 // import { FileParseQueue } from "./file-parse-queue";
@@ -544,8 +545,8 @@ export const Message = memo(function Message({
           .map((part, index, arr) => (
             <Reasoning
               key={`${message.id}-reasoning-${index}`}
-              defaultOpen={isStreaming}
-              isStreaming={isStreaming && index === arr.length - 1}
+              defaultOpen={isReasoningPartStreaming(message.parts, index, isStreaming)}
+              isStreaming={isReasoningPartStreaming(message.parts, index, isStreaming)}
             >
               <ReasoningTrigger />
               <ReasoningContent>{part.text || ""}</ReasoningContent>

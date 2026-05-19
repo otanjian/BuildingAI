@@ -6,8 +6,26 @@ import { toast } from "sonner";
 import { getFirstConsoleMenuPath, hasConsoleAccess, WEB_HOME_PATH } from "./shared/console-access";
 
 const isDev = import.meta.env.DEV;
-const devBase = import.meta.env.VITE_DEVELOP_APP_BASE_URL;
 const prodBase = import.meta.env.VITE_PRODUCTION_APP_BASE_URL;
+
+/** Dev API origin: env → same-origin extension iframe (Vite proxy) → localhost:4090 */
+function resolveDevBase(): string {
+    const fromEnv = import.meta.env.VITE_DEVELOP_APP_BASE_URL;
+    if (typeof fromEnv === "string" && fromEnv.trim()) {
+        return fromEnv.trim().replace(/\/$/, "");
+    }
+    if (typeof window !== "undefined") {
+        if (window.location.pathname.startsWith("/extension/")) {
+            return window.location.origin;
+        }
+        if (window.location.pathname.startsWith("/apps/")) {
+            return window.location.origin;
+        }
+    }
+    return "http://localhost:4090";
+}
+
+const devBase = resolveDevBase();
 
 export function generateWebApiBase() {
     const base: string = isDev ? devBase : prodBase;

@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+      "ERPnext-local": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:8000/api/method/frappe_assistant_core.api.fac_endpoint.handle_mcp",
+        "headers": {
+          "Authorization": "token 1eae2779f69f97a:9b52eb3a5bfef49"
+        }
+      }
+    }
+  }

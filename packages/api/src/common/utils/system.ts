@@ -163,14 +163,26 @@ export const setAssetsDir = async (app: NestExpressApplication) => {
             ];
         });
 
-    const extensionIndexHtmlCache = new Map<string, string>();
+    const isDev = process.env.NODE_ENV === "development";
 
-    extensionsMain.forEach((item) => {
-        const indexPath = path.join(item.dir, "index.html");
-        if (existsSync(item.dir) && existsSync(indexPath)) {
-            extensionIndexHtmlCache.set(item.prefix, readFileSync(indexPath, "utf-8"));
+    const extensionSpaRoutes = extensionsMain
+        .map((item) => {
+            const indexPath = path.join(item.dir, "index.html");
+            if (!existsSync(item.dir) || !existsSync(indexPath)) {
+                return null;
+            }
+            return { ...item, indexPath };
+        })
+        .filter((item): item is (typeof extensionsMain)[number] & { indexPath: string } =>
+            item != null,
+        );
+
+    const extensionIndexHtmlCache = new Map<string, string>();
+    if (!isDev) {
+        for (const item of extensionSpaRoutes) {
+            extensionIndexHtmlCache.set(item.prefix, readFileSync(item.indexPath, "utf-8"));
         }
-    });
+    }
 
     extensionsMain.forEach((item) => {
         if (existsSync(item.dir)) {
@@ -182,18 +194,34 @@ export const setAssetsDir = async (app: NestExpressApplication) => {
         }
     });
 
-    if (extensionIndexHtmlCache.size > 0) {
+    if (extensionSpaRoutes.length > 0) {
         app.use((req: Request, res: Response, next: NextFunction) => {
-            const matchedPrefix = Array.from(extensionIndexHtmlCache.keys()).find(
-                (prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`),
+            const matched = extensionSpaRoutes.find(
+                (item) => req.path === item.prefix || req.path.startsWith(`${item.prefix}/`),
             );
 
-            if (matchedPrefix && !res.headersSent) {
-                res.setHeader("Content-Type", "text/html; charset=utf-8");
-                return res.send(extensionIndexHtmlCache.get(matchedPrefix)!);
+            if (!matched || res.headersSent) {
+                return next();
             }
 
-            next();
+            // Asset requests must be served by useStaticAssets only (not SPA index.html).
+            if (
+                req.path.includes("/assets/") ||
+                /\.(?:js|mjs|css|map|woff2?|png|jpe?g|gif|svg|ico)$/i.test(req.path)
+            ) {
+                return next();
+            }
+
+            const html = isDev
+                ? readFileSync(matched.indexPath, "utf-8")
+                : extensionIndexHtmlCache.get(matched.prefix);
+
+            if (!html) {
+                return next();
+            }
+
+            res.setHeader("Content-Type", "text/html; charset=utf-8");
+            return res.send(html);
         });
     }
 };

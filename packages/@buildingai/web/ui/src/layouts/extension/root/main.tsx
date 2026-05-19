@@ -19,12 +19,22 @@ import { ReactNode, useMemo } from "react";
   if (!encoded) return;
 
   try {
-    const token = atob(encoded);
+    let token = atob(encoded);
+    if (token.includes("%")) {
+      token = decodeURIComponent(token);
+    }
     if (token) {
       useAuthStore.getState().authActions.setToken(token);
     }
   } catch {
-    // ignore invalid base64
+    try {
+      const token = decodeURIComponent(atob(encoded));
+      if (token) {
+        useAuthStore.getState().authActions.setToken(token);
+      }
+    } catch {
+      // ignore invalid token payload
+    }
   }
 
   params.delete("_t");

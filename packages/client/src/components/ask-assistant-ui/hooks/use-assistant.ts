@@ -5,9 +5,16 @@ import {
   safeJsonStringify,
   useAssistantStore,
 } from "@buildingai/stores";
-import type { UIMessage } from "ai";
+import {
+  consumePendingChatRequest,
+  resolveInspectionPromptQueue,
+  type PendingChatRequest,
+} from "@buildingai/web-core";
+import type { ChatStatus, UIMessage } from "ai";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
 
+import { resolveChatThreadId } from "../libs/embed-chat";
 import type { RawMessageRecord } from "../libs/message-repository";
 import { convertProvidersToModels } from "../libs/provider-converter";
 import type { AssistantContextValue, DisplayMessage, Suggestion } from "../types";
@@ -21,6 +28,8 @@ export interface UseAssistantOptions {
   providers: AiProvider[];
   suggestions?: Suggestion[];
   enableThinking?: boolean;
+  /** Inline bootstrap (e.g. extension embed sidebar); takes precedence over sessionStorage. */
+  pendingChatRequest?: PendingChatRequest | null;
 }
 
 function buildMessageRecords(
@@ -78,7 +87,46 @@ function sliceMessagesUntil(messages: UIMessage[], parentId: string | null): UIM
 }
 
 export function useAssistant(options: UseAssistantOptions): AssistantContextValue {
-  const { providers, suggestions = [], enableThinking: initialEnableThinking } = options;
+  const {
+    providers,
+    suggestions = [],
+    enableThinking: initialEnableThinking,
+    pendingChatRequest,
+  } = options;
+  const { id: routeId } = useParams<{ id: string }>();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const routeConversationId = resolveChatThreadId(
+    location.pathname,
+    routeId,
+    searchParams.get("conversationId"),
+  );
+  const hasActiveConversation = Boolean(routeConversationId);
+  const pendingChatSentRef = useRef(false);
+  const promptQueueRef = useRef<string[]>([]);
+  const promptQueueIndexRef = useRef(0);
+  const promptQueueActiveRef = useRef(false);
+  const prevChatStatusRef = useRef<ChatStatus>("ready");
+  const onSendRef = useRef<
+    (
+      content: string,
+      files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
+    ) => void
+  >(() => undefined);
+
+  useEffect(() => {
+    pendingChatSentRef.current = false;
+    promptQueueActiveRef.current = false;
+    promptQueueIndexRef.current = 0;
+    promptQueueRef.current = [];
+    prevChatStatusRef.current = "ready";
+  }, [
+    pendingChatRequest?.prompt,
+    pendingChatRequest?.modelId,
+    pendingChatRequest?.promptQueue,
+    pendingChatRequest?.inspectionRules,
+    pendingChatRequest?.initialDelayMs,
+  ]);
 
   const models = useMemo(() => {
     return convertProvidersToModels(providers);
@@ -235,6 +283,109 @@ export function useAssistant(options: UseAssistantOptions): AssistantContextValu
     },
     [repositoryMessages, send],
   );
+
+  useEffect(() => {
+    onSendRef.current = onSend;
+  }, [onSend]);
+
+  useEffect(() => {
+    if (!pendingChatRequest || models.length === 0) {
+      return;
+    }
+    if (
+      pendingChatRequest.modelId &&
+      models.some((model) => model.id === pendingChatRequest.modelId)
+    ) {
+      handleSelectModel(pendingChatRequest.modelId);
+    }
+    if (pendingChatRequest.mcpServerIds?.length) {
+      handleSelectMcpServers(pendingChatRequest.mcpServerIds);
+    }
+  }, [pendingChatRequest, models, handleSelectModel, handleSelectMcpServers]);
+
+  useEffect(() => {
+    if (hasActiveConversation || pendingChatSentRef.current) {
+      return;
+    }
+    if (models.length === 0 || providers.length === 0) {
+      return;
+    }
+    if (status !== "ready") {
+      return;
+    }
+
+    const pending = pendingChatRequest ?? consumePendingChatRequest();
+    if (!pending?.prompt?.trim()) {
+      return;
+    }
+
+    const queue = resolveInspectionPromptQueue(pending);
+    if (queue.length === 0) {
+      return;
+    }
+    promptQueueRef.current = queue;
+    promptQueueIndexRef.current = 0;
+    promptQueueActiveRef.current = queue.length > 1;
+
+    const delayMs =
+      typeof pending.initialDelayMs === "number" && pending.initialDelayMs >= 0
+        ? pending.initialDelayMs
+        : 0;
+
+    const timer = window.setTimeout(() => {
+      pendingChatSentRef.current = true;
+      const firstPrompt = queue[0];
+      if (firstPrompt) {
+        onSendRef.current(firstPrompt);
+      }
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    hasActiveConversation,
+    models.length,
+    providers.length,
+    status,
+    pendingChatRequest?.prompt,
+    pendingChatRequest?.modelId,
+    pendingChatRequest?.promptQueue,
+    pendingChatRequest?.inspectionRules,
+    pendingChatRequest?.initialDelayMs,
+  ]);
+
+  useEffect(() => {
+    const prevStatus = prevChatStatusRef.current;
+    prevChatStatusRef.current = status;
+
+    if (!promptQueueActiveRef.current) {
+      return;
+    }
+    if (!(prevStatus === "streaming" || prevStatus === "submitted")) {
+      return;
+    }
+    if (status !== "ready") {
+      return;
+    }
+
+    const queue = promptQueueRef.current;
+    const nextIndex = promptQueueIndexRef.current + 1;
+    if (nextIndex >= queue.length) {
+      promptQueueActiveRef.current = false;
+      return;
+    }
+
+    promptQueueIndexRef.current = nextIndex;
+    const nextPrompt = queue[nextIndex];
+    if (!nextPrompt) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      onSendRef.current(nextPrompt);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [status]);
 
   const onSwitchBranch = useCallback(
     (messageId: string) => switchToBranch(messageId),

@@ -100,6 +100,32 @@ export function useCreateAiProviderMutation(
     });
 }
 
+export type AiModelListItem = AiProviderModel & { isDefault?: boolean };
+
+/**
+ * List AI models (platform console API)
+ */
+export async function listAiModels(params?: { isActive?: boolean }): Promise<AiModelListItem[]> {
+    return consoleHttpClient.get<AiModelListItem[]>("/ai-models", {
+        params: { isActive: params?.isActive ?? true },
+    });
+}
+
+/**
+ * Query enabled AI models for selectors
+ */
+export function useAiModelsListQuery(
+    params?: { isActive?: boolean },
+    options?: QueryOptionsUtil<AiModelListItem[]>,
+) {
+    const isActive = params?.isActive ?? true;
+    return useQuery<AiModelListItem[]>({
+        queryKey: ["ai-models", "list", { isActive }],
+        queryFn: () => listAiModels({ isActive }),
+        ...options,
+    });
+}
+
 /**
  * Get AI provider list
  */
