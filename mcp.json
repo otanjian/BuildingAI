@@ -6,6 +6,10 @@
         "headers": {
           "Authorization": "token 1eae2779f69f97a:9b52eb3a5bfef49"
         }
+      },
+      "SAP-ABAP-ADT": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:8100/mcp"
       }
     }
   }
