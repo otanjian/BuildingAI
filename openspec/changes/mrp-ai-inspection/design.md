@@ -1,6 +1,6 @@
 ## Context
 
-The `mrp-governance` extension dashboard triggers AI inspections via `postMessage` (`extension-open-chat`) to the platform embedded chat sidebar. The agent uses ERP MCP tools (Path A). Results today are cached in `localStorage` (`ai-check-storage.ts`) and merged into the rules table; dashboard scores still come from batch `governance_run` + `quality_issue` (rule engine). Product requirements in `docs/mrp-ai.md` require session titles, structured output, DB persistence, and detail drill-down.
+The `erp-healthy` extension dashboard triggers AI inspections via `postMessage` (`extension-open-chat`) to the platform embedded chat sidebar. The agent uses ERP MCP tools (Path A). Results today are cached in `localStorage` (`ai-check-storage.ts`) and merged into the rules table; dashboard scores still come from batch `governance_run` + `quality_issue` (rule engine). Product requirements in `docs/mrp-ai.md` require session titles, structured output, DB persistence, and detail drill-down.
 
 **Constraints (locked):**
 
@@ -112,10 +112,10 @@ Auth: same extension console guards as existing dashboard routes.
 
 ## Migration Plan
 
-1. Add TypeORM entities + migration under `mrp_governance` schema.
+1. Add TypeORM entities + migration under `erp_healthy` schema.
 2. Deploy API; existing batch runs default `runType = rule_engine`.
 3. Deploy web coordinator + dashboard changes.
-4. Optional: clear stale `mrp-governance:ai-check-results` localStorage key on first load.
+4. Optional: clear stale `erp-healthy:ai-check-results` localStorage key on first load.
 
 Rollback: revert extension; new tables/columns remain unused; batch governance unaffected.
 

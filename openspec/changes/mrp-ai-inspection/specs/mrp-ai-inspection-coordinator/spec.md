@@ -6,7 +6,7 @@ The extension SHALL open the platform AI sidebar using the existing `extension-o
 
 #### Scenario: Start check opens sidebar
 
-- **WHEN** the user starts inspection from `/apps/mrp-governance`
+- **WHEN** the user starts inspection from `/apps/erp-healthy`
 - **THEN** the parent window opens the embedded chat panel and queues prompts for all enabled rules
 
 ### Requirement: Enhanced inspection prompt

@@ -10,7 +10,7 @@ Product checklist mapped to **`governance_run`** extension schema (not separate 
 | 结果落库 | `governance_rule_result` + `governance_check_detail` |
 | 双击上次结果 | `RuleResultDetailDrawer` + `GET /inspection/rule-results/:id/details` |
 
-## Tables (PostgreSQL `mrp_governance` schema)
+## Tables (PostgreSQL `erp_healthy` schema)
 
 **Task** → `governance_run` (`runType = ai_inspection`, `status = checking|completed`)
 

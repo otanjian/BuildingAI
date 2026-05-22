@@ -6,6 +6,7 @@ import {
   useAssistantStore,
 } from "@buildingai/stores";
 import {
+  clearPendingChatRequest,
   consumePendingChatRequest,
   resolveInspectionPromptQueue,
   type PendingChatRequest,
@@ -326,6 +327,7 @@ export function useAssistant(options: UseAssistantOptions): AssistantContextValu
     promptQueueRef.current = queue;
     promptQueueIndexRef.current = 0;
     promptQueueActiveRef.current = queue.length > 1;
+    clearPendingChatRequest();
 
     const delayMs =
       typeof pending.initialDelayMs === "number" && pending.initialDelayMs >= 0
@@ -371,6 +373,7 @@ export function useAssistant(options: UseAssistantOptions): AssistantContextValu
     const nextIndex = promptQueueIndexRef.current + 1;
     if (nextIndex >= queue.length) {
       promptQueueActiveRef.current = false;
+      clearPendingChatRequest();
       return;
     }
 

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { StandardChatSidebar } from "@/components/ask-assistant-ui/standard-chat-sidebar";
+import { ErpHealthyFloatingAgent } from "@/components/erp-healthy-floating-agent";
 
 function pendingRequestFromExtensionMessage(message: ExtensionOpenChatMessage): PendingChatRequest {
   const draft: PendingChatRequest = {
@@ -100,6 +101,9 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
   }, [applyRequest, openEmptyPanel]);
 
   const onAppsRoute = location.pathname.startsWith("/apps/");
+  const onErpHealthyApp =
+    location.pathname === "/apps/erp-healthy" ||
+    location.pathname.startsWith("/apps/erp-healthy/");
   const showPanel = onAppsRoute && panelOpen && panelMounted;
   const showFab = onAppsRoute && !showPanel;
 
@@ -138,6 +142,7 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
           <span className="sr-only">AI 对话</span>
         </Button>
       ) : null}
+      {onErpHealthyApp ? <ErpHealthyFloatingAgent /> : null}
     </div>
   );
 }

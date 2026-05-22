@@ -2,7 +2,7 @@
 
 - [x] 1.1 Add `RunType` enum and columns on `GovernanceRun` (`runType`, `sessionTitle`, `executor`, `dataSource`, `conversationId`, `inspectionMeta`)
 - [x] 1.2 Create `GovernanceRuleResult` and `GovernanceCheckDetail` entities with relations to `GovernanceRun`
-- [x] 1.3 Add migration `0.x.x-ai-inspection.ts` under `extensions/mrp-governance/src/api/db/migrations/`
+- [x] 1.3 Add migration `0.x.x-ai-inspection.ts` under `extensions/erp-healthy/src/api/db/migrations/`
 - [x] 1.4 Register entities in `db/entities/index.ts` and extension app module
 
 ## 2. Inspection API (extension)
@@ -44,7 +44,7 @@
 
 ## 7. Verification and docs
 
-- [ ] 7.1 Manual E2E: start check → MCP run → DB rows → drawer → score update (embedded `/apps/mrp-governance`)
-- [x] 7.2 Run `pnpm --filter mrp-governance build:api` and extension tests
-- [x] 7.3 Update `extensions/mrp-governance/README.md` with inspection persistence flow
+- [ ] 7.1 Manual E2E: start check → MCP run → DB rows → drawer → score update (embedded `/apps/erp-healthy`)
+- [x] 7.2 Run `pnpm --filter erp-healthy build:api` and extension tests
+- [x] 7.3 Update `extensions/erp-healthy/README.md` with inspection persistence flow
 - [x] 7.4 Align `docs/mrp-ai.md` checklist with `governance_run` field names (optional cross-reference)

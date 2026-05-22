@@ -32,11 +32,13 @@ export default defineConfig({
     port: 4091,
     strictPort: true,
     proxy: {
+      // Production index.html (cached) preloads /assets/*; serve built chunks from API in dev.
+      "/assets": { target: apiTarget, changeOrigin: true },
       "/extension": { target: apiTarget, changeOrigin: true },
       "/api": { target: apiTarget, changeOrigin: true },
       "/consoleapi": { target: apiTarget, changeOrigin: true },
       "/web": { target: apiTarget, changeOrigin: true },
-      "/mrp-governance": { target: apiTarget, changeOrigin: true },
+      "/erp-healthy": { target: apiTarget, changeOrigin: true },
     },
     hmr: host
       ? {

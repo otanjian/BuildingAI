@@ -604,7 +604,7 @@ importers:
         specifier: catalog:dev
         version: 2.2.12(typescript@5.9.3)
 
-  extensions/mrp-governance:
+  extensions/erp-healthy:
     dependencies:
       '@buildingai/ai-sdk':
         specifier: workspace:*

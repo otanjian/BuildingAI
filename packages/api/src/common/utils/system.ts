@@ -204,11 +204,14 @@ export const setAssetsDir = async (app: NestExpressApplication) => {
                 return next();
             }
 
-            // Asset requests must be served by useStaticAssets only (not SPA index.html).
+            // Missing extension assets must not fall through to the main web SPA index.html.
             if (
                 req.path.includes("/assets/") ||
                 /\.(?:js|mjs|css|map|woff2?|png|jpe?g|gif|svg|ico)$/i.test(req.path)
             ) {
+                if (!res.headersSent) {
+                    return res.status(404).send("Not Found");
+                }
                 return next();
             }
 

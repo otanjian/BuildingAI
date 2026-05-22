@@ -24,7 +24,7 @@ context: |
 
   ### Extensions
   - Plugins live under `extensions/<name>/` (API + web)
-  - Active product example: `extensions/mrp-governance` (MRP data governance, ERP MCP, AI checks)
+  - Active product example: `extensions/erp-healthy` (MRP data governance, ERP MCP, AI checks)
   - Product requirements: `docs/mrp.md`, `docs/mrp-ai.md`
 
   ## Conventions
@@ -41,11 +41,11 @@ context: |
   - UI work: `skills/frontend-design/SKILL.md`
   - PostgreSQL schema: `skills/postgresql-table-design/SKILL.md`
 
-  ## MRP governance domain (when touching `extensions/mrp-governance`)
+  ## MRP governance domain (when touching `extensions/erp-healthy`)
 
   - ERP data via MCP; quality rules in `docs/mrp.md`
   - Persist check results per `docs/mrp-ai.md` table design
-  - Dashboard and rule flows: `extensions/mrp-governance/src/web/`
+  - Dashboard and rule flows: `extensions/erp-healthy/src/web/`
 
 rules:
   proposal:

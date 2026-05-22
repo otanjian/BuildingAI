@@ -34,11 +34,11 @@ The dashboard UI and MCP path (Path A) are in place; the missing piece is persis
 
 ### Modified Capabilities
 
-<!-- No existing openspec/specs for mrp-governance; requirements live in docs/mrp.md and docs/mrp-ai.md -->
+<!-- No existing openspec/specs for erp-healthy; requirements live in docs/mrp.md and docs/mrp-ai.md -->
 
 ## Impact
 
-- **Extension**: `extensions/mrp-governance` (API entities, migrations, inspection module, web dashboard, prompt builder, coordinator hook).
+- **Extension**: `extensions/erp-healthy` (API entities, migrations, inspection module, web dashboard, prompt builder, coordinator hook).
 - **Docs**: `docs/mrp-ai.md` remains the product checklist; implementation maps to extended `governance_run` model.
 - **Platform**: Read-only use of existing Web APIs (`GET/PATCH /ai-conversations`); no client package changes.
-- **Database**: New tables/columns under `mrp_governance` schema via TypeORM entities + migration.
+- **Database**: New tables/columns under `erp_healthy` schema via TypeORM entities + migration.

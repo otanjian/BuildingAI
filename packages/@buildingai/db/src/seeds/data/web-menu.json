@@ -72,12 +72,12 @@
             "title": "应用",
             "items": [
                 {
-                    "id": "menu_group_extension_mrp_governance",
+                    "id": "menu_group_extension_erp_healthy",
                     "icon": "puzzle",
-                    "title": "MRP 数据治理",
+                    "title": "ERP数据治理",
                     "link": {
-                        "label": "MRP 数据治理",
-                        "path": "/apps/mrp-governance",
+                        "label": "ERP数据治理",
+                        "path": "/apps/erp-healthy",
                         "type": "extension",
                         "query": {},
                         "component": null,

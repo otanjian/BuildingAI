@@ -29,8 +29,16 @@ export function buildInspectionRulePrompt(rule: InspectionRulePayload): string {
     return `请检查：${rule.dataItem}\n规则：${rule.method}`;
 }
 
-/** Resolve sequential prompts; prefers inspectionRules over legacy bundled promptQueue. */
+/** Resolve sequential prompts; prefers metadata-rich promptQueue over inspectionRules. */
 export function resolveInspectionPromptQueue(request: PendingChatRequest): string[] {
+    const fromQueue = Array.isArray(request.promptQueue)
+        ? request.promptQueue.map((item) => String(item).trim()).filter(Boolean)
+        : [];
+
+    if (fromQueue.length > 0 && fromQueue.some((item) => item.includes("runId="))) {
+        return fromQueue;
+    }
+
     const fromRules = Array.isArray(request.inspectionRules)
         ? request.inspectionRules
               .filter(
@@ -52,10 +60,6 @@ export function resolveInspectionPromptQueue(request: PendingChatRequest): strin
     if (fromRules.length > 0) {
         return fromRules;
     }
-
-    const fromQueue = Array.isArray(request.promptQueue)
-        ? request.promptQueue.map((item) => String(item).trim()).filter(Boolean)
-        : [];
 
     if (fromQueue.length > 0 && !fromQueue[0]!.startsWith(BUNDLED_INSPECTION_PROMPT_PREFIX)) {
         return fromQueue;
