@@ -1,0 +1,33 @@
+{
+    "name": "@buildingai/extension-dashboard",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "exports": {
+        ".": {
+            "import": "./src/index.ts",
+            "types": "./src/index.ts"
+        },
+        "./styles.css": "./src/theme/dashboard-base.css"
+    },
+    "scripts": {
+        "lint": "eslint src --quiet",
+        "check-types": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@buildingai/constants": "workspace:*",
+        "@buildingai/ui": "workspace:*",
+        "lucide-react": "catalog:web",
+        "react": "catalog:web",
+        "react-dom": "catalog:web",
+        "react-router-dom": "catalog:web",
+        "recharts": "catalog:web"
+    },
+    "devDependencies": {
+        "@buildingai/eslint-config": "workspace:*",
+        "@buildingai/typescript-config": "workspace:*",
+        "@types/react": "catalog:web",
+        "@types/react-dom": "catalog:web",
+        "typescript": "catalog:dev"
+    }
+}

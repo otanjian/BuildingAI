@@ -1,15 +1,31 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, type UserConfig } from "vite";
 
+const viteDir = path.dirname(fileURLToPath(import.meta.url));
+const extensionDashboardSrc = path.resolve(
+    viteDir,
+    "../../../../extension-dashboard/src",
+);
+
+const extensionDashboardAlias = {
+    "@buildingai/extension-dashboard": path.join(extensionDashboardSrc, "index.ts"),
+};
+
 // https://vite.dev/config/
 export const defineExtensionViteConfig = (packageJson: { name: string }, config?: UserConfig) => {
+    const userResolve = config?.resolve ?? {};
+    const userAlias =
+        userResolve.alias && typeof userResolve.alias === "object" && !Array.isArray(userResolve.alias)
+            ? userResolve.alias
+            : {};
+
     return defineConfig({
         plugins: [react(), tailwindcss(), babel({ presets: [reactCompilerPreset()] })],
-        resolve: {
-            tsconfigPaths: true,
-        },
         base: `/extension/${packageJson.name}`,
         envDir: "./../../",
         build: {
@@ -43,5 +59,13 @@ export const defineExtensionViteConfig = (packageJson: { name: string }, config?
             },
         },
         ...config,
+        resolve: {
+            ...userResolve,
+            tsconfigPaths: true,
+            alias: {
+                ...extensionDashboardAlias,
+                ...userAlias,
+            },
+        },
     });
 };

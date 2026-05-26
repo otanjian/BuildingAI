@@ -1,0 +1,1535 @@
+{
+  "version": "1.0.0",
+  "generatedFor": "PRD/DB doc batch",
+  "apps": [
+    {
+      "appId": "inv-opt-ai",
+      "slug": "INV-OPT-AI",
+      "productName": "库存优化自治",
+      "productNameFull": "库存优化自治系统",
+      "acronym": "INVO",
+      "schema": "inv_opt_ai",
+      "tablePrefix": "inv-opt-",
+      "agentName": "库存优化自治助手",
+      "triggerPhrase": "开始分析",
+      "rulesPageLabel": "分析规则",
+      "healthScore": "100 − (缺货风险×15 + 过量库存×8 + 参数失效×5 + 呆滞×3)",
+      "businessDomains": [
+        "库存策略",
+        "采购参数",
+        "需求预测",
+        "仓储执行"
+      ],
+      "erpDoctypes": [
+        "Item",
+        "Bin",
+        "Stock Ledger Entry",
+        "Purchase Order",
+        "Sales Order",
+        "Material Request"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "INV",
+      "autoFixPolicy": "低风险可写回 Item Reorder Level、安全库存建议字段；高风险仅建议",
+      "kpiAlt": [
+        "监控物料数",
+        "缺货风险条数",
+        "库存健康分",
+        "参数自动更新率",
+        "分析批次数",
+        "RCA 会话数"
+      ],
+      "extensionColumns": [
+        {
+          "table": "inv-opt-check_results",
+          "columns": [
+            "item_code varchar(50)",
+            "suggested_ss numeric",
+            "suggested_rop numeric"
+          ]
+        }
+      ],
+      "dashboard": {
+        "template": "supply-chain",
+        "hue": 217,
+        "icon": "inventory",
+        "healthScoreLabel": "库存健康分",
+        "batchLabel": "分析批次",
+        "heroChart": "domainBars",
+        "accentChart": "trendArea",
+        "domainChartTitle": "库存策略域分布",
+        "trendChartTitle": "近14天缺货与异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "已启用分析规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "缺货风险条数"
+          },
+          {
+            "metric": "healthScore",
+            "label": "库存健康分"
+          },
+          {
+            "metric": "autoFixRate",
+            "label": "参数自动更新率"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "热点库存域"
+          },
+          {
+            "metric": "newAnomalies14d",
+            "label": "近14天新增异常"
+          }
+        ],
+        "tablePrefix": "inv-opt-"
+      }
+    },
+    {
+      "appId": "proc-audit-ai",
+      "slug": "PROC-AUDIT-AI",
+      "productName": "采购合规审查自治",
+      "productNameFull": "采购合规审查自治系统",
+      "acronym": "PROC",
+      "schema": "proc_audit_ai",
+      "tablePrefix": "proc-audit-",
+      "agentName": "采购合规审查自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (价格异常×12 + 合规缺失×10 + 集中度×6 + 低风险×2)",
+      "businessDomains": [
+        "价格合规",
+        "审批链",
+        "供应商",
+        "三单匹配"
+      ],
+      "erpDoctypes": [
+        "Purchase Order",
+        "Purchase Receipt",
+        "Purchase Invoice",
+        "Supplier",
+        "Price List",
+        "Request for Quotation"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "PROC",
+      "autoFixPolicy": "默认禁止自动写回；仅生成整改建议与审批提醒",
+      "kpiAlt": [
+        "规则总数",
+        "待解决异常",
+        "合规健康分",
+        "自动修复率",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "compliance-audit",
+        "hue": 152,
+        "icon": "audit",
+        "healthScoreLabel": "合规健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "riskDonut",
+        "accentChart": "topRules",
+        "domainChartTitle": "采购合规域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "合规检查规则"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "高风险合规项"
+          },
+          {
+            "metric": "healthScore",
+            "label": "合规健康分"
+          },
+          {
+            "metric": "topRuleHits",
+            "label": "价格异常高发规则"
+          },
+          {
+            "metric": "checkRunsToday",
+            "label": "今日审查批次"
+          },
+          {
+            "metric": "rcaToday",
+            "label": "今日根因会话"
+          }
+        ],
+        "tablePrefix": "proc-audit-"
+      }
+    },
+    {
+      "appId": "ar-risk-ai",
+      "slug": "AR-RISK-AI",
+      "productName": "应收账款风控自治",
+      "productNameFull": "应收账款风控自治系统",
+      "acronym": "ARR",
+      "schema": "ar_risk_ai",
+      "tablePrefix": "ar-risk-",
+      "agentName": "应收账款风控自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (超期×10 + 超限×8 + 集中度×5 + 低风险×2)",
+      "businessDomains": [
+        "账龄",
+        "信用额度",
+        "回款",
+        "客户集中度"
+      ],
+      "erpDoctypes": [
+        "Customer",
+        "Sales Invoice",
+        "Payment Entry",
+        "Credit Limit",
+        "GL Entry"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "AR",
+      "autoFixPolicy": "可创建催收任务 Draft；冻结发货需人工确认",
+      "kpiAlt": [
+        "规则总数",
+        "超期金额",
+        "风控健康分",
+        "自动修复率",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "finance",
+        "hue": 32,
+        "icon": "receivable",
+        "healthScoreLabel": "风控健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "agingStack",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "应收账款账龄域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "应收监控规则"
+          },
+          {
+            "metric": "highRiskPending",
+            "label": "高风险应收异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "风控健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "账龄最重业务域"
+          },
+          {
+            "metric": "resolvedShare",
+            "label": "异常闭环率"
+          },
+          {
+            "metric": "rcaSessions",
+            "label": "催收分析会话"
+          }
+        ],
+        "tablePrefix": "ar-risk-"
+      }
+    },
+    {
+      "appId": "ap-opt-ai",
+      "slug": "AP-OPT-AI",
+      "productName": "应付账款优化自治",
+      "productNameFull": "应付账款优化自治系统",
+      "acronym": "APO",
+      "schema": "ap_opt_ai",
+      "tablePrefix": "ap-opt-",
+      "agentName": "应付账款优化自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (重复风险×15 + 早付损失×8 + 匹配失败×10 + 低风险×2)",
+      "businessDomains": [
+        "付款优化",
+        "三单匹配",
+        "现金折扣",
+        "供应商对账"
+      ],
+      "erpDoctypes": [
+        "Purchase Invoice",
+        "Payment Entry",
+        "Purchase Order",
+        "Purchase Receipt",
+        "GL Entry"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "AP",
+      "autoFixPolicy": "禁止自动付款；可建议付款排程与折扣窗口",
+      "kpiAlt": [
+        "规则总数",
+        "可享折扣未用",
+        "应付健康分",
+        "三单不匹配数",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "finance",
+        "hue": 262,
+        "icon": "payable",
+        "healthScoreLabel": "应付健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "statusPie",
+        "accentChart": "domainBars",
+        "domainChartTitle": "应付优化域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "应付优化规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "付款/匹配异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "应付健康分"
+          },
+          {
+            "metric": "autoFixRate",
+            "label": "折扣建议采纳率"
+          },
+          {
+            "metric": "statusPending",
+            "label": "待处理发票项"
+          },
+          {
+            "metric": "checkRunsToday",
+            "label": "今日优化运行"
+          }
+        ],
+        "tablePrefix": "ap-opt-"
+      }
+    },
+    {
+      "appId": "mfg-var-ai",
+      "slug": "MFG-VAR-AI",
+      "productName": "生产成本偏差自治",
+      "productNameFull": "生产成本偏差自治系统",
+      "acronym": "MFGV",
+      "schema": "mfg_var_ai",
+      "tablePrefix": "mfg-var-",
+      "agentName": "生产成本偏差自治助手",
+      "triggerPhrase": "开始分析",
+      "rulesPageLabel": "分析规则",
+      "healthScore": "100 − (材料超耗×10 + 工时偏差×8 + 报废×6 + 低风险×2)",
+      "businessDomains": [
+        "材料成本",
+        "人工成本",
+        "制造费用",
+        "工单完工"
+      ],
+      "erpDoctypes": [
+        "Work Order",
+        "BOM",
+        "Stock Entry",
+        "Job Card",
+        "Operation",
+        "Workstation"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "MFG",
+      "autoFixPolicy": "禁止自动调整标准成本；可建议 BOM/工艺修正",
+      "kpiAlt": [
+        "规则总数",
+        "工单偏差率",
+        "成本健康分",
+        "超耗金额",
+        "分析批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "operations",
+        "hue": 0,
+        "icon": "manufacturing",
+        "healthScoreLabel": "成本健康分",
+        "batchLabel": "分析批次",
+        "heroChart": "batchStack",
+        "accentChart": "trendArea",
+        "domainChartTitle": "生产成本域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "成本偏差规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "工单偏差异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "成本健康分"
+          },
+          {
+            "metric": "topRuleHits",
+            "label": "超耗高发规则"
+          },
+          {
+            "metric": "checkRunsToday",
+            "label": "今日分析批次"
+          },
+          {
+            "metric": "batchStackDone",
+            "label": "最近批次完成数"
+          }
+        ],
+        "tablePrefix": "mfg-var-"
+      }
+    },
+    {
+      "appId": "forecast-ai",
+      "slug": "FORECAST-AI",
+      "productName": "销售预测校准自治",
+      "productNameFull": "销售预测校准自治系统",
+      "acronym": "FCST",
+      "schema": "forecast_ai",
+      "tablePrefix": "forecast-",
+      "agentName": "销售预测校准自治助手",
+      "triggerPhrase": "开始分析",
+      "rulesPageLabel": "分析规则",
+      "healthScore": "100 − (MAPE过高×10 + 系统性偏差×6 + 低风险×2)",
+      "businessDomains": [
+        "预测准确率",
+        "偏差方向",
+        "新品预测",
+        "季节因子"
+      ],
+      "erpDoctypes": [
+        "Sales Forecast",
+        "Sales Order",
+        "Delivery Note",
+        "Item Group",
+        "Material Request Plan"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "FCST",
+      "autoFixPolicy": "可建议预测参数；写回预测数量需审批",
+      "kpiAlt": [
+        "规则总数",
+        "预测准确率",
+        "校准健康分",
+        "偏差方向一致数",
+        "分析批次",
+        "RCA 会话数"
+      ],
+      "extensionColumns": [
+        {
+          "table": "forecast-check_results",
+          "columns": [
+            "item_group varchar(100)",
+            "mape_value numeric(8,4)"
+          ]
+        }
+      ],
+      "dashboard": {
+        "template": "operations",
+        "hue": 187,
+        "icon": "forecast",
+        "healthScoreLabel": "校准健康分",
+        "batchLabel": "分析批次",
+        "heroChart": "trendArea",
+        "accentChart": "topRules",
+        "domainChartTitle": "预测校准域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "预测校准规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "MAPE/偏差异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "校准健康分"
+          },
+          {
+            "metric": "newAnomalies14d",
+            "label": "近14天预测偏差"
+          },
+          {
+            "metric": "autoFixRate",
+            "label": "参数建议采纳率"
+          },
+          {
+            "metric": "rcaToday",
+            "label": "今日校准会话"
+          }
+        ],
+        "tablePrefix": "forecast-"
+      }
+    },
+    {
+      "appId": "mdm-quality-ai",
+      "slug": "MDM-QUALITY-AI",
+      "productName": "主数据质量自治",
+      "productNameFull": "主数据质量自治系统",
+      "acronym": "MDM",
+      "schema": "mdm_quality_ai",
+      "tablePrefix": "mdm-quality-",
+      "agentName": "主数据质量自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (高风险×10 + 中风险×5 + 低风险×2)",
+      "businessDomains": [
+        "物料主数据",
+        "客户主数据",
+        "供应商主数据",
+        "BOM 主数据"
+      ],
+      "erpDoctypes": [
+        "Item",
+        "Customer",
+        "Supplier",
+        "BOM",
+        "Address",
+        "Contact"
+      ],
+      "seedRuleCount": 35,
+      "rulePrefix": "MDM",
+      "autoFixPolicy": "低风险可自动补全编码/格式；重复记录仅标记",
+      "kpiAlt": [
+        "规则总数",
+        "主数据完整率",
+        "质量健康分",
+        "重复率",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "compliance-audit",
+        "hue": 239,
+        "icon": "master-data",
+        "healthScoreLabel": "质量健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "domainQuadrant",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "主数据四域质量分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRuleShare",
+            "label": "规则启用率"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "主数据缺陷条数"
+          },
+          {
+            "metric": "healthScore",
+            "label": "质量健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "最差主数据域"
+          },
+          {
+            "metric": "autoFixedCount",
+            "label": "已自动修复条数"
+          },
+          {
+            "metric": "disabledRules",
+            "label": "待启用规则"
+          }
+        ],
+        "tablePrefix": "mdm-quality-"
+      }
+    },
+    {
+      "appId": "asset-life-ai",
+      "slug": "ASSET-LIFE-AI",
+      "productName": "固定资产全生命周期自治",
+      "productNameFull": "固定资产全生命周期自治系统",
+      "acronym": "AST",
+      "schema": "asset_life_ai",
+      "tablePrefix": "asset-life-",
+      "agentName": "固定资产全生命周期自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (账实不符×12 + 折旧异常×8 + 闲置×5 + 低风险×2)",
+      "businessDomains": [
+        "资产台账",
+        "折旧计提",
+        "盘点",
+        "处置"
+      ],
+      "erpDoctypes": [
+        "Asset",
+        "Asset Category",
+        "Depreciation Schedule",
+        "Asset Movement",
+        "Purchase Receipt"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "AST",
+      "autoFixPolicy": "禁止自动处置；可建议折旧调整与盘点差异处理",
+      "kpiAlt": [
+        "规则总数",
+        "盘点差异",
+        "资产健康分",
+        "闲置资产数",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "operations",
+        "hue": 84,
+        "icon": "asset",
+        "healthScoreLabel": "资产健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "statusPie",
+        "accentChart": "domainBars",
+        "domainChartTitle": "资产全生命周期域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "资产台账规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "账实/折旧异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "资产健康分"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "高风险资产项"
+          },
+          {
+            "metric": "autoFixedCount",
+            "label": "已建议处置条数"
+          },
+          {
+            "metric": "disabledRules",
+            "label": "未启用规则"
+          }
+        ],
+        "tablePrefix": "asset-life-"
+      }
+    },
+    {
+      "appId": "tax-compliance-ai",
+      "slug": "TAX-COMPLIANCE-AI",
+      "productName": "税务合规自治",
+      "productNameFull": "税务合规自治系统",
+      "acronym": "TAX",
+      "schema": "tax_compliance_ai",
+      "tablePrefix": "tax-compliance-",
+      "agentName": "税务合规自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (税率错误×15 + 发票缺失×10 + 匹配缺口×8 + 低风险×2)",
+      "businessDomains": [
+        "销项税",
+        "进项税",
+        "申报",
+        "跨境税"
+      ],
+      "erpDoctypes": [
+        "Sales Invoice",
+        "Purchase Invoice",
+        "Tax Category",
+        "Item Tax Template",
+        "GL Entry"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "TAX",
+      "autoFixPolicy": "禁止自动改税；仅建议与申报清单",
+      "kpiAlt": [
+        "规则总数",
+        "申报缺口",
+        "税务健康分",
+        "税率错误数",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "compliance-audit",
+        "hue": 28,
+        "icon": "tax",
+        "healthScoreLabel": "税务健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "riskDonut",
+        "accentChart": "domainBars",
+        "domainChartTitle": "税务合规域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "税务校验规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "申报缺口条数"
+          },
+          {
+            "metric": "healthScore",
+            "label": "税务健康分"
+          },
+          {
+            "metric": "riskMedium",
+            "label": "中风险税项"
+          },
+          {
+            "metric": "autoFixRate",
+            "label": "建议采纳率"
+          },
+          {
+            "metric": "newAnomalies14d",
+            "label": "近14天新发现"
+          }
+        ],
+        "tablePrefix": "tax-compliance-"
+      }
+    },
+    {
+      "appId": "otif-ai",
+      "slug": "OTIF-AI",
+      "productName": "供应链 OTIF 自治",
+      "productNameFull": "供应链 OTIF 自治系统",
+      "acronym": "OTIF",
+      "schema": "otif_ai",
+      "tablePrefix": "otif-",
+      "agentName": "供应链 OTIF 自治助手",
+      "triggerPhrase": "开始巡检",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (OTIF偏低×10 + 缺料停线×15 + 供应商延迟×6 + 低风险×2)",
+      "businessDomains": [
+        "交付准时",
+        "齐套率",
+        "供应商绩效",
+        "关键物料"
+      ],
+      "erpDoctypes": [
+        "Purchase Order",
+        "Delivery Note",
+        "Work Order",
+        "Material Request",
+        "Supplier Scorecard"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "OTIF",
+      "autoFixPolicy": "可建议加急 PO；不自动改承诺交期",
+      "kpiAlt": [
+        "规则总数",
+        "OTIF%",
+        "交付健康分",
+        "关键件缺料",
+        "巡检批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "supply-chain",
+        "hue": 201,
+        "icon": "delivery",
+        "healthScoreLabel": "交付健康分",
+        "batchLabel": "巡检批次",
+        "heroChart": "trendArea",
+        "accentChart": "domainBars",
+        "domainChartTitle": "交付与齐套域分布",
+        "trendChartTitle": "近14天 OTIF 相关异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "交付监控规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "交付异常条数"
+          },
+          {
+            "metric": "healthScore",
+            "label": "交付健康分"
+          },
+          {
+            "metric": "runningCheckRuns",
+            "label": "运行中巡检"
+          },
+          {
+            "metric": "resolved14d",
+            "label": "近14天已闭环"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "高风险交付项"
+          }
+        ],
+        "tablePrefix": "otif-"
+      }
+    },
+    {
+      "appId": "quality-rca-ai",
+      "slug": "QUALITY-RCA-AI",
+      "productName": "质量异常追溯自治",
+      "productNameFull": "质量异常追溯自治系统",
+      "acronym": "QRCA",
+      "schema": "quality_rca_ai",
+      "tablePrefix": "quality-rca-",
+      "agentName": "质量异常追溯自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (客诉×15 + 批量不良×10 + SPC越界×8 + 低风险×2)",
+      "businessDomains": [
+        "来料检验",
+        "制程质量",
+        "客诉",
+        "批次追溯"
+      ],
+      "erpDoctypes": [
+        "Quality Inspection",
+        "Batch",
+        "Non Conformance",
+        "Customer Issue",
+        "Work Order"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "QA",
+      "autoFixPolicy": "可建议批次隔离；不自动报废",
+      "kpiAlt": [
+        "规则总数",
+        "不良率",
+        "质量健康分",
+        "批次隔离数",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "extensionColumns": [
+        {
+          "table": "quality-rca-check_results",
+          "columns": [
+            "batch_no varchar(50)",
+            "inspection_id varchar(50)"
+          ]
+        }
+      ],
+      "dashboard": {
+        "template": "compliance-audit",
+        "hue": 343,
+        "icon": "quality",
+        "healthScoreLabel": "质量健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "topRules",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "质量追溯域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "质量追溯规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "批次/客诉异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "质量健康分"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "高风险质量项"
+          },
+          {
+            "metric": "batchStackFailed",
+            "label": "检查失败批次"
+          },
+          {
+            "metric": "rcaSessions",
+            "label": "RCA 追溯会话"
+          }
+        ],
+        "tablePrefix": "quality-rca-"
+      }
+    },
+    {
+      "appId": "hr-compliance-ai",
+      "slug": "HR-COMPLIANCE-AI",
+      "productName": "人力资源合规自治",
+      "productNameFull": "人力资源合规自治系统",
+      "acronym": "HRC",
+      "schema": "hr_compliance_ai",
+      "tablePrefix": "hr-compliance-",
+      "agentName": "人力资源合规自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (违法加班×12 + 证照过期×10 + 薪酬异常×8 + 低风险×2)",
+      "businessDomains": [
+        "考勤合规",
+        "证照",
+        "薪酬",
+        "编制"
+      ],
+      "erpDoctypes": [
+        "Employee",
+        "Attendance",
+        "Salary Slip",
+        "Leave Application",
+        "Employee Grade"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "HR",
+      "autoFixPolicy": "禁止自动改薪酬；可提醒证照续期",
+      "kpiAlt": [
+        "规则总数",
+        "证照到期",
+        "合规健康分",
+        "超编岗位数",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "compliance-audit",
+        "hue": 271,
+        "icon": "hr",
+        "healthScoreLabel": "合规健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "domainBars",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "人力合规域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "人力合规规则"
+          },
+          {
+            "metric": "highRiskPending",
+            "label": "高风险人力项"
+          },
+          {
+            "metric": "healthScore",
+            "label": "合规健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "重点合规域"
+          },
+          {
+            "metric": "checkRunTotal",
+            "label": "累计检查批次"
+          },
+          {
+            "metric": "rcaToday",
+            "label": "今日咨询会话"
+          }
+        ],
+        "tablePrefix": "hr-compliance-"
+      }
+    },
+    {
+      "appId": "project-health-ai",
+      "slug": "PROJECT-HEALTH-AI",
+      "productName": "项目交付健康自治",
+      "productNameFull": "项目交付健康自治系统",
+      "acronym": "PRJ",
+      "schema": "project_health_ai",
+      "tablePrefix": "project-health-",
+      "agentName": "项目交付健康自治助手",
+      "triggerPhrase": "开始分析",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (里程碑延误×10 + 预算超支×8 + 资源冲突×6 + 低风险×2)",
+      "businessDomains": [
+        "进度",
+        "成本",
+        "资源",
+        "范围"
+      ],
+      "erpDoctypes": [
+        "Project",
+        "Task",
+        "Timesheet",
+        "Purchase Invoice",
+        "Sales Order"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "PRJ",
+      "autoFixPolicy": "仅建议；不自动改任务日期或预算",
+      "kpiAlt": [
+        "规则总数",
+        "SPI/CPI",
+        "项目健康分",
+        "延误项目数",
+        "分析批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "project-service",
+        "hue": 174,
+        "icon": "project",
+        "healthScoreLabel": "项目健康分",
+        "batchLabel": "分析批次",
+        "heroChart": "batchTimeline",
+        "accentChart": "domainBars",
+        "domainChartTitle": "项目交付域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "项目监控规则"
+          },
+          {
+            "metric": "highRiskPending",
+            "label": "延误/超支风险"
+          },
+          {
+            "metric": "healthScore",
+            "label": "项目健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "最差项目域"
+          },
+          {
+            "metric": "checkRunsToday",
+            "label": "今日健康分析"
+          },
+          {
+            "metric": "rcaSessions",
+            "label": "交付复盘会话"
+          }
+        ],
+        "tablePrefix": "project-health-"
+      }
+    },
+    {
+      "appId": "energy-carbon-ai",
+      "slug": "ENERGY-CARBON-AI",
+      "productName": "能源与碳排放自治",
+      "productNameFull": "能源与碳排放自治系统",
+      "acronym": "ECO",
+      "schema": "energy_carbon_ai",
+      "tablePrefix": "energy-carbon-",
+      "agentName": "能源与碳排放自治助手",
+      "triggerPhrase": "开始分析",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (能耗异常×10 + 超排×12 + 数据缺失×5 + 低风险×2)",
+      "businessDomains": [
+        "能耗",
+        "碳排",
+        "计量",
+        "节能"
+      ],
+      "erpDoctypes": [
+        "Energy Log (custom)",
+        "Work Order",
+        "Utility Invoice",
+        "Production Plan"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "ECO",
+      "autoFixPolicy": "仅建议节能措施；不写回生产计划",
+      "kpiAlt": [
+        "规则总数",
+        "单位能耗",
+        "能源健康分",
+        "碳排超标",
+        "分析批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "sustainability",
+        "hue": 142,
+        "icon": "energy",
+        "healthScoreLabel": "能源健康分",
+        "batchLabel": "分析批次",
+        "heroChart": "domainEsgBars",
+        "accentChart": "trendArea",
+        "domainChartTitle": "能源与碳排域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "能耗监控规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "能耗/碳排异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "能源健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "超标最重站点域"
+          },
+          {
+            "metric": "newAnomalies14d",
+            "label": "近14天能耗异常"
+          },
+          {
+            "metric": "autoFixRate",
+            "label": "节能建议采纳率"
+          }
+        ],
+        "tablePrefix": "energy-carbon-"
+      }
+    },
+    {
+      "appId": "contract-ai",
+      "slug": "CONTRACT-AI",
+      "productName": "合同履约自治",
+      "productNameFull": "合同履约自治系统",
+      "acronym": "CTR",
+      "schema": "contract_ai",
+      "tablePrefix": "contract-",
+      "agentName": "合同履约自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (到期未续×10 + SLA违约×12 + 执行偏差×6 + 低风险×2)",
+      "businessDomains": [
+        "合同到期",
+        "SLA",
+        "金额执行",
+        "续约"
+      ],
+      "erpDoctypes": [
+        "Contract",
+        "Sales Order",
+        "Purchase Order",
+        "Service Level Agreement"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "CTR",
+      "autoFixPolicy": "可创建续约提醒；不自动签署",
+      "kpiAlt": [
+        "规则总数",
+        "即将到期合同",
+        "履约健康分",
+        "SLA 违约",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "project-service",
+        "hue": 231,
+        "icon": "contract",
+        "healthScoreLabel": "履约健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "recentBatches",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "合同履约域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "合同履约规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "到期/SLA 异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "履约健康分"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "高风险合同"
+          },
+          {
+            "metric": "checkRunTotal",
+            "label": "累计巡检批次"
+          },
+          {
+            "metric": "resolvedShare",
+            "label": "履约闭环率"
+          }
+        ],
+        "tablePrefix": "contract-"
+      }
+    },
+    {
+      "appId": "channel-inv-ai",
+      "slug": "CHANNEL-INV-AI",
+      "productName": "渠道库存协同自治",
+      "productNameFull": "渠道库存协同自治系统",
+      "acronym": "CHI",
+      "schema": "channel_inv_ai",
+      "tablePrefix": "channel-inv-",
+      "agentName": "渠道库存协同自治助手",
+      "triggerPhrase": "开始分析",
+      "rulesPageLabel": "分析规则",
+      "healthScore": "100 − (渠道缺货×10 + 窜货嫌疑×12 + 呆滞×6 + 低风险×2)",
+      "businessDomains": [
+        "渠道库存",
+        "补货",
+        "窜货",
+        "渠道呆滞"
+      ],
+      "erpDoctypes": [
+        "Warehouse",
+        "Stock Ledger Entry",
+        "Sales Order",
+        "Delivery Note",
+        "Territory"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "CHI",
+      "autoFixPolicy": "可建议调拨 Draft；不自动改渠道价格",
+      "kpiAlt": [
+        "规则总数",
+        "渠道覆盖",
+        "协同健康分",
+        "补货建议数",
+        "分析批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "supply-chain",
+        "hue": 38,
+        "icon": "channel",
+        "healthScoreLabel": "协同健康分",
+        "batchLabel": "分析批次",
+        "heroChart": "domainBars",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "渠道库存域分布",
+        "trendChartTitle": "近14天渠道异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "渠道监控规则"
+          },
+          {
+            "metric": "highRiskPending",
+            "label": "高风险渠道异常"
+          },
+          {
+            "metric": "healthScore",
+            "label": "协同健康分"
+          },
+          {
+            "metric": "pendingShare",
+            "label": "待处理占比"
+          },
+          {
+            "metric": "checkRunsToday",
+            "label": "今日协同分析"
+          },
+          {
+            "metric": "topRuleHits",
+            "label": "高发规则命中"
+          }
+        ],
+        "tablePrefix": "channel-inv-"
+      }
+    },
+    {
+      "appId": "budget-control-ai",
+      "slug": "BUDGET-CONTROL-AI",
+      "productName": "预算执行监控自治",
+      "productNameFull": "预算执行监控自治系统",
+      "acronym": "BDG",
+      "schema": "budget_control_ai",
+      "tablePrefix": "budget-control-",
+      "agentName": "预算执行监控自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (超支×10 + 无预算支出×12 + 预测偏差×6 + 低风险×2)",
+      "businessDomains": [
+        "部门预算",
+        "项目预算",
+        "冻结",
+        "滚动预测"
+      ],
+      "erpDoctypes": [
+        "Budget",
+        "GL Entry",
+        "Purchase Order",
+        "Cost Center",
+        "Project"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "BDG",
+      "autoFixPolicy": "可建议冻结 PO；不自动过账",
+      "kpiAlt": [
+        "规则总数",
+        "预算执行率",
+        "预算健康分",
+        "无预算 PO",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "finance",
+        "hue": 172,
+        "icon": "budget",
+        "healthScoreLabel": "预算健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "domainBars",
+        "accentChart": "statusPie",
+        "domainChartTitle": "预算执行域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "ruleCount",
+            "label": "预算监控规则"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "超支/无预算项"
+          },
+          {
+            "metric": "healthScore",
+            "label": "预算健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "超支最重部门域"
+          },
+          {
+            "metric": "autoFixRate",
+            "label": "冻结建议采纳率"
+          },
+          {
+            "metric": "runningCheckRuns",
+            "label": "运行中监控"
+          }
+        ],
+        "tablePrefix": "budget-control-"
+      }
+    },
+    {
+      "appId": "service-sla-ai",
+      "slug": "SERVICE-SLA-AI",
+      "productName": "售后服务 SLA 自治",
+      "productNameFull": "售后服务 SLA 自治系统",
+      "acronym": "SLA",
+      "schema": "service_sla_ai",
+      "tablePrefix": "service-sla-",
+      "agentName": "售后服务 SLA 自治助手",
+      "triggerPhrase": "开始巡检",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (SLA违约×12 + 重复维修×8 + 备件缺货×6 + 低风险×2)",
+      "businessDomains": [
+        "响应时效",
+        "解决时效",
+        "备件",
+        "一次修复率"
+      ],
+      "erpDoctypes": [
+        "Issue",
+        "Maintenance Visit",
+        "Warranty Claim",
+        "Stock Entry",
+        "Serial No"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "SLA",
+      "autoFixPolicy": "可建议备件补货；不自动关闭工单",
+      "kpiAlt": [
+        "规则总数",
+        "一次修复率",
+        "SLA 健康分",
+        "P1 超时",
+        "巡检批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "project-service",
+        "hue": 213,
+        "icon": "service",
+        "healthScoreLabel": "SLA 健康分",
+        "batchLabel": "巡检批次",
+        "heroChart": "riskDonut",
+        "accentChart": "batchTimeline",
+        "domainChartTitle": "售后服务域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "pendingAnomalies",
+            "label": "SLA 违约条数"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "P1 级超时风险"
+          },
+          {
+            "metric": "healthScore",
+            "label": "SLA 健康分"
+          },
+          {
+            "metric": "checkRunsToday",
+            "label": "今日巡检批次"
+          },
+          {
+            "metric": "resolved14d",
+            "label": "近14天已闭环"
+          },
+          {
+            "metric": "topRuleHits",
+            "label": "重复维修高发规则"
+          }
+        ],
+        "tablePrefix": "service-sla-"
+      }
+    },
+    {
+      "appId": "fx-risk-ai",
+      "slug": "FX-RISK-AI",
+      "productName": "外汇风险自治",
+      "productNameFull": "外汇风险自治系统",
+      "acronym": "FXR",
+      "schema": "fx_risk_ai",
+      "tablePrefix": "fx-risk-",
+      "agentName": "外汇风险自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "监控规则",
+      "healthScore": "100 − (敞口超限×10 + 损益异常×8 + 汇率陈旧×5 + 低风险×2)",
+      "businessDomains": [
+        "敞口",
+        "汇兑损益",
+        "汇率",
+        "对冲"
+      ],
+      "erpDoctypes": [
+        "Currency Exchange Settings",
+        "GL Entry",
+        "Sales Invoice",
+        "Purchase Invoice",
+        "Journal Entry"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "FX",
+      "autoFixPolicy": "禁止自动交易；仅风险报告与对冲建议",
+      "kpiAlt": [
+        "规则总数",
+        "净敞口",
+        "外汇健康分",
+        "汇兑损益异常",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "finance",
+        "hue": 258,
+        "icon": "fx",
+        "healthScoreLabel": "外汇健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "trendArea",
+        "accentChart": "riskDonut",
+        "domainChartTitle": "外汇风险域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRules",
+            "label": "外汇监控规则"
+          },
+          {
+            "metric": "riskHigh",
+            "label": "敞口高风险项"
+          },
+          {
+            "metric": "healthScore",
+            "label": "外汇健康分"
+          },
+          {
+            "metric": "riskMedium",
+            "label": "中风险汇兑项"
+          },
+          {
+            "metric": "newAnomalies14d",
+            "label": "近14天新增预警"
+          },
+          {
+            "metric": "rcaSessions",
+            "label": "对冲分析会话"
+          }
+        ],
+        "tablePrefix": "fx-risk-"
+      }
+    },
+    {
+      "appId": "esg-report-ai",
+      "slug": "ESG-REPORT-AI",
+      "productName": "ESG 合规披露自治",
+      "productNameFull": "ESG 合规披露自治系统",
+      "acronym": "ESG",
+      "schema": "esg_report_ai",
+      "tablePrefix": "esg-report-",
+      "agentName": "ESG 合规披露自治助手",
+      "triggerPhrase": "开始检查",
+      "rulesPageLabel": "检查规则",
+      "healthScore": "100 − (披露缺口×10 + 供应链ESG缺失×8 + 指标异常×6 + 低风险×2)",
+      "businessDomains": [
+        "环境指标",
+        "社会指标",
+        "治理指标",
+        "供应链 ESG"
+      ],
+      "erpDoctypes": [
+        "Supplier",
+        "Purchase Order",
+        "Custom ESG Metrics",
+        "Quality Inspection"
+      ],
+      "seedRuleCount": 30,
+      "rulePrefix": "ESG",
+      "autoFixPolicy": "仅披露建议；不写回供应商主数据",
+      "kpiAlt": [
+        "规则总数",
+        "披露完整率",
+        "ESG 健康分",
+        "供应商覆盖率",
+        "检查批次",
+        "RCA 会话数"
+      ],
+      "dashboard": {
+        "template": "sustainability",
+        "hue": 128,
+        "icon": "esg",
+        "healthScoreLabel": "ESG 健康分",
+        "batchLabel": "检查批次",
+        "heroChart": "domainEsgBars",
+        "accentChart": "statusPie",
+        "domainChartTitle": "ESG 披露域分布",
+        "trendChartTitle": "近14天异常趋势",
+        "kpis": [
+          {
+            "metric": "enabledRuleShare",
+            "label": "披露规则启用率"
+          },
+          {
+            "metric": "pendingAnomalies",
+            "label": "披露缺口条数"
+          },
+          {
+            "metric": "healthScore",
+            "label": "ESG 健康分"
+          },
+          {
+            "metric": "domainLeadPending",
+            "label": "ESG 薄弱域"
+          },
+          {
+            "metric": "resolvedShare",
+            "label": "披露完整率(闭环)"
+          },
+          {
+            "metric": "rcaSessions",
+            "label": "披露编报会话"
+          }
+        ],
+        "tablePrefix": "esg-report-"
+      }
+    }
+  ]
+}

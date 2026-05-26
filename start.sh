@@ -344,23 +344,6 @@ check_deps() {
   fi
 }
 
-build_erp_healthy_extension_web_if_stale() {
-  local ext_dir="extensions/erp-healthy"
-  local out_index="${ext_dir}/.output/public/index.html"
-  if [[ ! -f "${ext_dir}/package.json" ]]; then
-    return 0
-  fi
-  if [[ ! -f "$out_index" ]]; then
-    echo "Building erp-healthy extension web (first run)..."
-    pnpm --filter erp-healthy build:web
-    return 0
-  fi
-  if find "${ext_dir}/src/web" -type f -newer "$out_index" 2>/dev/null | grep -q .; then
-    echo "Rebuilding erp-healthy extension web (source changed)..."
-    pnpm --filter erp-healthy build:web
-  fi
-}
-
 print_info() {
   cat <<EOF
 
@@ -386,7 +369,6 @@ start_dev() {
   check_env_file
   ensure_ports_available "$force" "${DEV_PORTS[@]}"
   check_deps
-  build_erp_healthy_extension_web_if_stale
 
   if [[ "$detach" == 1 ]]; then
     stop_pid_file "dev"

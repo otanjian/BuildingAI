@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { StandardChatSidebar } from "@/components/ask-assistant-ui/standard-chat-sidebar";
-import { ErpHealthyFloatingAgent } from "@/components/erp-healthy-floating-agent";
+import { appUsesInternalAgentDock } from "@/lib/extension-internal-agent-apps";
 
 function pendingRequestFromExtensionMessage(message: ExtensionOpenChatMessage): PendingChatRequest {
   const draft: PendingChatRequest = {
@@ -77,8 +77,19 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
     setPanelMounted(false);
   }, []);
 
+  const onInternalAgentApp = appUsesInternalAgentDock(location.pathname);
+
+  useEffect(() => {
+    if (!onInternalAgentApp) return;
+    clearPendingChatRequest();
+    setRequest(null);
+    setPanelOpen(false);
+    setPanelMounted(false);
+  }, [onInternalAgentApp]);
+
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (onInternalAgentApp) return;
       if (isExtensionOpenChatMessage(event.data)) {
         applyRequest(pendingRequestFromExtensionMessage(event.data));
         return;
@@ -89,6 +100,7 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
     };
 
     const handleShowPanelEvent = () => {
+      if (onInternalAgentApp) return;
       openEmptyPanel();
     };
 
@@ -98,14 +110,12 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
       window.removeEventListener("message", handleMessage);
       window.removeEventListener(EXTENSION_SHOW_CHAT_PANEL_MESSAGE_TYPE, handleShowPanelEvent);
     };
-  }, [applyRequest, openEmptyPanel]);
+  }, [applyRequest, onInternalAgentApp, openEmptyPanel]);
 
   const onAppsRoute = location.pathname.startsWith("/apps/");
-  const onErpHealthyApp =
-    location.pathname === "/apps/erp-healthy" ||
-    location.pathname.startsWith("/apps/erp-healthy/");
-  const showPanel = onAppsRoute && panelOpen && panelMounted;
-  const showFab = onAppsRoute && !showPanel;
+  const showEmbeddedShellChat = onAppsRoute && !onInternalAgentApp;
+  const showPanel = showEmbeddedShellChat && panelOpen && panelMounted;
+  const showFab = showEmbeddedShellChat && !showPanel;
 
   const chatSidebarKey = request
     ? `${requestNonce}:${request.prompt}:${request.promptQueue?.join("\x1e") ?? ""}:${request.initialDelayMs ?? 0}:${request.modelId ?? ""}:${request.mcpServerIds?.join(",") ?? ""}`
@@ -142,7 +152,6 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
           <span className="sr-only">AI 对话</span>
         </Button>
       ) : null}
-      {onErpHealthyApp ? <ErpHealthyFloatingAgent /> : null}
     </div>
   );
 }

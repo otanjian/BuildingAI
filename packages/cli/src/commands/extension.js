@@ -557,6 +557,11 @@ export async function syncExtensions() {
                 continue;
             }
 
+            const icon =
+                manifest.icon ??
+                (manifest.identifier
+                    ? `/static/avatars/enterprise/${manifest.identifier}.svg`
+                    : "/static/extensions/default.png");
             await insertExtensionToDatabase(
                 {
                     identifier: manifest.identifier,
@@ -568,6 +573,7 @@ export async function syncExtensions() {
                     type,
                     isLocal: extConfig.isLocal ?? true,
                     enabled: extConfig.enabled ?? true,
+                    icon,
                     author: manifest.author,
                 },
             );
@@ -908,7 +914,7 @@ export async function createExtension() {
         const description = await prompt(rl, "Description", `A BuildingAI extension: ${name}`);
 
         // 5. Get author name
-        const author = await prompt(rl, "Author", "BuildingAI Teams");
+        const author = await prompt(rl, "Author", "BowiAI Teams");
 
         // 6. Get homepage (optional)
         const homepage = await prompt(rl, "Homepage (optional)", "");

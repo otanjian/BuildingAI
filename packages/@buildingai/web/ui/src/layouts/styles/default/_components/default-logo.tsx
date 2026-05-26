@@ -29,27 +29,33 @@ export function DefaultLogo() {
               />
               <Link
                 to="/"
-                className={cn("transition-opacity duration-200", {
-                  "relative z-1 md:group-hover/default-logo-button:opacity-0":
-                    state === "collapsed",
-                })}
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-2 transition-opacity duration-200",
+                  {
+                    "relative z-1 md:group-hover/default-logo-button:opacity-0":
+                      state === "collapsed",
+                  },
+                )}
               >
-                <>
-                  {websiteConfig?.webinfo.logo ? (
-                    <Avatar className="h-8 w-auto rounded-md after:hidden">
-                      <AvatarImage
-                        className="rounded-md"
-                        src={websiteConfig?.webinfo.logo}
-                        alt={websiteConfig?.webinfo.name}
-                      />
-                      <AvatarFallback className="rounded-md">
-                        {websiteConfig?.webinfo.name?.slice(0, 1).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ) : (
-                    <SvgIcons.buildingai className="size-8!" />
-                  )}
-                </>
+                {websiteConfig?.webinfo.logo ? (
+                  <Avatar className="size-8 shrink-0 rounded-md after:hidden">
+                    <AvatarImage
+                      className="rounded-md"
+                      src={websiteConfig?.webinfo.logo}
+                      alt={websiteConfig?.webinfo.name}
+                    />
+                    <AvatarFallback className="rounded-md">
+                      {websiteConfig?.webinfo.name?.slice(0, 1).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <SvgIcons.buildingai className="size-8! shrink-0" />
+                )}
+                {state === "expanded" && websiteConfig?.webinfo.name ? (
+                  <span className="truncate text-sm leading-tight font-semibold">
+                    {websiteConfig.webinfo.name}
+                  </span>
+                ) : null}
               </Link>
             </div>
             {state === "expanded" && (

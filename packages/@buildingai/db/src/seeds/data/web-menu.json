@@ -72,12 +72,12 @@
             "title": "应用",
             "items": [
                 {
-                    "id": "menu_group_extension_erp_healthy",
+                    "id": "menu_group_extension_ehcs_ai",
                     "icon": "puzzle",
-                    "title": "ERP数据治理",
+                    "title": "EHCS数据健康自治",
                     "link": {
-                        "label": "ERP数据治理",
-                        "path": "/apps/erp-healthy",
+                        "label": "EHCS数据健康自治",
+                        "path": "/apps/ehcs-ai",
                         "type": "extension",
                         "query": {},
                         "component": null,

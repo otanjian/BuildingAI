@@ -388,12 +388,14 @@ export class AgentChatCompletionService {
                                   } as PlanningContext)
                                 : undefined;
 
-                        const tools = this.buildTools(
-                            agent,
-                            mcpResult.tools as Record<string, Tool>,
-                            useToolForDocuments ? documentContents : undefined,
-                            planningContext,
-                        );
+                        const tools = {
+                            ...this.buildTools(
+                                agent,
+                                mcpResult.tools as Record<string, Tool>,
+                                useToolForDocuments ? documentContents : undefined,
+                                planningContext,
+                            ),
+                        };
 
                         const providerOptions = chatModel.dbModel.enableThinkingParam
                             ? getReasoningOptions(chatModel.dbModel.provider.provider, {

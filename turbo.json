@@ -1,7 +1,7 @@
 {
     "$schema": "https://turborepo.com/schema.json",
     "ui": "tui",
-    "concurrency": "30",
+    "concurrency": "50",
     "globalEnv": [
         "DEV",
         "NODE_ENV",

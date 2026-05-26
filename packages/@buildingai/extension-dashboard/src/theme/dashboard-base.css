@@ -1,0 +1,511 @@
+/* Enterprise extension dashboard — vivid per-app theme via CSS variables from buildDashboardThemeVars */
+
+.dash {
+    --dash-gauge-deg: 360deg;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 100%;
+    padding: 4px 2px 20px;
+    font-family: var(--dash-font-display);
+    color: var(--dash-title);
+    background: var(--dash-bg);
+    border-radius: 16px;
+}
+
+.dash-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 280px;
+    color: var(--dash-muted);
+    font-size: 14px;
+    font-weight: 500;
+    background: var(--dash-bg);
+    border-radius: 16px;
+}
+
+/* —— KPI row —— */
+.dash-kpis {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dash-kpi {
+    position: relative;
+    padding: 16px 14px 16px 52px;
+    min-height: 96px;
+    background: var(--dash-surface);
+    border: 1px solid var(--dash-kpi-border, var(--dash-border));
+    border-radius: 14px;
+    box-shadow: var(--dash-kpi-shadow);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dash-kpi:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px hsl(220 30% 30% / 0.12);
+}
+
+.dash-kpi--accent-0 {
+    --dash-kpi-border: var(--dash-kpi-0-border);
+    --dash-kpi-icon-bg: var(--dash-kpi-0-bg);
+    --dash-kpi-icon-fg: var(--dash-kpi-0-fg);
+    --dash-kpi-value-color: var(--dash-kpi-0-value);
+}
+.dash-kpi--accent-1 {
+    --dash-kpi-border: var(--dash-kpi-1-border);
+    --dash-kpi-icon-bg: var(--dash-kpi-1-bg);
+    --dash-kpi-icon-fg: var(--dash-kpi-1-fg);
+    --dash-kpi-value-color: var(--dash-kpi-1-value);
+}
+.dash-kpi--accent-2 {
+    --dash-kpi-border: var(--dash-kpi-2-border);
+    --dash-kpi-icon-bg: var(--dash-kpi-2-bg);
+    --dash-kpi-icon-fg: var(--dash-kpi-2-fg);
+    --dash-kpi-value-color: var(--dash-kpi-2-value);
+}
+.dash-kpi--accent-3 {
+    --dash-kpi-border: var(--dash-kpi-3-border);
+    --dash-kpi-icon-bg: var(--dash-kpi-3-bg);
+    --dash-kpi-icon-fg: var(--dash-kpi-3-fg);
+    --dash-kpi-value-color: var(--dash-kpi-3-value);
+}
+.dash-kpi--accent-4 {
+    --dash-kpi-border: var(--dash-kpi-4-border);
+    --dash-kpi-icon-bg: var(--dash-kpi-4-bg);
+    --dash-kpi-icon-fg: var(--dash-kpi-4-fg);
+    --dash-kpi-value-color: var(--dash-kpi-4-value);
+}
+.dash-kpi--accent-5 {
+    --dash-kpi-border: var(--dash-kpi-5-border);
+    --dash-kpi-icon-bg: var(--dash-kpi-5-bg);
+    --dash-kpi-icon-fg: var(--dash-kpi-5-fg);
+    --dash-kpi-value-color: var(--dash-kpi-5-value);
+}
+
+.dash-kpi-icon {
+    position: absolute;
+    left: 14px;
+    top: 18px;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: var(--dash-kpi-icon-bg, var(--dash-primary-muted));
+    color: var(--dash-kpi-icon-fg, var(--dash-primary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.65);
+}
+
+.dash-kpi-title {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--dash-subtitle);
+    margin-bottom: 6px;
+    line-height: 1.3;
+}
+
+.dash-kpi-value {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--dash-kpi-value-color, var(--dash-primary-dark));
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-kpi-sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--dash-muted);
+    margin-top: 8px;
+    line-height: 1.45;
+}
+
+.dash-tag {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 10px;
+    font-weight: 500;
+    color: #94a3b8;
+    text-decoration: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dash-tag:hover {
+    color: var(--dash-primary);
+}
+
+/* —— Layout rows —— */
+.dash-row {
+    display: grid;
+    gap: 14px;
+}
+
+.dash-row--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dash-row--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* —— Panels —— */
+.dash-panel {
+    overflow: hidden;
+    background: var(--dash-surface);
+    border: 1px solid var(--dash-border);
+    border-radius: 14px;
+    box-shadow: var(--dash-panel-shadow);
+}
+
+.dash-card-hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--dash-border);
+    background: linear-gradient(180deg, hsl(0 0% 100% / 0.9) 0%, hsl(220 30% 98%) 100%);
+}
+
+.dash-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--dash-title);
+}
+
+.dash-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dash-badge-live {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--dash-primary) 18%, white);
+    color: var(--dash-primary-dark);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.dash-link {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dash-primary);
+    text-decoration: none;
+}
+
+.dash-link:hover {
+    text-decoration: underline;
+}
+
+.dash-card-body {
+    padding: 12px 14px 16px;
+}
+
+.dash-chart {
+    width: 100%;
+    height: 228px;
+}
+
+.dash-chart--tall {
+    height: 248px;
+}
+
+.dash-chart--donut {
+    height: 228px;
+}
+
+.dash-empty-chart {
+    height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dash-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* —— Tables —— */
+.dash-panel--table .dash-table-wrap {
+    overflow-x: auto;
+}
+
+.dash-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.dash-table th,
+.dash-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--dash-border);
+}
+
+.dash-table th {
+    color: var(--dash-muted);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: none;
+    letter-spacing: 0.03em;
+    background: hsl(220 30% 98%);
+}
+
+.dash-table tbody tr:hover td {
+    background: hsl(220 40% 98%);
+}
+
+.dash-desc {
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--dash-subtitle);
+}
+
+.dash-empty-cell {
+    text-align: center;
+    color: var(--dash-muted);
+    padding: 28px !important;
+    font-weight: 500;
+}
+
+/* —— Risk / status pills —— */
+.dash-risk {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.dash-risk--high {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+}
+
+.dash-risk--mid {
+    background: #fff7ed;
+    color: #ea580c;
+    border: 1px solid #fed7aa;
+}
+
+.dash-risk--low {
+    background: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+}
+
+.dash-status {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.dash-status--ok {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.dash-status--run {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.dash-status--muted {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+/* —— Hero health (supply-chain) —— */
+.dash-template--supply-chain .dash-hero-row {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.05fr) 1.95fr;
+    gap: 14px;
+}
+
+.dash-hero-score {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 22px 24px;
+    border-radius: 16px;
+    background: var(--dash-hero-gradient);
+    color: #fff;
+    min-height: 152px;
+    box-shadow: 0 12px 32px hsl(260 40% 30% / 0.22);
+}
+
+.dash-hero-gauge {
+    flex-shrink: 0;
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    padding: 6px;
+    background: conic-gradient(
+        rgb(255 255 255 / 0.95) 0deg,
+        rgb(255 255 255 / 0.95) var(--dash-gauge-deg),
+        rgb(255 255 255 / 0.22) var(--dash-gauge-deg),
+        rgb(255 255 255 / 0.22) 360deg
+    );
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+
+.dash-hero-gauge-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: var(--dash-hero-gradient);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.dash-hero-gauge-value {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.dash-hero-gauge-unit {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.85;
+    margin-top: 2px;
+}
+
+.dash-hero-score-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.dash-hero-score-label {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 6px;
+}
+
+.dash-hero-score-status {
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0.92;
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+.dash-hero-risks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dash-hero-risk {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 999px;
+    backdrop-filter: blur(4px);
+}
+
+.dash-hero-risk--high {
+    background: rgb(254 226 226 / 0.95);
+    color: #b91c1c;
+}
+
+.dash-hero-risk--mid {
+    background: rgb(255 237 213 / 0.95);
+    color: #c2410c;
+}
+
+.dash-hero-risk--low {
+    background: rgb(220 252 231 / 0.95);
+    color: #15803d;
+}
+
+/* —— Template accents —— */
+.dash-template--compliance-audit .dash-panel--stamp {
+    border-top: 4px solid var(--dash-primary);
+}
+
+.dash-template--finance .dash-kpi-value {
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-template--finance .dash-card-title {
+    color: var(--dash-primary-dark);
+}
+
+.dash-template--sustainability .dash-esg-bar--e {
+    stroke: #16a34a !important;
+}
+
+.dash-template--sustainability .dash-esg-bar--s {
+    stroke: #2563eb !important;
+}
+
+.dash-template--sustainability .dash-esg-bar--g {
+    stroke: #7c3aed !important;
+}
+
+.dash-template--project-service .dash-timeline-card {
+    border-left: 4px solid var(--dash-primary);
+}
+
+/* Recharts — bolder axis labels inside dashboard */
+.dash .recharts-cartesian-axis-tick text {
+    fill: var(--dash-muted) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+}
+
+.dash .recharts-legend-item-text {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: var(--dash-title) !important;
+}
+
+@media (max-width: 1200px) {
+    .dash-kpis {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .dash-row--3 {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .dash-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .dash-row--2 {
+        grid-template-columns: 1fr;
+    }
+    .dash-template--supply-chain .dash-hero-row {
+        grid-template-columns: 1fr;
+    }
+    .dash-hero-score {
+        flex-direction: column;
+        text-align: center;
+    }
+    .dash-hero-risks {
+        justify-content: center;
+    }
+}

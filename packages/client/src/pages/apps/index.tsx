@@ -56,22 +56,24 @@ type DisplayAppItem = ReturnType<typeof extToDisplayItem>;
 const AppItem = ({ item }: { item: DisplayAppItem }) => {
   return (
     <Item
-      className="group/apps-item hover:bg-accent cursor-pointer px-0 transition-[padding] hover:px-4"
+      className="group/apps-item bg-muted/35 hover:bg-accent min-h-[5.5rem] cursor-pointer rounded-xl px-2 py-3 transition-[padding,background-color] hover:px-3"
       onClick={() => {
         window.location.href = `/apps/${item.identifier}`;
       }}
     >
-      <ItemMedia>
-        <Avatar className="size-10 rounded-lg after:rounded-lg">
-          <AvatarImage src={item.avatar} className="rounded-lg" />
-          <AvatarFallback className="rounded-lg">
+      <ItemMedia className="self-start pt-0.5">
+        <Avatar className="size-12 rounded-xl after:rounded-xl">
+          <AvatarImage src={item.avatar} className="rounded-xl" />
+          <AvatarFallback className="rounded-xl text-sm">
             {item.title.slice(0, 2).toUpperCase()}
           </AvatarFallback>
         </Avatar>
       </ItemMedia>
-      <ItemContent>
-        <ItemTitle>{item.title}</ItemTitle>
-        <ItemDescription className="line-clamp-1">{item.description}</ItemDescription>
+      <ItemContent className="gap-1.5">
+        <ItemTitle className="text-base leading-snug font-semibold">{item.title}</ItemTitle>
+        <ItemDescription className="line-clamp-2 text-sm leading-relaxed">
+          {item.description}
+        </ItemDescription>
       </ItemContent>
       <ItemActions className="opacity-0 group-hover/apps-item:opacity-100">
         <Button size="icon-sm" variant="outline" className="rounded-full" aria-label="查看" asChild>
@@ -156,18 +158,18 @@ const AppsIndexPage = () => {
 
   return (
     <ScrollArea className="h-dvh" viewportClassName="[&_>div]:block!">
-      <div className="flex w-full flex-col items-center">
-        <div className="flex h-13 w-full items-center px-2">
+      <div className="flex w-full min-w-0 flex-col">
+        <div className="flex h-10 w-full items-center px-2 lg:px-4">
           <SidebarTrigger className="md:hidden" />
         </div>
 
-        <div className="w-full max-w-4xl px-4 py-8 pt-12 sm:pt-20 md:px-6">
-          <div className="flex flex-col items-center justify-between gap-4 max-sm:items-start sm:flex-row sm:px-3">
-            <div className="flex flex-col gap-2">
+        <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pt-6 sm:px-6 sm:pt-8 lg:px-8 xl:px-10">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div className="flex min-w-0 flex-col gap-2">
               <h1 className="text-2xl">{pageTitle}</h1>
               <p className="text-muted-foreground text-sm">{pageDescription}</p>
             </div>
-            <div className="max-sm:w-full">
+            <div className="w-full shrink-0 sm:w-auto sm:min-w-[240px] sm:max-w-sm">
               <InputGroup className="rounded-full">
                 <InputGroupInput
                   placeholder="搜索应用"
@@ -216,7 +218,7 @@ const AppsIndexPage = () => {
           )}
 
           {tags.length > 0 && (
-            <div className="no-scrollbar mt-8 flex flex-nowrap gap-2 overflow-x-auto sm:px-3">
+            <div className="no-scrollbar mt-6 flex flex-nowrap gap-2 overflow-x-auto">
               <Badge
                 variant={selectedTagId === null ? "default" : "secondary"}
                 className="h-9 cursor-pointer px-4 font-medium text-nowrap sm:font-normal"
@@ -237,9 +239,9 @@ const AppsIndexPage = () => {
             </div>
           )}
 
-          <div className="mt-6 sm:px-3">
+          <div className="mt-5">
             {displayItems.length > 0 ? (
-              <div className="grid gap-x-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {displayItems.map((item) => (
                   <AppItem key={item.id} item={item} />
                 ))}

@@ -1,12 +1,35 @@
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import fs from "node:fs";
 import path from "path";
 // import { visualizer } from "rollup-plugin-visualizer";
-import { defineConfig } from "vite";
+import { defineConfig, type ProxyOptions } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 const apiTarget = process.env.VITE_DEVELOP_APP_BASE_URL || "http://localhost:4090";
+
+/** Proxy /{extensionId}/consoleapi|api to the API server (apps iframe uses same origin in dev). */
+function buildExtensionApiProxies(target: string): Record<string, ProxyOptions> {
+  const proxies: Record<string, ProxyOptions> = {};
+  const configPath = path.resolve(__dirname, "../../extensions/extensions.json");
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+      applications?: Record<string, unknown>;
+      functionals?: Record<string, unknown>;
+    };
+    const ids = [
+      ...Object.keys(config.applications ?? {}),
+      ...Object.keys(config.functionals ?? {}),
+    ];
+    for (const id of ids) {
+      proxies[`/${id}`] = { target, changeOrigin: true };
+    }
+  } catch {
+    proxies["/ehcs-ai"] = { target, changeOrigin: true };
+  }
+  return proxies;
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -38,7 +61,7 @@ export default defineConfig({
       "/api": { target: apiTarget, changeOrigin: true },
       "/consoleapi": { target: apiTarget, changeOrigin: true },
       "/web": { target: apiTarget, changeOrigin: true },
-      "/erp-healthy": { target: apiTarget, changeOrigin: true },
+      ...buildExtensionApiProxies(apiTarget),
     },
     hmr: host
       ? {

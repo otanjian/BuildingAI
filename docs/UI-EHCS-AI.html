@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP数据健康自治系统 V1.0 | AI Agent 驱动（交互原型）</title>
+    <!--
+      PROTOTYPE ONLY — 实现以 docs/PRD-EHCS-AI.md V1.1.1 为准：
+      - 扩展实现为顶栏导航 + 全宽驾驶舱，非本页左侧深色侧栏
+      - 全量检查：右下角智能体栏「开始检查」，应用读规则表后逐条调 Agent（无表头/趋势区「AI 自动检查」）
+      - 设置页绑定平台智能体「EHCS数据健康自治」
+    -->
+    <style>
+        :root {
+            --bg: #f1f5f9;
+            --sidebar-bg: #0f172a;
+            --card: #fff;
+            --text: #1e293b;
+            --text2: #64748b;
+            --text3: #94a3b8;
+            --border: #e2e8f0;
+            --blue: #3b82f6;
+            --blue-light: #eff6ff;
+            --green: #10b981;
+            --green-light: #ecfdf5;
+            --red: #ef4444;
+            --red-light: #fef2f2;
+            --amber: #f59e0b;
+            --amber-light: #fffbeb;
+            --purple: #6366f1;
+            --shadow: 0 1px 3px rgba(0, 0, 0, .06);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, .07);
+            --radius: 10px;
+            --radius-sm: 6px;
+            --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+            --transition: 0.2s ease;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            display: flex;
+            min-height: 100vh;
+            color: var(--text);
+            line-height: 1.5;
+        }
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            color: #e2e8f0;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255, 255, 255, .06);
+            z-index: 100;
+        }
+        .sidebar-logo {
+            padding: 18px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, .08);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sidebar-logo .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 15px;
+            color: #fff;
+        }
+        .sidebar-logo .txt {
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+        .sidebar-logo .txt small {
+            display: block;
+            font-weight: 400;
+            font-size: 9px;
+            color: #94a3b8;
+            letter-spacing: .03em;
+        }
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 10px;
+        }
+        .sidebar-nav .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 10px 12px;
+            border-radius: 7px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #cbd5e1;
+            transition: var(--transition);
+            margin-bottom: 1px;
+            font-weight: 500;
+        }
+        .sidebar-nav .nav-item:hover {
+            background: rgba(255, 255, 255, .05);
+            color: #f1f5f9;
+        }
+        .sidebar-nav .nav-item.active {
+            background: rgba(59, 130, 246, .22);
+            color: #60a5fa;
+            font-weight: 600;
+        }
+        .sidebar-nav .nav-item .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-left: auto;
+        }
+        .sidebar-footer {
+            padding: 10px 14px;
+            border-top: 1px solid rgba(255, 255, 255, .07);
+            font-size: 10px;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+        .sidebar-footer .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, .5);
+            }
+            50% {
+                box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+            }
+        }
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .topbar {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 11px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .03);
+        }
+        .topbar h1 {
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .topbar .tag {
+            font-size: 9px;
+            background: #eff6ff;
+            color: #3b82f6;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+            color: #64748b;
+        }
+        .topbar-right .time {
+            font-family: var(--mono);
+            font-size: 11px;
+            background: #f8fafc;
+            padding: 5px 10px;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        .page {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+            gap: 14px;
+            flex-direction: column;
+        }
+        .page.active {
+            display: flex;
+        }
+        .dashboard-layout {
+            display: flex;
+            gap: 14px;
+            height: 100%;
+        }
+        .dashboard-left {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-width: 0;
+        }
+        .dashboard-right {
+            width: 360px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .stat-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border: 1px solid transparent;
+            transition: var(--transition);
+        }
+        .stat-card:hover {
+            box-shadow: var(--shadow-md);
+            border-color: #e2e8f0;
+            transform: translateY(-1px);
+        }
+        .stat-card .hd {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 500;
+        }
+        .stat-card .val {
+            font-size: 26px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .stat-card .sub {
+            font-size: 10px;
+            color: #94a3b8;
+        }
+        .card {
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            border: 1px solid transparent;
+        }
+        .card-hd {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 12.5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #fafbfc;
+        }
+        .card-bd {
+            padding: 14px 16px;
+        }
+        .card-bd.nopad {
+            padding: 0;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .badge-g {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+        .badge-r {
+            background: #fef2f2;
+            color: #991b1b;
+        }
+        .badge-a {
+            background: #fffbeb;
+            color: #92400e;
+        }
+        .badge-b {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .badge-n {
+            background: #f8fafc;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        table th {
+            background: #f8fafc;
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: #64748b;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            border-bottom: 2px solid #e2e8f0;
+            white-space: nowrap;
+        }
+        table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: nowrap;
+        }
+        table tbody tr:hover {
+            background: #f8fafc;
+        }
+        .progress {
+            height: 5px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            flex: 1;
+        }
+        .progress-f {
+            height: 100%;
+            border-radius: 10px;
+            transition: width .5s;
+        }
+        .progress-f.gr {
+            background: #10b981;
+        }
+        .progress-f.bl {
+            background: #3b82f6;
+        }
+        .btn {
+            padding: 8px 16px;
+            border-radius: 7px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: var(--transition);
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, .3);
+        }
+        .btn-outline {
+            background: #fff;
+            border: 1px solid #d1d5db;
+            color: #374151;
+        }
+        .btn-outline:hover {
+            background: #f9fafb;
+        }
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 10px;
+        }
+        .flex-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .input {
+            padding: 7px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+            transition: var(--transition);
+        }
+        .input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, .06);
+        }
+        .chat-box {
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            height: 100%;
+            min-height: 500px;
+            max-height: calc(100vh - 120px);
+            border: 1px solid var(--border);
+        }
+        .chat-msgs {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #fafbfc;
+        }
+        .chat-msg {
+            max-width: 85%;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            line-height: 1.5;
+            animation: fadeUp .3s ease;
+        }
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .chat-msg.user {
+            align-self: flex-end;
+            background: #3b82f6;
+            color: #fff;
+            border-bottom-right-radius: 3px;
+        }
+        .chat-msg.ai {
+            align-self: flex-start;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+            border-bottom-left-radius: 3px;
+        }
+        .chat-msg .lbl {
+            font-size: 9px;
+            font-weight: 600;
+            opacity: .7;
+            margin-bottom: 2px;
+        }
+        .chat-inp {
+            display: flex;
+            gap: 6px;
+            padding: 10px;
+            border-top: 1px solid #e2e8f0;
+            background: #fff;
+        }
+        .chat-inp input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            font-size: 12px;
+            outline: none;
+            font-family: inherit;
+        }
+        .chat-inp button {
+            padding: 8px 16px;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, .4);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: #fff;
+            border-radius: 12px;
+            width: 500px;
+            max-width: 90%;
+            padding: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, .15);
+        }
+        .modal-content h3 {
+            margin-bottom: 16px;
+        }
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .form-row label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+        }
+        .form-row select,
+        .form-row input,
+        .form-row textarea {
+            padding: 8px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        .mini-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            height: 60px;
+        }
+        .mini-chart .bar {
+            width: 14px;
+            border-radius: 4px 4px 0 0;
+            transition: height .4s;
+        }
+        .bar.high {
+            background: #ef4444;
+        }
+        .bar.mid {
+            background: #f59e0b;
+        }
+        .bar.low {
+            background: #10b981;
+        }
+        /* RCA 对话框样式 */
+        .rca-modal-content {
+            width: 650px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .rca-chat-msgs {
+            flex: 1;
+            overflow-y: auto;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 250px;
+            max-height: 400px;
+            border: 1px solid #e2e8f0;
+        }
+        .rca-chat-msg {
+            max-width: 90%;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            animation: fadeUp .3s;
+        }
+        .rca-chat-msg.ai {
+            align-self: flex-start;
+            background: #eef2ff;
+            color: #1e293b;
+            border: 1px solid #c7d2fe;
+        }
+        .rca-chat-msg.user {
+            align-self: flex-end;
+            background: #3b82f6;
+            color: #fff;
+        }
+        .rca-chat-inp {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .rca-chat-inp input {
+            flex: 1;
+        }
+        @media (max-width: 1200px) {
+            .dashboard-layout {
+                flex-direction: column;
+            }
+            .dashboard-right {
+                width: 100%;
+            }
+            .stats-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .rca-modal-content {
+                width: 95%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="icon">EH</div>
+            <div class="txt">EHCS-AI<small>数据健康自治系统 V1.0</small></div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item active" data-page="dashboard">📊 驾驶舱<span class="dot" style="background:#10b981;"></span></div>
+            <div class="nav-item" data-page="rules">📋 检查规则<span class="dot" style="background:#3b82f6;"></span></div>
+            <div class="nav-item" data-page="anomalies">⚠️ 异常明细<span class="dot" style="background:#f59e0b;"></span></div>
+        </nav>
+        <div class="sidebar-footer"><span class="live-dot"></span>AI Agent 就绪</div>
+    </aside>
+    <div class="main">
+        <div class="topbar">
+            <h1 id="pageTitle">📊 驾驶舱<span class="tag">AI Agent</span></h1>
+            <div class="topbar-right">
+                <span class="time" id="liveTime"></span>
+                <span>👤 管理员</span>
+            </div>
+        </div>
+        <!-- 驾驶舱页面 -->
+        <div class="page active" id="page-dashboard">
+            <div class="dashboard-layout">
+                <div class="dashboard-left">
+                    <div class="stats-row">
+                        <div class="stat-card"><div class="hd"><span>规则总数</span>📋</div><div class="val" id="ruleCount">12</div><div class="sub">已启用10条</div></div>
+                        <div class="stat-card"><div class="hd"><span>今日异常</span>⚠️</div><div class="val" id="anomalyCount">23</div><div class="sub">高风险3条</div></div>
+                        <div class="stat-card"><div class="hd"><span>健康分</span>💎</div><div class="val" id="healthScore">87.5</div><div class="sub">较昨日↑1.2</div></div>
+                        <div class="stat-card"><div class="hd"><span>自动修复率</span>🤖</div><div class="val" id="autoFixRate">35%</div><div class="sub">低风险闭环</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-hd">📈 近7天异常趋势</div>
+                        <div class="card-bd">
+                            <div class="mini-chart" id="trendChart">
+                                <div class="bar low" style="height:20px;"></div><div class="bar low" style="height:25px;"></div>
+                                <div class="bar mid" style="height:35px;"></div><div class="bar mid" style="height:30px;"></div>
+                                <div class="bar high" style="height:50px;"></div><div class="bar mid" style="height:40px;"></div>
+                                <div class="bar high" style="height:55px;"></div>
+                            </div>
+                            <div class="flex-row" style="justify-content:space-between;font-size:9px;color:#64748b;margin-top:4px;">
+                                <span>5-18</span><span>5-19</span><span>5-20</span><span>5-21</span><span>5-22</span><span>5-23</span><span>今天</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-hd">🚨 最新异常记录</div>
+                        <div class="card-bd nopad" style="overflow-x:auto;">
+                            <table id="recentAnomalies">
+                                <thead><tr><th>异常ID</th><th>规则</th><th>描述</th><th>风险</th><th>状态</th><th>时间</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-right">
+                    <div class="chat-box" id="chatBox">
+                        <div class="chat-msgs" id="chatMessages">
+                            <div class="chat-msg ai"><div class="lbl">🤖 AI Agent</div>您好！我是ERP数据健康检查智能体。点击“AI自动检查”按钮或输入“开始检查”即可执行全量规则检查。</div>
+                        </div>
+                        <div class="chat-inp">
+                            <input type="text" id="chatInput" placeholder="输入指令，如：开始检查...">
+                            <button onclick="sendChat()">发送</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 检查规则页面 -->
+        <div class="page" id="page-rules">
+            <div class="flex-row" style="justify-content:space-between;margin-bottom:4px;">
+                <span style="font-weight:600;font-size:14px;">📋 检查规则列表</span>
+                <button class="btn btn-primary btn-sm" onclick="openRuleModal()">+ 新增规则</button>
+            </div>
+            <div class="card">
+                <div class="card-bd nopad" style="overflow-x:auto;">
+                    <table id="rulesTable">
+                        <thead><tr><th>规则ID</th><th>业务域</th><th>数据项目</th><th>检查规则</th><th>扣分</th><th>严重程度</th><th>自动修复</th><th>状态</th><th>操作</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- 异常明细页面 -->
+        <div class="page" id="page-anomalies">
+            <div class="flex-row" style="justify-content:space-between;margin-bottom:4px;">
+                <span style="font-weight:600;font-size:14px;">⚠️ 异常明细</span>
+                <div class="flex-row gap8">
+                    <select class="input" id="filterRisk" onchange="filterAnomalies()"><option value="">全部风险</option><option value="高">高风险</option><option value="中">中风险</option><option value="低">低风险</option></select>
+                    <select class="input" id="filterStatus" onchange="filterAnomalies()"><option value="">全部状态</option><option value="待解决">待解决</option><option value="已解决">已解决</option><option value="ai自动修复">AI自动修复</option></select>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-bd nopad" style="overflow-x:auto;">
+                    <table id="anomaliesTable">
+                        <thead><tr><th>异常ID</th><th>规则ID</th><th>描述</th><th>风险</th><th>根因分析</th><th>解决方案</th><th>状态</th><th>检查时间</th><th>操作</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 新增/编辑规则模态框 -->
+    <div class="modal" id="ruleModal">
+        <div class="modal-content">
+            <h3 id="modalTitle">新增检查规则</h3>
+            <div class="form-row">
+                <label>业务域</label><select id="fDomain"><option value="财务数据">财务数据</option><option value="供应链数据">供应链数据</option><option value="合作伙伴">合作伙伴</option></select>
+            </div>
+            <div class="form-row"><label>数据项目</label><input id="fItem" placeholder="例如：会计凭证"></div>
+            <div class="form-row"><label>检查规则</label><textarea id="fDesc" rows="2" placeholder="自然语言描述规则..."></textarea></div>
+            <div class="form-row"><label>扣分</label><input type="number" id="fScore" min="1" max="100" value="10"></div>
+            <div class="form-row"><label>严重程度</label><select id="fSeverity"><option value="低">低</option><option value="中" selected>中</option><option value="高">高</option></select></div>
+            <div class="form-row"><label>是否AI自动修复</label><select id="fAutoFix"><option value="false">否</option><option value="true">是</option></select></div>
+            <div class="form-row"><label>是否启用</label><select id="fEnabled"><option value="true">是</option><option value="false">否</option></select></div>
+            <div class="flex-row" style="justify-content:flex-end;gap:8px;">
+                <button class="btn btn-outline" onclick="closeRuleModal()">取消</button>
+                <button class="btn btn-primary" id="btnSaveRule">保存</button>
+            </div>
+        </div>
+    </div>
+    <!-- 根因分析模态框 -->
+    <div class="modal" id="rcaModal">
+        <div class="modal-content rca-modal-content">
+            <h3>🧠 AI 根因分析 <span id="rcaAnomalyId" class="badge badge-b"></span></h3>
+            <div class="rca-chat-msgs" id="rcaChatMsgs"></div>
+            <div class="rca-chat-inp">
+                <input type="text" class="input" id="rcaInput" placeholder="输入补充信息或提问...">
+                <button class="btn btn-primary" onclick="sendRcaMsg()">发送</button>
+                <button class="btn btn-outline" onclick="closeRcaModal()">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 数据存储
+        let rules = [
+            { id: 'RULE_001', domain: '财务数据', item: '会计凭证', desc: '凭证日期不能为空', score: 10, severity: '中', autoFix: false, enabled: true },
+            { id: 'RULE_002', domain: '供应链数据', item: '采购订单', desc: '订单金额 > 0 且供应商字段不为空', score: 20, severity: '高', autoFix: false, enabled: true },
+            { id: 'RULE_003', domain: '合作伙伴', item: '客户主数据', desc: '客户名称、税号不能为空', score: 15, severity: '中', autoFix: false, enabled: true },
+            { id: 'RULE_004', domain: '财务数据', item: '科目表', desc: '科目编码长度必须等于6位', score: 5, severity: '低', autoFix: true, enabled: true },
+            { id: 'RULE_005', domain: '供应链数据', item: '库存台账', desc: '库存数量不能为负数', score: 25, severity: '高', autoFix: false, enabled: true },
+            { id: 'RULE_006', domain: '财务数据', item: '应收应付', desc: '金额必须保留两位小数', score: 8, severity: '低', autoFix: true, enabled: true },
+            { id: 'RULE_007', domain: '合作伙伴', item: '供应商主数据', desc: '供应商银行账号格式校验', score: 12, severity: '中', autoFix: false, enabled: true },
+            { id: 'RULE_008', domain: '供应链数据', item: '销售订单', desc: '客户编码必须在主数据中存在', score: 18, severity: '高', autoFix: false, enabled: true },
+            { id: 'RULE_009', domain: '财务数据', item: '总账', desc: '凭证借方总额必须等于贷方总额', score: 30, severity: '高', autoFix: false, enabled: true },
+            { id: 'RULE_010', domain: '合作伙伴', item: '联系人', desc: '邮箱格式校验', score: 6, severity: '低', autoFix: true, enabled: true },
+            { id: 'RULE_011', domain: '供应链数据', item: '采购收货单', desc: '收货数量与订单数量偏差不超过5%', score: 15, severity: '中', autoFix: false, enabled: false },
+            { id: 'RULE_012', domain: '财务数据', item: '固定资产', desc: '资产折旧年限大于0', score: 10, severity: '中', autoFix: false, enabled: true },
+        ];
+        let anomalies = [
+            { id: 'ANOM-20260524-001', ruleId: 'RULE_001', desc: '凭证 ACC-202605001 日期字段为空', risk: '中', rootCause: '用户录入时未填写日期', solution: '补充日期并增加前端必填校验', status: '待解决', time: '2026-05-24 10:30', autoFixed: false },
+            { id: 'ANOM-20260524-002', ruleId: 'RULE_004', desc: '科目编码 1001 长度不足6位', risk: '低', rootCause: '旧系统迁移数据未统一', solution: '自动补全前导零为001001', status: 'ai自动修复', time: '2026-05-24 09:45', autoFixed: true },
+            { id: 'ANOM-20260524-003', ruleId: 'RULE_002', desc: '采购订单 PO-3321 金额为0', risk: '高', rootCause: '订单创建时未填写金额', solution: '与采购部门确认后修正', status: '待解决', time: '2026-05-24 09:20', autoFixed: false },
+            { id: 'ANOM-20260524-004', ruleId: 'RULE_008', desc: '销售订单 SO-1122 客户编码不存在', risk: '高', rootCause: '客户主数据缺失', solution: '先创建客户主数据', status: '待解决', time: '2026-05-24 08:55', autoFixed: false },
+            { id: 'ANOM-20260524-005', ruleId: 'RULE_005', desc: '库存物料 MAT-2301 数量为 -5', risk: '高', rootCause: '出库录入错误', solution: '核实后冲销调整', status: '待解决', time: '2026-05-24 08:30', autoFixed: false },
+            { id: 'ANOM-20260523-006', ruleId: 'RULE_009', desc: '凭证 ACC-2026052001 借贷不平衡', risk: '高', rootCause: '录入金额错误', solution: '调整凭证分录', status: '已解决', time: '2026-05-23 16:10', autoFixed: false },
+        ];
+
+        function updateDashboard() {
+            const enabledRules = rules.filter(r => r.enabled).length;
+            document.getElementById('ruleCount').textContent = rules.length;
+            document.getElementById('anomalyCount').textContent = anomalies.filter(a => a.status === '待解决').length;
+            const total = anomalies.length;
+            const autoFixed = anomalies.filter(a => a.autoFixed).length;
+            document.getElementById('autoFixRate').textContent = total ? Math.round((autoFixed / total) * 100) + '%' : '0%';
+            const high = anomalies.filter(a => a.risk === '高' && a.status === '待解决').length;
+            const mid = anomalies.filter(a => a.risk === '中' && a.status === '待解决').length;
+            const low = anomalies.filter(a => a.risk === '低' && a.status === '待解决').length;
+            const health = Math.max(0, 100 - (high * 10 + mid * 5 + low * 2));
+            document.getElementById('healthScore').textContent = health.toFixed(1);
+            renderRecentAnomalies();
+            renderAnomaliesTable();
+            updateTrendChart();
+        }
+
+        function renderRecentAnomalies() {
+            const tbody = document.querySelector('#recentAnomalies tbody');
+            const recent = anomalies.slice(-5).reverse();
+            tbody.innerHTML = recent.map(a => `
+            <tr>
+              <td>${a.id}</td>
+              <td>${a.ruleId}</td>
+              <td>${a.desc}</td>
+              <td><span class="badge ${a.risk==='高'?'badge-r':a.risk==='中'?'badge-a':'badge-g'}">${a.risk}</span></td>
+              <td>${a.status}</td>
+              <td>${a.time}</td>
+            </tr>`).join('');
+        }
+
+        function renderRulesTable() {
+            const tbody = document.querySelector('#rulesTable tbody');
+            tbody.innerHTML = rules.map(r => `
+            <tr>
+              <td>${r.id}</td>
+              <td>${r.domain}</td>
+              <td>${r.item}</td>
+              <td>${r.desc}</td>
+              <td>${r.score}</td>
+              <td><span class="badge ${r.severity==='高'?'badge-r':r.severity==='中'?'badge-a':'badge-g'}">${r.severity}</span></td>
+              <td>${r.autoFix?'✅':'❌'}</td>
+              <td><span class="badge ${r.enabled?'badge-g':'badge-n'}">${r.enabled?'启用':'禁用'}</span></td>
+              <td><button class="btn btn-outline btn-sm" onclick="editRule('${r.id}')">编辑</button> <button class="btn btn-outline btn-sm" onclick="toggleRule('${r.id}')">${r.enabled?'禁用':'启用'}</button></td>
+            </tr>`).join('');
+        }
+
+        function renderAnomaliesTable(filterRisk = '', filterStatus = '') {
+            const tbody = document.querySelector('#anomaliesTable tbody');
+            let filtered = anomalies;
+            if (filterRisk) filtered = filtered.filter(a => a.risk === filterRisk);
+            if (filterStatus) filtered = filtered.filter(a => a.status === filterStatus);
+            tbody.innerHTML = filtered.map(a => `
+            <tr>
+              <td>${a.id}</td>
+              <td>${a.ruleId}</td>
+              <td>${a.desc}</td>
+              <td><span class="badge ${a.risk==='高'?'badge-r':a.risk==='中'?'badge-a':'badge-g'}">${a.risk}</span></td>
+              <td>${a.rootCause}</td>
+              <td>${a.solution}</td>
+              <td>${a.status}</td>
+              <td>${a.time}</td>
+              <td><button class="btn btn-primary btn-sm" onclick="openRCADialog('${a.id}')">🔍 根因分析</button></td>
+            </tr>`).join('');
+        }
+
+        function filterAnomalies() {
+            const risk = document.getElementById('filterRisk').value;
+            const status = document.getElementById('filterStatus').value;
+            renderAnomaliesTable(risk, status);
+        }
+
+        function updateTrendChart() {
+            const bars = document.querySelectorAll('#trendChart .bar');
+            const counts = [12, 15, 18, 16, 23, 19, anomalies.filter(a => a.status === '待解决').length + 5];
+            bars.forEach((bar, i) => { bar.style.height = (counts[i] * 2) + 'px'; });
+        }
+
+        // 页面切换
+        const navItems = document.querySelectorAll('.nav-item');
+        const pages = document.querySelectorAll('.page');
+        const pageTitle = document.getElementById('pageTitle');
+        navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                const page = this.dataset.page;
+                navItems.forEach(n => n.classList.remove('active'));
+                this.classList.add('active');
+                pages.forEach(p => p.classList.remove('active'));
+                document.getElementById('page-' + page).classList.add('active');
+                if (page === 'dashboard') pageTitle.innerHTML = '📊 驾驶舱<span class="tag">AI Agent</span>';
+                else if (page === 'rules') pageTitle.innerHTML = '📋 检查规则<span class="tag">AI Agent</span>';
+                else if (page === 'anomalies') pageTitle.innerHTML = '⚠️ 异常明细<span class="tag">AI Agent</span>';
+                if (page === 'anomalies') renderAnomaliesTable();
+                if (page === 'rules') renderRulesTable();
+            });
+        });
+
+        // 规则模态框
+        let editingRuleId = null;
+
+        function openRuleModal(ruleId = null) {
+            editingRuleId = ruleId;
+            document.getElementById('ruleModal').classList.add('active');
+            if (ruleId) {
+                const rule = rules.find(r => r.id === ruleId);
+                document.getElementById('modalTitle').textContent = '编辑检查规则';
+                document.getElementById('fDomain').value = rule.domain;
+                document.getElementById('fItem').value = rule.item;
+                document.getElementById('fDesc').value = rule.desc;
+                document.getElementById('fScore').value = rule.score;
+                document.getElementById('fSeverity').value = rule.severity;
+                document.getElementById('fAutoFix').value = rule.autoFix.toString();
+                document.getElementById('fEnabled').value = rule.enabled.toString();
+            } else {
+                document.getElementById('modalTitle').textContent = '新增检查规则';
+                document.getElementById('fDomain').value = '财务数据';
+                document.getElementById('fItem').value = '';
+                document.getElementById('fDesc').value = '';
+                document.getElementById('fScore').value = 10;
+                document.getElementById('fSeverity').value = '中';
+                document.getElementById('fAutoFix').value = 'false';
+                document.getElementById('fEnabled').value = 'true';
+            }
+        }
+
+        function closeRuleModal() { document.getElementById('ruleModal').classList.remove('active'); }
+
+        function editRule(id) { openRuleModal(id); }
+
+        function toggleRule(id) {
+            const rule = rules.find(r => r.id === id);
+            if (rule) { rule.enabled = !rule.enabled;
+                renderRulesTable();
+                updateDashboard(); }
+        }
+        document.getElementById('btnSaveRule').addEventListener('click', function() {
+            const domain = document.getElementById('fDomain').value;
+            const item = document.getElementById('fItem').value.trim();
+            const desc = document.getElementById('fDesc').value.trim();
+            const score = parseInt(document.getElementById('fScore').value) || 10;
+            const severity = document.getElementById('fSeverity').value;
+            const autoFix = document.getElementById('fAutoFix').value === 'true';
+            const enabled = document.getElementById('fEnabled').value === 'true';
+            if (!item || !desc) return alert('请填写完整');
+            if (editingRuleId) {
+                const rule = rules.find(r => r.id === editingRuleId);
+                if (rule) { rule.domain = domain;
+                    rule.item = item;
+                    rule.desc = desc;
+                    rule.score = score;
+                    rule.severity = severity;
+                    rule.autoFix = autoFix;
+                    rule.enabled = enabled; }
+            } else {
+                const newId = 'RULE_' + String(rules.length + 1).padStart(3, '0');
+                rules.push({ id: newId, domain, item, desc, score, severity, autoFix, enabled });
+            }
+            closeRuleModal();
+            renderRulesTable();
+            updateDashboard();
+        });
+
+        // AI 聊天与检查
+        function addChatMessage(role, text) {
+            const msgs = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = 'chat-msg ' + (role === 'user' ? 'user' : 'ai');
+            div.innerHTML = `<div class="lbl">${role==='user'?'👤 您':'🤖 AI Agent'}</div>${text}`;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function sendChat() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            addChatMessage('user', msg);
+            input.value = '';
+            if (msg.includes('开始检查') || msg.includes('自动检查')) {
+                startCheck();
+            } else {
+                setTimeout(() => { addChatMessage('ai', '您可以输入“开始检查”触发全量规则AI检查，或者询问数据健康情况。'); }, 500);
+            }
+        }
+
+        function startCheck() {
+            addChatMessage('ai', '🔍 收到指令，开始执行AI自动检查... 正在获取已启用规则列表...');
+            const enabledRules = rules.filter(r => r.enabled);
+            if (enabledRules.length === 0) { addChatMessage('ai', '⚠️ 没有启用的规则，请先在检查规则页面启用至少一条规则。'); return; }
+            addChatMessage('ai', `📋 已加载 ${enabledRules.length} 条规则，正在逐条通过MCP连接ERP取数分析...`);
+            let index = 0;
+
+            function processNext() {
+                if (index >= enabledRules.length) {
+                    addChatMessage('ai', `✅ 检查完成！共发现 ${anomalies.filter(a=>a.status==='待解决').length} 条待解决异常。详情请查看异常明细。`);
+                    updateDashboard(); return;
+                }
+                const rule = enabledRules[index];
+                addChatMessage('ai', `⏳ 正在检查规则 ${rule.id}：${rule.desc} ...`);
+                setTimeout(() => {
+                    const rand = Math.random();
+                    if (rand < 0.5) {
+                        const newAnomaly = {
+                            id: 'ANOM-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + String(anomalies.length + 1).padStart(3, '0'),
+                            ruleId: rule.id,
+                            desc: `${rule.item} 异常：${rule.desc} (模拟数据)`,
+                            risk: rule.severity,
+                            rootCause: 'AI 分析：数据录入不规范或系统缺少校验',
+                            solution: rule.autoFix ? 'AI 已自动修复' : '建议人工核实并修正',
+                            status: rule.autoFix ? 'ai自动修复' : '待解决',
+                            time: new Date().toLocaleString(),
+                            autoFixed: rule.autoFix
+                        };
+                        anomalies.push(newAnomaly);
+                        addChatMessage('ai', `⚠️ 发现异常：${newAnomaly.desc}，风险${newAnomaly.risk}，状态：${newAnomaly.status}`);
+                    } else { addChatMessage('ai', `✅ 规则 ${rule.id} 检查通过，无异常。`); }
+                    index++;
+                    updateDashboard();
+                    processNext();
+                }, 800 + Math.random() * 1200);
+            }
+            processNext();
+        }
+        document.getElementById('btnStartCheck').addEventListener('click', startCheck);
+        document.getElementById('chatInput').addEventListener('keydown', function(e) { if (e.key === 'Enter') sendChat(); });
+
+        // 根因分析对话框
+        let currentRcaAnomalyId = null;
+
+        function addRcaMessage(text, isUser = false) {
+            const msgs = document.getElementById('rcaChatMsgs');
+            const div = document.createElement('div');
+            div.className = 'rca-chat-msg ' + (isUser ? 'user' : 'ai');
+            div.innerHTML = text;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function openRCADialog(anomalyId) {
+            currentRcaAnomalyId = anomalyId;
+            const anomaly = anomalies.find(a => a.id === anomalyId);
+            document.getElementById('rcaAnomalyId').textContent = anomalyId;
+            const msgs = document.getElementById('rcaChatMsgs');
+            msgs.innerHTML = '';
+            addRcaMessage(`🤖 开始对异常 <b>${anomalyId}</b> 进行深度根因分析...`);
+            document.getElementById('rcaModal').classList.add('active');
+            // 模拟分析步骤
+            setTimeout(() => {
+                addRcaMessage('📡 正在通过MCP协议连接ERP，获取相关业务数据...');
+            }, 800);
+            setTimeout(() => {
+                addRcaMessage(`📊 已获取到异常记录：<b>${anomaly.desc}</b>，风险等级：${anomaly.risk}`);
+            }, 1600);
+            setTimeout(() => {
+                addRcaMessage('🧠 正在调用因果推断模型 (MODEL-RCA-001) 进行跨模块关联分析...');
+            }, 2400);
+            setTimeout(() => {
+                // 生成更详细的根因
+                let detailedCause = '';
+                if (anomaly.ruleId === 'RULE_001') detailedCause = '凭证创建时前端未强制校验日期字段，且用户操作习惯中跳过该字段，导致大量凭证日期缺失。';
+                else if (anomaly.ruleId === 'RULE_004') detailedCause = '科目编码在旧系统迁移过程中未统一标准化，部分编码保留了原始4位长度，与新系统6位规则冲突。';
+                else if (anomaly.ruleId === 'RULE_002') detailedCause = '采购订单PO-3321在创建时金额字段被错误置零，可能由接口传输异常或手工录入失误造成。';
+                else if (anomaly.ruleId === 'RULE_008') detailedCause = '销售订单引用的客户编码CS-001在主数据中不存在，原因是该客户为新客户，但主数据维护流程滞后。';
+                else detailedCause = '数据录入时缺乏有效的实时校验机制，且相关业务规则未在ERP前端进行硬性拦截。';
+                addRcaMessage(`🔍 <b>根因定位：</b>${detailedCause}`);
+            }, 3200);
+            setTimeout(() => {
+                addRcaMessage(`💡 <b>建议方案：</b>${anomaly.solution} （请根据实际情况确认执行）`);
+            }, 4000);
+            setTimeout(() => {
+                addRcaMessage(`✅ 根因分析完成。如需进一步讨论或执行修复，可输入指令。`);
+            }, 4500);
+        }
+
+        function closeRcaModal() {
+            document.getElementById('rcaModal').classList.remove('active');
+        }
+
+        function sendRcaMsg() {
+            const input = document.getElementById('rcaInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            addRcaMessage(msg, true);
+            input.value = '';
+            setTimeout(() => {
+                addRcaMessage('🤖 收到，我会根据您的输入进一步优化分析。目前该异常的根因已定位，建议优先处理。');
+            }, 600);
+        }
+        document.getElementById('rcaInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') sendRcaMsg();
+        });
+
+        // 初始化
+        function init() {
+            updateDashboard();
+            renderRulesTable();
+            renderAnomaliesTable();
+        }
+        init();
+
+        // 时钟
+        function updateTime() {
+            const n = new Date();
+            document.getElementById('liveTime').textContent = n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-' + String(n.getDate()).padStart(2, '0') + ' ' + String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0') + ':' + String(n.getSeconds()).padStart(2, '0');
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+    </script>
+</body>
+</html>

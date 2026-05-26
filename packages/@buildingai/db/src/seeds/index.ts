@@ -1,6 +1,15 @@
 export { MenuSeeder } from "./runtime-seeders/menu.seeder";
 export { PermissionSeeder } from "./runtime-seeders/permission.seeder";
 export { SeedRunner } from "./seed-runner";
+export {
+    bindBowiAndErpMcpToAgent,
+    bowiModelFieldsForCreate,
+    ensureBowiAgentWebAndSquarePublish,
+    resolveBowiLlmModel,
+    resolvePlatformAgentMcpServerIds,
+    syncBowiPlatformAgentProfile,
+    type BowiPlatformAgentPromptProfile,
+} from "./helpers/bowi-platform-agent-sync";
 export { AiModelSeeder } from "./seeders/ai-model.seeder";
 export { AiProviderSeeder } from "./seeders/ai-provider.seeder";
 export { DatasetsConfigSeeder } from "./seeders/datasets-config.seeder";

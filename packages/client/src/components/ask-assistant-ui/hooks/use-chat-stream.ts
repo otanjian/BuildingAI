@@ -14,11 +14,6 @@ import {
   isEmbedChatPath,
   resolveChatThreadId,
 } from "../libs/embed-chat";
-import {
-  buildAssistantReplyFromChatMessages,
-  notifyExtensionInspectionSync,
-  resolveAppsExtensionIdentifier,
-} from "@/lib/notify-extension-inspection-sync";
 import { getApiBaseUrl } from "@/utils/api";
 
 /** Delay before running post-stop side effects, giving backend time to persist usage. */
@@ -99,7 +94,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   const location = useLocation();
   const isEmbedChat = isEmbedChatPath(location.pathname);
   const isAppsEmbeddedChat = isAppsEmbeddedChatPath(location.pathname);
-  const appsExtensionIdentifier = resolveAppsExtensionIdentifier(location.pathname);
   const currentThreadId = resolveChatThreadId(
     location.pathname,
     routeId,
@@ -268,13 +262,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         const isNewConversation = !conversationIdRef.current;
         conversationIdRef.current = newConversationId;
 
-        if (isAppsEmbeddedChat && appsExtensionIdentifier) {
-          notifyExtensionInspectionSync(appsExtensionIdentifier, {
-            conversationId: newConversationId,
-            trigger: true,
-          });
-        }
-
         if (isNewConversation) {
           let targetPath: string;
           if (isEmbedChat) {
@@ -329,14 +316,6 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     },
     onFinish: () => {
       const conversationId = conversationIdRef.current;
-      if (isAppsEmbeddedChat && appsExtensionIdentifier) {
-        const assistantReply = buildAssistantReplyFromChatMessages(messagesRef.current);
-        notifyExtensionInspectionSync(appsExtensionIdentifier, {
-          conversationId: conversationId ?? undefined,
-          trigger: true,
-          assistantReply: assistantReply ?? undefined,
-        });
-      }
       const lastAssistantId = [...messagesRef.current]
         .reverse()
         .find((m) => m.role === "assistant")?.id;

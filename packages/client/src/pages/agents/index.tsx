@@ -187,8 +187,8 @@ const AgentsIndexPage = () => {
 
   return (
     <ScrollArea className="h-dvh" viewportClassName="[&_>div]:block!">
-      <div className="flex w-full flex-col items-center">
-        <div className="bg-background sticky top-0 z-20 flex h-13 w-full items-center px-2">
+      <div className="flex w-full min-w-0 flex-col">
+        <div className="bg-background sticky top-0 z-20 flex h-10 w-full items-center px-2 lg:px-4">
           <SidebarTrigger className="md:hidden" />
           <div className="ml-auto">
             <Button variant="ghost" size="sm" className="ml-auto" asChild>
@@ -200,27 +200,25 @@ const AgentsIndexPage = () => {
           </div>
         </div>
 
-        <div className="w-full max-w-4xl px-4 py-8 pt-12 sm:pt-20 md:px-6">
-          <div className="bg-background sticky top-12 z-20 pb-4">
-            <div className="flex flex-col items-center justify-between gap-4 max-sm:items-start sm:flex-row sm:px-3">
-              <div className="flex flex-col gap-2">
-                <h1 className="text-2xl">{decorateConfig?.title || "智能体广场"}</h1>
-                <p className="text-muted-foreground text-sm">
-                  {decorateConfig?.description || "选择你想要的智能体"}
-                </p>
-              </div>
-              <div className="max-sm:w-full">
-                <InputGroup className="rounded-full">
-                  <InputGroupInput
-                    placeholder="搜索智能体"
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                  />
-                  <InputGroupAddon>
-                    <Search />
-                  </InputGroupAddon>
-                </InputGroup>
-              </div>
+        <div className="mx-auto w-full max-w-[1600px] px-4 py-4 pt-6 sm:px-6 sm:pt-8 lg:px-8 xl:px-10">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div className="flex min-w-0 flex-col gap-2">
+              <h1 className="text-2xl">{decorateConfig?.title || "智能体广场"}</h1>
+              <p className="text-muted-foreground text-sm">
+                {decorateConfig?.description || "选择你想要的智能体"}
+              </p>
+            </div>
+            <div className="w-full shrink-0 sm:w-auto sm:min-w-[240px] sm:max-w-sm">
+              <InputGroup className="rounded-full">
+                <InputGroupInput
+                  placeholder="搜索智能体"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                />
+                <InputGroupAddon>
+                  <Search />
+                </InputGroupAddon>
+              </InputGroup>
             </div>
           </div>
 
@@ -257,7 +255,8 @@ const AgentsIndexPage = () => {
             </Carousel>
           ) : null}
 
-          <div className="group relative mt-8 sm:px-3">
+          {tags.length > 0 ? (
+            <div className="group relative mt-6">
             <div
               className={cn(
                 "from-background via-background/80 pointer-events-none absolute inset-y-0 left-0 z-10 flex w-24 items-center bg-linear-to-r to-transparent transition-opacity duration-300",
@@ -292,12 +291,6 @@ const AgentsIndexPage = () => {
 
             <div ref={tagScrollRef} className="no-scrollbar overflow-x-auto scroll-smooth py-2">
               <div className="flex min-w-max flex-nowrap gap-2">
-                <Badge
-                  className={badgeClass(selectedTagId === null)}
-                  onClick={() => setSelectedTagId(null)}
-                >
-                  全部
-                </Badge>
                 {tags.map((tag) => (
                   <Badge
                     key={tag.id}
@@ -310,8 +303,9 @@ const AgentsIndexPage = () => {
               </div>
             </div>
           </div>
+          ) : null}
 
-          <div className="mt-6 sm:px-3">
+          <div className="mt-5">
             {squareQuery.isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="text-muted-foreground size-8 animate-spin" />
@@ -326,7 +320,7 @@ const AgentsIndexPage = () => {
                 emptyText=""
                 showEmptyText={!hasNextPage}
               >
-                <div className="grid gap-x-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {items.map((agent) => {
                     const creator = agent.creator;
                     const displayName = creator?.nickname ?? "智能体";
@@ -336,27 +330,25 @@ const AgentsIndexPage = () => {
                     return (
                       <Item
                         key={agent.id}
-                        className="group/apps-item hover:bg-accent cursor-pointer px-0 transition-[padding] hover:px-4"
+                        className="group/apps-item bg-muted/35 hover:bg-accent min-h-[5.5rem] cursor-pointer rounded-xl px-2 py-3 transition-[padding,background-color] hover:px-3"
                         onClick={() => openAgentChat(agent)}
                       >
-                        <ItemMedia>
-                          <Avatar className="size-10">
-                            <AvatarImage src={agent.avatar ?? creator?.avatar ?? undefined} />
-                            <AvatarFallback>{initial || <Bot />}</AvatarFallback>
+                        <ItemMedia className="self-start pt-0.5">
+                          <Avatar className="size-12 rounded-xl after:rounded-xl">
+                            <AvatarImage
+                              src={agent.avatar ?? creator?.avatar ?? undefined}
+                              className="rounded-xl"
+                            />
+                            <AvatarFallback className="rounded-xl text-sm">
+                              {initial || <Bot />}
+                            </AvatarFallback>
                           </Avatar>
                         </ItemMedia>
-                        <ItemContent>
-                          <ItemTitle>{agent.name}</ItemTitle>
-                          {/* <div className="text-muted-foreground mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
-                            <Avatar className="size-4 shrink-0">
-                              <AvatarImage src={creator?.avatar ?? undefined} />
-                              <AvatarFallback className="text-[9px]">
-                                {creatorInitial || "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate">{creatorLabel}</span>
-                          </div> */}
-                          <ItemDescription className="line-clamp-1">
+                        <ItemContent className="gap-1.5">
+                          <ItemTitle className="text-base leading-snug font-semibold">
+                            {agent.name}
+                          </ItemTitle>
+                          <ItemDescription className="line-clamp-2 text-sm leading-relaxed">
                             {agent.description?.toString().trim() || "暂无描述"}
                           </ItemDescription>
                           <div className="text-muted-foreground mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
