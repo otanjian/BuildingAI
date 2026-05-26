@@ -1,0 +1,11 @@
+/** Shared with src/api/db/seed-data/otif-platform-agent.config.ts (PRD V1.1). */
+export {
+    OTIF_PLATFORM_AGENT_DESCRIPTION,
+    OTIF_PLATFORM_AGENT_NAME,
+    OTIF_PLATFORM_AGENT_OPENING_QUESTIONS,
+    OTIF_PLATFORM_AGENT_OPENING_STATEMENT,
+    OTIF_PLATFORM_AGENT_MAX_STEPS,
+    OTIF_PLATFORM_AGENT_QUICK_COMMANDS,
+    OTIF_PLATFORM_AGENT_ROLE_PROMPT,
+    OTIF_PREFERRED_MCP_NAME_HINTS,
+} from "../../api/db/seed-data/otif-platform-agent.config";

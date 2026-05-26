@@ -1,0 +1,18 @@
+{
+    "identifier": "energy-carbon-ai",
+    "name": "能源与碳排放自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "能耗与碳排强度对标，发现异常表计、班次与产线超标。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/energy-carbon-ai.svg"
+}

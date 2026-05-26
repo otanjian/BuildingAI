@@ -1,0 +1,18 @@
+{
+    "identifier": "quality-rca-ai",
+    "name": "质量异常追溯自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "批次追溯与客诉质量闭环，关联检验、工单与退换货根因分析。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/quality-rca-ai.svg"
+}

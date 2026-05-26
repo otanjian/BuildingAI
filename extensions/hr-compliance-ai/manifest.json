@@ -1,0 +1,18 @@
+{
+    "identifier": "hr-compliance-ai",
+    "name": "人力资源合规自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "薪酬、社保与用工合规巡检，预警加班超限、合同到期与公积金异常。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/hr-compliance-ai.svg"
+}

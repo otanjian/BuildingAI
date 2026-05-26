@@ -1,0 +1,87 @@
+{
+    "name": "service-sla-ai",
+    "version": "0.1.0",
+    "description": "售后服务 SLA 自治系统",
+    "author": "BowiAI Teams",
+    "private": true,
+    "main": "./manifest.json",
+    "module": "./manifest.json",
+    "files": [
+        "build/**/*"
+    ],
+    "exports": {
+        ".": {
+            "import": "./manifest.json",
+            "require": "./manifest.json"
+        },
+        "./api": {
+            "types": "./build/index.d.ts",
+            "import": "./build/index.js",
+            "require": "./build/index.js"
+        },
+        "./*": "./*"
+    },
+    "scripts": {
+        "build:clean": "rimraf build .nuxt .output .temp",
+        "dev:web": "vite",
+        "dev:api": "cross-env NODE_ENV=development tsup --watch src/api",
+        "dev": "concurrently -n web,api -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:api\"",
+        "build:api": "cross-env NODE_ENV=production tsup",
+        "build:web": "vite build",
+        "build:web:watch": "vite build --watch",
+        "build:publish": "pnpm build:clean && pnpm run build:web && pnpm run build:api",
+        "format": "prettier --write src",
+        "lint": "eslint src --quiet",
+        "lint:fix": "eslint src --fix",
+        "check-types": "tsc -p tsconfig.web.json --noEmit",
+        "test": "vitest run --config vitest.config.ts",
+        "seed:agent": "node scripts/seed-platform-agent.mjs",
+        "seed:rules": "node scripts/seed-check-rules.mjs"
+    },
+    "dependencies": {
+        "@ai-sdk/react": "^3.0.80",
+        "@buildingai/base": "workspace:*",
+        "@buildingai/constants": "workspace:*",
+        "@buildingai/core": "workspace:*",
+        "@buildingai/db": "workspace:*",
+        "@buildingai/decorators": "workspace:*",
+        "@buildingai/dto": "workspace:*",
+        "@buildingai/errors": "workspace:*",
+        "@buildingai/extension-sdk": "workspace:*",
+        "@buildingai/hooks": "workspace:*",
+        "@buildingai/http": "workspace:*",
+        "@buildingai/i18n": "workspace:*",
+        "@buildingai/pipe": "workspace:*",
+        "@buildingai/services": "workspace:*",
+        "@buildingai/stores": "workspace:*",
+        "@buildingai/ui": "workspace:*",
+        "@buildingai/utils": "workspace:*",
+        "@buildingai/web-core": "workspace:*",
+        "@tanstack/react-query": "^5.90.21",
+        "ai": "^6.0.138",
+        "@modelcontextprotocol/sdk": "1.21.0",
+        "@nestjs/mapped-types": "catalog:api",
+        "class-validator": "catalog:api",
+        "lucide-react": "catalog:web",
+        "react": "catalog:web",
+        "react-dom": "catalog:web",
+        "react-router-dom": "catalog:web",
+        "recharts": "catalog:web",
+        "sonner": "^2.0.7",
+        "vite-tsconfig-paths": "catalog:web",
+        "zod": "^4.3.6",
+        "@buildingai/extension-dashboard": "workspace:*"
+    },
+    "devDependencies": {
+        "@buildingai/eslint-config": "workspace:*",
+        "@buildingai/typescript-config": "workspace:*",
+        "@buildingai/web-types": "workspace:*",
+        "@types/react": "catalog:web",
+        "@types/react-dom": "catalog:web",
+        "eslint-plugin-react-refresh": "^0.4.26",
+        "vitest": "^3.2.4"
+    },
+    "engine": {
+        "buildingai": ">=25.1.0"
+    }
+}

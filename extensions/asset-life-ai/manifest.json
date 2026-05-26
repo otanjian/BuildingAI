@@ -1,0 +1,18 @@
+{
+    "identifier": "asset-life-ai",
+    "name": "固定资产全生命周期自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "固定资产账实、折旧与处置合规，提示闲置、减值与调拨异常。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/asset-life-ai.svg"
+}

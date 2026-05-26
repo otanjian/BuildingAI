@@ -1,0 +1,18 @@
+{
+    "identifier": "tax-compliance-ai",
+    "name": "税务合规自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "税率、申报要素与进项抵扣链校验，提示税务缺口与申报风险。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/tax-compliance-ai.svg"
+}

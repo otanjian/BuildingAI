@@ -6,9 +6,6 @@ node_modules
 .pnp
 .pnp.js
 
-# storage
-storage/*
-!storage/static
 
 # Local env files
 .env
@@ -66,11 +63,15 @@ yarn-error.log*
 # ESLint cache
 .eslintcache
 
-# extensions
-extensions/*
-!extensions/simple-blog
-!extensions/simple-blog/*
-!extensions/simple-blog/build
-!extensions/simple-blog/.output
-extensions/simple-blog/dist
+# extensions — track sources; ignore deps & build artifacts
+extensions/**/node_modules
+extensions/**/.output
+extensions/**/build
+extensions/**/.temp
+extensions/**/.turbo
+extensions/**/dist
+extensions/**/.data
+extensions/**/.cache
+extensions/**/.nuxt
+extensions/**/.nitro
 releases

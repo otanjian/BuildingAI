@@ -1,0 +1,11 @@
+/** Shared with src/api/db/seed-data/inv-opt-platform-agent.config.ts (PRD V1.1). */
+export {
+    INVO_PLATFORM_AGENT_DESCRIPTION,
+    INVO_PLATFORM_AGENT_NAME,
+    INVO_PLATFORM_AGENT_OPENING_QUESTIONS,
+    INVO_PLATFORM_AGENT_OPENING_STATEMENT,
+    INVO_PLATFORM_AGENT_MAX_STEPS,
+    INVO_PLATFORM_AGENT_QUICK_COMMANDS,
+    INVO_PLATFORM_AGENT_ROLE_PROMPT,
+    INVO_PREFERRED_MCP_NAME_HINTS,
+} from "../../api/db/seed-data/inv-opt-platform-agent.config";

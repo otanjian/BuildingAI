@@ -1,0 +1,467 @@
+{
+    "applications": {
+        "ehcs-ai": {
+            "manifest": {
+                "identifier": "ehcs-ai",
+                "name": "EHCS数据健康自治",
+                "type": "application",
+                "version": "0.1.3",
+                "description": "跨模块 ERP 数据健康巡检：规则驱动检查、异常落库与交互式根因分析。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/ehcs-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "inv-opt-ai": {
+            "manifest": {
+                "identifier": "inv-opt-ai",
+                "name": "库存优化自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "安全库存与 ABC 物料分析，识别缺货与高库存，辅助补货与安全库存参数优化。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/inv-opt-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "mdm-quality-ai": {
+            "manifest": {
+                "identifier": "mdm-quality-ai",
+                "name": "主数据质量自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "主数据唯一性与必填完整性治理，批量修复客商、物料与 BOM 缺陷。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/mdm-quality-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "proc-audit-ai": {
+            "manifest": {
+                "identifier": "proc-audit-ai",
+                "name": "采购合规审查自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "采购价与供应商合规审查，识别价格偏离、围标风险与三单不匹配。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/proc-audit-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "ar-risk-ai": {
+            "manifest": {
+                "identifier": "ar-risk-ai",
+                "name": "应收账款风控自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "应收账龄与信用超限监控，分级坏账风险并辅助催收策略分析。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/ar-risk-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "ap-opt-ai": {
+            "manifest": {
+                "identifier": "ap-opt-ai",
+                "name": "应付账款优化自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "应付三单匹配与付款节奏优化，发现重复付款与提前/延迟付款机会。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/ap-opt-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "mfg-var-ai": {
+            "manifest": {
+                "identifier": "mfg-var-ai",
+                "name": "生产成本偏差自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "工单标准与实际耗用偏差分析，定位 BOM、报工与在制品成本异常。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/mfg-var-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "forecast-ai": {
+            "manifest": {
+                "identifier": "forecast-ai",
+                "name": "销售预测校准自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "销售预测 MAPE 与需求偏差校准，滚动修正预测模型与安全库存参数。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/forecast-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "asset-life-ai": {
+            "manifest": {
+                "identifier": "asset-life-ai",
+                "name": "固定资产全生命周期自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "固定资产账实、折旧与处置合规，提示闲置、减值与调拨异常。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/asset-life-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "tax-compliance-ai": {
+            "manifest": {
+                "identifier": "tax-compliance-ai",
+                "name": "税务合规自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "税率、申报要素与进项抵扣链校验，提示税务缺口与申报风险。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/tax-compliance-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "otif-ai": {
+            "manifest": {
+                "identifier": "otif-ai",
+                "name": "供应链 OTIF 自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "订单 OTIF 与发运准时率跟踪，定位延误、短装与承运环节异常。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/otif-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "quality-rca-ai": {
+            "manifest": {
+                "identifier": "quality-rca-ai",
+                "name": "质量异常追溯自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "批次追溯与客诉质量闭环，关联检验、工单与退换货根因分析。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/quality-rca-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "hr-compliance-ai": {
+            "manifest": {
+                "identifier": "hr-compliance-ai",
+                "name": "人力资源合规自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "薪酬、社保与用工合规巡检，预警加班超限、合同到期与公积金异常。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/hr-compliance-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "project-health-ai": {
+            "manifest": {
+                "identifier": "project-health-ai",
+                "name": "项目交付健康自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "项目进度、成本与里程碑健康度，预警延误、超支与资源冲突。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/project-health-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "energy-carbon-ai": {
+            "manifest": {
+                "identifier": "energy-carbon-ai",
+                "name": "能源与碳排放自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "能耗与碳排强度对标，发现异常表计、班次与产线超标。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/energy-carbon-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "contract-ai": {
+            "manifest": {
+                "identifier": "contract-ai",
+                "name": "合同履约自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "合同到期、履约节点与回款跟踪，识别违约、续签与里程碑风险。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/contract-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "channel-inv-ai": {
+            "manifest": {
+                "identifier": "channel-inv-ai",
+                "name": "渠道库存协同自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "渠道库存与调拨协同监控，预警渠道积压、断货与跨仓库存差异。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/channel-inv-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "budget-control-ai": {
+            "manifest": {
+                "identifier": "budget-control-ai",
+                "name": "预算执行监控自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "预算占用与无预算支出台账，按部门预警超支并给出冻结建议。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/budget-control-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "service-sla-ai": {
+            "manifest": {
+                "identifier": "service-sla-ai",
+                "name": "售后服务 SLA 自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "售后响应与一次修复率巡检，预警 P1 超时、备件缺货与重复维修。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/service-sla-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "fx-risk-ai": {
+            "manifest": {
+                "identifier": "fx-risk-ai",
+                "name": "外汇风险自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "多币种敞口与汇兑损益监控，预警汇率陈旧与对冲缺口（不自动交易）。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/fx-risk-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        },
+        "esg-report-ai": {
+            "manifest": {
+                "identifier": "esg-report-ai",
+                "name": "ESG 合规披露自治",
+                "type": "application",
+                "version": "0.1.0",
+                "description": "ESG 披露指标缺口与证据链校验，按域辅助编报周期与完整性。",
+                "homepage": "",
+                "author": {
+                    "name": "BowiAI Teams",
+                    "avatar": "/static/avatars/bowiai-teams.svg",
+                    "homepage": ""
+                },
+                "changelog": [],
+                "engine": {
+                    "buildingai": ">=25.1.0"
+                },
+                "icon": "/static/avatars/enterprise/esg-report-ai.svg"
+            },
+            "isLocal": true,
+            "enabled": true
+        }
+    },
+    "functionals": {}
+}

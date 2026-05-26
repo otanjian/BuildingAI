@@ -1,0 +1,18 @@
+{
+    "identifier": "service-sla-ai",
+    "name": "售后服务 SLA 自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "售后响应与一次修复率巡检，预警 P1 超时、备件缺货与重复维修。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/service-sla-ai.svg"
+}

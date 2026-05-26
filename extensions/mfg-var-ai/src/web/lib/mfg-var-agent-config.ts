@@ -1,0 +1,11 @@
+/** Shared with src/api/db/seed-data/mfg-var-platform-agent.config.ts (PRD V1.1). */
+export {
+    MFGV_PLATFORM_AGENT_DESCRIPTION,
+    MFGV_PLATFORM_AGENT_NAME,
+    MFGV_PLATFORM_AGENT_OPENING_QUESTIONS,
+    MFGV_PLATFORM_AGENT_OPENING_STATEMENT,
+    MFGV_PLATFORM_AGENT_MAX_STEPS,
+    MFGV_PLATFORM_AGENT_QUICK_COMMANDS,
+    MFGV_PLATFORM_AGENT_ROLE_PROMPT,
+    MFGV_PREFERRED_MCP_NAME_HINTS,
+} from "../../api/db/seed-data/mfg-var-platform-agent.config";

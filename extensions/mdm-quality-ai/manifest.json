@@ -1,0 +1,18 @@
+{
+    "identifier": "mdm-quality-ai",
+    "name": "主数据质量自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "主数据唯一性与必填完整性治理，批量修复客商、物料与 BOM 缺陷。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/mdm-quality-ai.svg"
+}

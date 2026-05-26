@@ -1,0 +1,18 @@
+{
+    "identifier": "channel-inv-ai",
+    "name": "渠道库存协同自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "渠道库存与调拨协同监控，预警渠道积压、断货与跨仓库存差异。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/channel-inv-ai.svg"
+}

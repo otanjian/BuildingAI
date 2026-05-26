@@ -1,0 +1,18 @@
+{
+    "identifier": "ar-risk-ai",
+    "name": "应收账款风控自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "应收账龄与信用超限监控，分级坏账风险并辅助催收策略分析。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/ar-risk-ai.svg"
+}

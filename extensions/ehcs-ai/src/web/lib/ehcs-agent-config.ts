@@ -1,0 +1,11 @@
+/** Shared with src/api/db/seed-data/ehcs-platform-agent.config.ts (PRD V1.1). */
+export {
+    EHCS_PLATFORM_AGENT_DESCRIPTION,
+    EHCS_PLATFORM_AGENT_NAME,
+    EHCS_PLATFORM_AGENT_OPENING_QUESTIONS,
+    EHCS_PLATFORM_AGENT_OPENING_STATEMENT,
+    EHCS_PLATFORM_AGENT_MAX_STEPS,
+    EHCS_PLATFORM_AGENT_QUICK_COMMANDS,
+    EHCS_PLATFORM_AGENT_ROLE_PROMPT,
+    EHCS_PREFERRED_MCP_NAME_HINTS,
+} from "../../api/db/seed-data/ehcs-platform-agent.config";

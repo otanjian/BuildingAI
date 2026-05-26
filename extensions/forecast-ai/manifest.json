@@ -1,0 +1,18 @@
+{
+    "identifier": "forecast-ai",
+    "name": "销售预测校准自治",
+    "type": "application",
+    "version": "0.1.0",
+    "description": "销售预测 MAPE 与需求偏差校准，滚动修正预测模型与安全库存参数。",
+    "homepage": "",
+    "author": {
+        "name": "BowiAI Teams",
+        "avatar": "/static/avatars/bowiai-teams.svg",
+        "homepage": ""
+    },
+    "changelog": [],
+    "engine": {
+        "buildingai": ">=25.1.0"
+    },
+    "icon": "/static/avatars/enterprise/forecast-ai.svg"
+}
