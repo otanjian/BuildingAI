@@ -8,6 +8,10 @@ import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
 
+function requireFromRoot(rootDir) {
+    return createRequire(path.join(rootDir, "package.json"));
+}
+
 /**
  * Load all TypeORM entities from @buildingai/db dist (avoids missing relation metadata).
  * @param {string} rootDir - Monorepo root
@@ -34,8 +38,9 @@ export function loadCoreDbEntities(rootDir) {
  * @param {import("typeorm").DataSourceOptions} [extra]
  */
 export async function createPlatformAgentDataSource(rootDir, extra = {}) {
-    const { DataSource } = require("@buildingai/db/typeorm");
-    const { SnakeNamingStrategy } = require("typeorm-naming-strategies");
+    const rootRequire = requireFromRoot(rootDir);
+    const { DataSource } = require(path.join(rootDir, "packages/@buildingai/db/dist/typeorm.js"));
+    const { SnakeNamingStrategy } = rootRequire("typeorm-naming-strategies");
     return new DataSource({
         type: "postgres",
         host: process.env.DB_HOST || "localhost",
@@ -57,7 +62,8 @@ export async function createPlatformAgentDataSource(rootDir, extra = {}) {
  * @param {string} seederName - e.g. InvOptPlatformAgentSeeder
  */
 export async function runPlatformAgentSeeder(dataSource, seedsIndexPath, seederName) {
-    const { SeedRunner } = await import("@buildingai/db/seeds");
+    const rootDir = path.resolve(path.dirname(seedsIndexPath), "../../../../..");
+    const { SeedRunner } = require(path.join(rootDir, "packages/@buildingai/db/dist/seeds/index.js"));
     const seedsModule = await import(pathToFileURL(seedsIndexPath).href);
     const seeders = await seedsModule.getSeeders();
     const agentSeeder = seeders.find((s) => s.name === seederName);

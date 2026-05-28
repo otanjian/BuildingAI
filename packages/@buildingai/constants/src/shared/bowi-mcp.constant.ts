@@ -105,6 +105,10 @@ export function getBowiMcpPublicUrl(): string {
     const base =
         process.env.BOWI_MCP_BASE_URL?.trim() ||
         process.env.EHCS_MCP_BASE_URL?.trim() ||
+        (process.env.NODE_ENV === "production"
+            ? process.env.VITE_PRODUCTION_APP_BASE_URL?.trim() ||
+              process.env.APP_DOMAIN?.trim()
+            : undefined) ||
         process.env.VITE_DEVELOP_APP_BASE_URL?.trim() ||
         `http://127.0.0.1:${process.env.SERVER_PORT || "4090"}`;
     const prefix = process.env.VITE_APP_CONSOLE_API_PREFIX || "/consoleapi";

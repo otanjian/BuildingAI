@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BuildingAI local dev orchestrator: API :4090, web :4091, SAP ADT MCP :8100, optional Docker infra
+# BuildingAI local dev orchestrator: API :4090, web :4091, SAP ADT MCP :8100, SAP PyRFC MCP :8200, optional Docker infra
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,9 +8,12 @@ cd "$ROOT_DIR"
 RUN_DIR="${ROOT_DIR}/.run"
 SAP_DIR="${ROOT_DIR}/integrations/sap-abap-adt-mcp"
 SAP_ENV="${SAP_DIR}/.env"
+SAP_PYRFC_DIR="${ROOT_DIR}/integrations/sap-pyrfc-mcp"
+SAP_PYRFC_ENV="${SAP_PYRFC_DIR}/.env"
 
 DEV_PORTS=(4090 4091)
 SAP_PORT="${MCP_PORT:-8100}"
+SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
 ERPNEXT_PORT=8000
 INFRA_SERVICES=(redis postgres)
 
@@ -41,9 +44,10 @@ Commands:
   logs          Tail logs (default: dev; use "sap" or "all")
 
 Targets (optional, for start/restart/stop):
-  all           Dev + SAP MCP + infra when enabled (default)
+  all           Dev + SAP MCPs + infra when enabled (default)
   dev           BuildingAI only (pnpm dev)
   sap           SAP ABAP ADT MCP only (:8100)
+  sap-pyrfc     SAP PyRFC MCP only (:8200)
   infra         Docker redis + postgres only
 
 Options:
@@ -51,9 +55,11 @@ Options:
   -d, --detach  Run pnpm dev in background (logs: .run/dev.log)
 
 Environment (root .env or shell):
-  START_SAP_MCP=auto|true|false   Default auto (start if integrations/sap-abap-adt-mcp/.env exists)
-  START_DOCKER_INFRA=true|false   Default false — docker compose up redis postgres
-  MCP_PORT=8100                   SAP MCP HTTP port
+  START_SAP_MCP=auto|true|false         Default auto (start if integrations/sap-abap-adt-mcp/.env exists)
+  START_SAP_PYRFC_MCP=auto|true|false   Default auto (start if integrations/sap-pyrfc-mcp/.env exists)
+  START_DOCKER_INFRA=true|false         Default false — docker compose up redis postgres
+  MCP_PORT=8100                         SAP ADT MCP HTTP port
+  SAP_PYRFC_MCP_PORT=8200               SAP PyRFC MCP HTTP port
 
 Examples:
   ./start.sh                      # first start (foreground dev)
@@ -61,13 +67,15 @@ Examples:
   ./start.sh stop                 # stop everything
   ./start.sh status
   ./start.sh logs sap
-  ./start.sh restart sap          # SAP MCP only
+  ./start.sh restart sap          # SAP ADT MCP only
+  ./start.sh restart sap-pyrfc    # SAP PyRFC MCP only
   ./start.sh infra start          # postgres + redis via Docker
   ./start.sh -f restart           # force-free ports, then start
 
 MCP endpoints (register in console when running):
-  SAP:      http://127.0.0.1:8100/mcp
-  ERPNext:  http://127.0.0.1:8000/... (external; not started by this script)
+  SAP ADT:    http://127.0.0.1:8100/mcp
+  SAP PyRFC:  http://127.0.0.1:8200/mcp
+  ERPNext:    http://127.0.0.1:8000/... (external; not started by this script)
 
 EOF
 }
@@ -91,14 +99,16 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_SAP_MCP START_DOCKER_INFRA MCP_PORT MCP_HOST MCP_PATH SERVER_PORT; do
+    for key in START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
     done
   fi
   SAP_PORT="${MCP_PORT:-8100}"
+  SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
   START_SAP_MCP="${START_SAP_MCP:-auto}"
+  START_SAP_PYRFC_MCP="${START_SAP_PYRFC_MCP:-auto}"
   START_DOCKER_INFRA="${START_DOCKER_INFRA:-false}"
 }
 
@@ -257,6 +267,16 @@ should_start_sap() {
   esac
 }
 
+should_start_sap_pyrfc() {
+  case "$START_SAP_PYRFC_MCP" in
+    true|1|yes|YES) return 0 ;;
+    false|0|no|NO) return 1 ;;
+    auto|*)
+      [[ -f "$SAP_PYRFC_ENV" ]]
+      ;;
+  esac
+}
+
 docker_available() {
   command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
 }
@@ -337,6 +357,55 @@ stop_sap_mcp() {
   kill_port "$SAP_PORT"
 }
 
+start_sap_pyrfc_mcp() {
+  local force="${1:-0}"
+  local strict="${2:-0}"
+
+  if ! should_start_sap_pyrfc; then
+    echo "SAP PyRFC MCP: skipped (set START_SAP_PYRFC_MCP=true or add ${SAP_PYRFC_ENV})"
+    return 0
+  fi
+
+  if [[ ! -x "${SAP_PYRFC_DIR}/start.sh" ]]; then
+    echo "Error: ${SAP_PYRFC_DIR}/start.sh not found or not executable."
+    exit 1
+  fi
+
+  stop_pid_file "sap-pyrfc-mcp"
+  ensure_ports_available "$force" "$SAP_PYRFC_PORT"
+
+  echo "Starting SAP PyRFC MCP on port ${SAP_PYRFC_PORT}..."
+  clear_broken_proxy
+  SAP_PYRFC_SKIP_INSTALL="${SAP_PYRFC_SKIP_INSTALL:-1}" \
+    MCP_PORT="$SAP_PYRFC_PORT" \
+    nohup env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
+      "${SAP_PYRFC_DIR}/start.sh" >>"${RUN_DIR}/sap-pyrfc-mcp.log" 2>&1 &
+  echo $! >"${RUN_DIR}/sap-pyrfc-mcp.pid"
+
+  local i=0
+  while [[ $i -lt 90 ]]; do
+    if port_in_use "$SAP_PYRFC_PORT"; then
+      echo "  SAP PyRFC MCP: http://127.0.0.1:${SAP_PYRFC_PORT}/mcp (log: .run/sap-pyrfc-mcp.log)"
+      return 0
+    fi
+    if ! pid_alive "$(read_pid "${RUN_DIR}/sap-pyrfc-mcp.pid")"; then
+      echo "Warning: SAP PyRFC MCP exited early. See .run/sap-pyrfc-mcp.log"
+      tail -15 "${RUN_DIR}/sap-pyrfc-mcp.log" 2>/dev/null || true
+      rm -f "${RUN_DIR}/sap-pyrfc-mcp.pid"
+      [[ "$strict" == 1 ]] && return 1
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  echo "Warning: SAP PyRFC MCP still starting. Log: .run/sap-pyrfc-mcp.log"
+}
+
+stop_sap_pyrfc_mcp() {
+  stop_pid_file "sap-pyrfc-mcp"
+  kill_port "$SAP_PYRFC_PORT"
+}
+
 check_deps() {
   if [[ ! -d node_modules ]]; then
     echo "Installing dependencies..."
@@ -352,10 +421,11 @@ BuildingAI dev server
   API:  http://localhost:4090/
   Install wizard (first run): http://localhost:4090/install
 
-$(should_start_sap && echo "  SAP MCP: http://127.0.0.1:${SAP_PORT}/mcp")
+$(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/mcp")
+$(should_start_sap_pyrfc && echo "  SAP PyRFC MCP: http://127.0.0.1:${SAP_PYRFC_PORT}/mcp")
 $(port_in_use "$ERPNEXT_PORT" && echo "  ERPNext MCP: http://127.0.0.1:${ERPNEXT_PORT}/ (detected)" || echo "  ERPNext MCP: port ${ERPNEXT_PORT} not listening (start ERPNext separately)")
 
-Commands: ./start.sh restart | stop | status | logs [dev|sap]
+Commands: ./start.sh restart | stop | status | logs [dev|sap|sap-pyrfc]
 
 EOF
 }
@@ -406,9 +476,15 @@ cmd_status() {
   done
 
   if port_in_use "$SAP_PORT"; then
-    echo "  :${SAP_PORT}  SAP MCP   listening"
+    echo "  :${SAP_PORT}  SAP ADT MCP     listening"
   else
-    echo "  :${SAP_PORT}  SAP MCP   down"
+    echo "  :${SAP_PORT}  SAP ADT MCP     down"
+  fi
+
+  if port_in_use "$SAP_PYRFC_PORT"; then
+    echo "  :${SAP_PYRFC_PORT}  SAP PyRFC MCP   listening"
+  else
+    echo "  :${SAP_PYRFC_PORT}  SAP PyRFC MCP   down"
   fi
 
   if port_in_use "$ERPNEXT_PORT"; then
@@ -417,7 +493,7 @@ cmd_status() {
     echo "  :${ERPNEXT_PORT}  ERPNext   down (external)"
   fi
 
-  for name in dev sap-mcp; do
+  for name in dev sap-mcp sap-pyrfc-mcp; do
     local pid file="${RUN_DIR}/${name}.pid"
     pid="$(read_pid "$file")"
     if [[ -n "$pid" ]]; then
@@ -441,11 +517,12 @@ cmd_logs() {
   case "$which" in
     dev) tail -f "${RUN_DIR}/dev.log" ;;
     sap) tail -f "${RUN_DIR}/sap-mcp.log" ;;
+    sap-pyrfc) tail -f "${RUN_DIR}/sap-pyrfc-mcp.log" ;;
     all)
-      tail -f "${RUN_DIR}/dev.log" "${RUN_DIR}/sap-mcp.log" 2>/dev/null
+      tail -f "${RUN_DIR}/dev.log" "${RUN_DIR}/sap-mcp.log" "${RUN_DIR}/sap-pyrfc-mcp.log" 2>/dev/null
       ;;
     *)
-      echo "Unknown log target: $which (use dev, sap, or all)"
+      echo "Unknown log target: $which (use dev, sap, sap-pyrfc, or all)"
       exit 1
       ;;
   esac
@@ -457,10 +534,12 @@ stop_target() {
     all)
       stop_dev
       stop_sap_mcp
+      stop_sap_pyrfc_mcp
       stop_infra
       ;;
     dev) stop_dev ;;
     sap) stop_sap_mcp ;;
+    sap-pyrfc) stop_sap_pyrfc_mcp ;;
     infra) stop_infra ;;
     *)
       echo "Unknown target: $target"
@@ -483,6 +562,7 @@ start_target() {
     all)
       start_infra
       start_sap_mcp "$force" "$skip_sap_build" 0 || true
+      start_sap_pyrfc_mcp "$force" 0 || true
       if [[ "$detach" == 1 ]]; then
         start_dev "$force" 1
       else
@@ -498,6 +578,9 @@ start_target() {
       ;;
     sap)
       start_sap_mcp "$force" "$skip_sap_build" 1
+      ;;
+    sap-pyrfc)
+      start_sap_pyrfc_mcp "$force" 1
       ;;
     infra)
       start_infra
@@ -524,7 +607,7 @@ parse_args() {
         ;;
       status) COMMAND="status"; shift ;;
       logs) COMMAND="logs"; shift; LOG_TARGET="${1:-dev}"; shift || true ;;
-      dev | sap | infra | all)
+      dev | sap | sap-pyrfc | infra | all)
         TARGET="$1"
         shift
         ;;

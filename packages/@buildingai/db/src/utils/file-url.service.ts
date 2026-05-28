@@ -211,24 +211,31 @@ export class FileUrlService {
      * @param requestDomain 请求域名
      * @returns 基础域名
      */
+    private isLoopbackDomain(domain?: string): boolean {
+        if (!domain) {
+            return false;
+        }
+        try {
+            const host = new URL(domain).hostname;
+            return host === "localhost" || host === "127.0.0.1" || host === "::1";
+        } catch {
+            return domain.includes("127.0.0.1") || domain.includes("localhost");
+        }
+    }
+
     private getBaseDomain(config: StorageConfig, requestDomain?: string): string {
+        const appDomain = process.env.APP_DOMAIN?.trim();
+        const fallback = appDomain || `http://localhost:${process.env.SERVER_PORT}`;
+        const publicRequestDomain =
+            requestDomain && !this.isLoopbackDomain(requestDomain) ? requestDomain : undefined;
+
         // 对于本地存储,优先使用请求域名,确保与前端访问域名一致
         if (config.engine === STORAGE_ENGINE.LOCAL) {
-            return (
-                requestDomain ||
-                config.domain ||
-                process.env.APP_DOMAIN ||
-                `http://localhost:${process.env.SERVER_PORT}`
-            );
+            return publicRequestDomain || config.domain || fallback;
         }
 
         // 对于其他存储引擎(如OSS、S3等),优先使用配置的域名
-        return (
-            config.domain ||
-            process.env.APP_DOMAIN ||
-            requestDomain ||
-            `http://localhost:${process.env.SERVER_PORT}`
-        );
+        return config.domain || fallback || publicRequestDomain || fallback;
     }
 
     private joinPaths(...segments: string[]): string {

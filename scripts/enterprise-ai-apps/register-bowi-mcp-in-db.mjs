@@ -23,6 +23,11 @@ async function main() {
     await ds.initialize();
 
     const url = getBowiMcpPublicUrl();
+    const adminRow = await ds.query(
+        `SELECT id FROM "user" WHERE is_root = '1' ORDER BY created_at ASC LIMIT 1`,
+    );
+    const creatorId = adminRow[0]?.id ?? null;
+
     const legacy = await ds.query(
         `SELECT id FROM ai_mcp_servers WHERE name IN ('ehcs-mcp', $1) ORDER BY CASE WHEN name = $1 THEN 0 ELSE 1 END LIMIT 1`,
         [BOWI_MCP_SERVER_NAME],
@@ -32,17 +37,18 @@ async function main() {
     if (legacy.length > 0) {
         serverId = legacy[0].id;
         await ds.query(
-            `UPDATE ai_mcp_servers SET name = $1, alias = $2, url = $3, communication_type = 'streamable-http',
-             is_disabled = false, connectable = true, connect_error = '', updated_at = NOW() WHERE id = $4`,
-            [BOWI_MCP_SERVER_NAME, "BowiAI MCP", url, serverId],
+            `UPDATE ai_mcp_servers SET name = $1, alias = $2, url = $3, type = 'system', communication_type = 'streamable-http',
+             is_disabled = false, connectable = true, connect_error = '', creator_id = COALESCE(creator_id, $5),
+             updated_at = NOW() WHERE id = $4`,
+            [BOWI_MCP_SERVER_NAME, "BowiAI MCP", url, serverId, creatorId],
         );
         console.log(`Updated MCP server ${serverId} → ${BOWI_MCP_SERVER_NAME}`);
     } else {
         const inserted = await ds.query(
-            `INSERT INTO ai_mcp_servers (id, name, alias, url, type, communication_type, is_disabled, connectable, sort_order, created_at, updated_at)
-             VALUES (gen_random_uuid(), $1, $2, $3, 'user', 'streamable-http', false, true, 0, NOW(), NOW())
+            `INSERT INTO ai_mcp_servers (id, name, alias, url, type, communication_type, is_disabled, connectable, creator_id, sort_order, created_at, updated_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, 'system', 'streamable-http', false, true, $4, 0, NOW(), NOW())
              RETURNING id`,
-            [BOWI_MCP_SERVER_NAME, "BowiAI MCP", url],
+            [BOWI_MCP_SERVER_NAME, "BowiAI MCP", url, creatorId],
         );
         serverId = inserted[0].id;
         console.log(`Created MCP server ${BOWI_MCP_SERVER_NAME} (${serverId})`);

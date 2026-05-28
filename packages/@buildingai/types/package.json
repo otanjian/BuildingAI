@@ -19,6 +19,11 @@
             "types": "./dist/*.d.ts",
             "import": "./dist/*.mjs",
             "require": "./dist/*.js"
+        },
+        "./ai/*": {
+            "types": "./dist/ai/*.d.ts",
+            "import": "./dist/ai/*.mjs",
+            "require": "./dist/ai/*.js"
         }
     },
     "scripts": {

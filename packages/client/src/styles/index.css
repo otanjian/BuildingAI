@@ -1,3 +1,46 @@
 @import "@buildingai/ui/styles/index.css";
 @import "@buildingai/ui/styles/base.css";
 @import "@buildingai/ui/styles/utils.css";
+
+/* Embedded in ERPNext iframe: fit iframe height and suppress page-level scrollbars. */
+html.embed-host-mode,
+html.embed-host-mode body,
+html.embed-host-mode #root {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100%;
+  overflow: hidden !important;
+  overflow-x: hidden !important;
+}
+
+html.embed-host-mode ::-webkit-scrollbar:horizontal {
+  display: none;
+  height: 0;
+}
+
+html.embed-host-mode ::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+html.embed-host-mode .chat-scroll > div {
+  scrollbar-gutter: auto;
+  overflow-x: hidden;
+}
+
+html.embed-host-mode [data-streamdown] {
+  max-width: 100%;
+}
+
+html.embed-host-mode [data-streamdown] table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+html.embed-host-mode .prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}

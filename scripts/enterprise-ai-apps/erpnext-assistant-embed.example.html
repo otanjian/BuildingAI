@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>ERPNext Assistant Embed Example</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+    #assistant { width: 100%; height: 720px; border: 0; border-radius: 16px; }
+  </style>
+</head>
+<body>
+  <h1>ERPNext 页面嵌入示例</h1>
+  <p>将下方 iframe 嵌入 ERPNext Desk 自定义 HTML 块或 Client Script。</p>
+  <iframe id="assistant" allow="clipboard-write; microphone; camera"></iframe>
+  <script>
+    // Replace with output from: node scripts/enterprise-ai-apps/seed-erpnext-assistant-agent.mjs
+    // Example (local dev):
+    // const AGENT_ID = "3a6420a3-8bbe-40a1-8da2-4c6aad83b487";
+    // const ACCESS_TOKEN = "<from seed script output>";
+    const AGENT_ID = "YOUR_AGENT_ID";
+    const ACCESS_TOKEN = "YOUR_ACCESS_TOKEN";
+    const BASE = "https://ai.bosofts.com"; // or http://localhost:4090
+
+    const iframe = document.getElementById("assistant");
+    iframe.src = `${BASE}/agents/${AGENT_ID}/${ACCESS_TOKEN}`;
+
+    function getErpNextPageContext() {
+      // Adapt to your ERPNext page: frappe.get_route(), cur_frm, etc.
+      const route = typeof frappe !== "undefined" ? frappe.get_route() : [];
+      const doctype = route[0] === "Form" ? route[1] : (typeof cur_frm !== "undefined" ? cur_frm?.doctype : "");
+      const docname = route[0] === "Form" ? route[2] : (typeof cur_frm !== "undefined" ? cur_frm?.docname : "");
+      let contextJson = "";
+      try {
+        if (typeof cur_frm !== "undefined" && cur_frm?.doc) {
+          contextJson = JSON.stringify({
+            doctype: cur_frm.doctype,
+            docname: cur_frm.docname,
+            docstatus: cur_frm.doc.docstatus,
+          });
+        }
+      } catch (_) {}
+
+      return {
+        erp_page_url: window.location.href,
+        erp_doctype: doctype || "",
+        erp_docname: docname || "",
+        erp_route: route.join("/"),
+        erp_context_json: contextJson,
+      };
+    }
+
+    function pushContext() {
+      if (!iframe.contentWindow) return;
+      iframe.contentWindow.postMessage(
+        { type: "buildingai-set-form-context", payload: getErpNextPageContext() },
+        "*",
+      );
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== iframe.contentWindow) return;
+      if (event.data?.type === "buildingai-embed-ready") {
+        pushContext();
+      }
+    });
+
+    // Re-push when ERPNext navigates (hook route_change in real integration)
+    setInterval(pushContext, 5000);
+  </script>
+</body>
+</html>

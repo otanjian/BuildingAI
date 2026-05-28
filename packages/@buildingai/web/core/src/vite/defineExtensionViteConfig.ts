@@ -11,18 +11,43 @@ const extensionDashboardSrc = path.resolve(
     viteDir,
     "../../../../extension-dashboard/src",
 );
+const constantsDist = path.resolve(viteDir, "../../../../constants/dist");
 
 const extensionDashboardAlias = {
     "@buildingai/extension-dashboard": path.join(extensionDashboardSrc, "index.ts"),
 };
 
+const buildResolveAliases = () => [
+    {
+        find: /^@buildingai\/constants\/shared\/(.+)$/,
+        replacement: `${path.join(constantsDist, "shared")}/$1.js`,
+    },
+    {
+        find: "@buildingai/constants/web",
+        replacement: path.join(constantsDist, "web/index.js"),
+    },
+    {
+        find: "@buildingai/constants/shared",
+        replacement: path.join(constantsDist, "shared/index.js"),
+    },
+    ...Object.entries(extensionDashboardAlias).map(([find, replacement]) => ({
+        find,
+        replacement,
+    })),
+];
+
 // https://vite.dev/config/
 export const defineExtensionViteConfig = (packageJson: { name: string }, config?: UserConfig) => {
     const userResolve = config?.resolve ?? {};
-    const userAlias =
+    const userAliasEntries =
         userResolve.alias && typeof userResolve.alias === "object" && !Array.isArray(userResolve.alias)
-            ? userResolve.alias
-            : {};
+            ? Object.entries(userResolve.alias).map(([find, replacement]) => ({
+                  find,
+                  replacement: replacement as string,
+              }))
+            : Array.isArray(userResolve.alias)
+              ? userResolve.alias
+              : [];
 
     return defineConfig({
         plugins: [react(), tailwindcss(), babel({ presets: [reactCompilerPreset()] })],
@@ -62,10 +87,7 @@ export const defineExtensionViteConfig = (packageJson: { name: string }, config?
         resolve: {
             ...userResolve,
             tsconfigPaths: true,
-            alias: {
-                ...extensionDashboardAlias,
-                ...userAlias,
-            },
+            alias: [...buildResolveAliases(), ...userAliasEntries],
         },
     });
 };

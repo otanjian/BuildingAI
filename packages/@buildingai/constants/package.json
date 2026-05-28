@@ -20,12 +20,36 @@
             "import": "./dist/*.js",
             "require": "./dist/*.js"
         },
-        "./server": "./src/server/index.ts",
-        "./server/*": "./src/server/*.ts",
-        "./web": "./src/web/index.ts",
-        "./web/*": "./src/web/*.ts",
-        "./shared": "./src/shared/index.ts",
-        "./shared/*": "./src/shared/*.ts"
+        "./server": {
+            "types": "./dist/server/index.d.ts",
+            "import": "./dist/server/index.js",
+            "require": "./dist/server/index.js"
+        },
+        "./server/*": {
+            "types": "./dist/server/*.d.ts",
+            "import": "./dist/server/*.js",
+            "require": "./dist/server/*.js"
+        },
+        "./web": {
+            "types": "./dist/web/index.d.ts",
+            "import": "./dist/web/index.js",
+            "require": "./dist/web/index.js"
+        },
+        "./web/*": {
+            "types": "./dist/web/*.d.ts",
+            "import": "./dist/web/*.js",
+            "require": "./dist/web/*.js"
+        },
+        "./shared": {
+            "types": "./dist/shared/index.d.ts",
+            "import": "./dist/shared/index.js",
+            "require": "./dist/shared/index.js"
+        },
+        "./shared/*": {
+            "types": "./dist/shared/*.d.ts",
+            "import": "./dist/shared/*.js",
+            "require": "./dist/shared/*.js"
+        }
     },
     "scripts": {
         "clean": "rimraf dist .turbo dist/build.tsbuildinfo",

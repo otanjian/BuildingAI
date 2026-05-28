@@ -16,9 +16,9 @@
         {
             "id": "menu_app-center",
             "icon": "layout-grid",
-            "title": "应用",
+            "title": "AI应用",
             "link": {
-                "label": "应用",
+                "label": "AI应用",
                 "path": "/apps",
                 "type": "system",
                 "query": {},
@@ -41,7 +41,7 @@
         },
         {
             "id": "menu_datasets",
-            "icon": "book-search",
+            "icon": "file-search",
             "title": "知识库",
             "link": {
                 "label": "知识库",
@@ -54,7 +54,7 @@
         },
         {
             "id": "menu_history_fixed",
-            "icon": "folder-clock",
+            "icon": "history",
             "title": "历史记录",
             "link": {
                 "label": "历史记录",

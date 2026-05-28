@@ -8,6 +8,22 @@ import { defineConfig, type ProxyOptions } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 const apiTarget = process.env.VITE_DEVELOP_APP_BASE_URL || "http://localhost:4090";
+const constantsDist = path.resolve(__dirname, "../@buildingai/constants/dist");
+
+const constantsAliases = [
+  {
+    find: /^@buildingai\/constants\/shared\/(.+)$/,
+    replacement: `${path.join(constantsDist, "shared")}/$1.js`,
+  },
+  {
+    find: "@buildingai/constants/web",
+    replacement: path.join(constantsDist, "web/index.js"),
+  },
+  {
+    find: "@buildingai/constants/shared",
+    replacement: path.join(constantsDist, "shared/index.js"),
+  },
+];
 
 /** Proxy /{extensionId}/consoleapi|api to the API server (apps iframe uses same origin in dev). */
 function buildExtensionApiProxies(target: string): Record<string, ProxyOptions> {
@@ -44,9 +60,18 @@ export default defineConfig({
   clearScreen: false,
   resolve: {
     tsconfigPaths: true,
-    alias: {
-      "@": path.resolve(__dirname, "src"),
-    },
+    alias: [
+      ...constantsAliases,
+      { find: "@", replacement: path.resolve(__dirname, "src") },
+      {
+        find: "@buildingai/types/ai/agent-config.interface",
+        replacement: path.resolve(__dirname, "../@buildingai/types/dist/ai/agent-config.interface.mjs"),
+      },
+      {
+        find: "@buildingai/types",
+        replacement: path.resolve(__dirname, "../@buildingai/types/dist/index.mjs"),
+      },
+    ],
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
   server: {

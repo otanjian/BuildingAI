@@ -1,0 +1,1 @@
+import{t as e}from"./rolldown-runtime-C5c2KzVm.js";var t=e((e=>{Object.defineProperty(e,`__esModule`,{value:!0}),e.AlipaySignType=e.PayVersion=e.Merchant=e.PayConfigPayType=void 0,e.PayConfigPayType={WECHAT:1,ALIPAY:2},e.Merchant={ORDINARY:`ordinary`,CHILD:`child`},e.PayVersion={V2:`V2`,V3:`V3`},e.AlipaySignType={RSA:`RSA`,RSA2:`RSA2`}}));export{t};

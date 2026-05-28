@@ -40,6 +40,7 @@ import {
   type PromptInputHiddenTool,
 } from "@/components/ask-assistant-ui";
 
+import { useEmbedFormContext, useEmbedHostDocumentClass, useHasEmbedFormContext } from "./_hooks/use-embed-form-context";
 import { usePublicAgentAssistant } from "./_hooks/use-public-agent-assistant";
 
 const AGENT_MODEL_ID = "agent";
@@ -277,6 +278,13 @@ export default function PublishChatPage() {
     formVariables,
   });
 
+  useEmbedFormContext(formFields, setFormValues);
+  useEmbedHostDocumentClass();
+  const hasEmbedFormContext = useHasEmbedFormContext(formValues, formFields);
+  const isEmbeddedHost = typeof window !== "undefined" && window.parent !== window;
+  const embedHeightClass = isEmbeddedHost ? "h-full max-h-full" : "h-dvh";
+  const showFormVariablesUi = formFields.length > 0 && !(isEmbeddedHost && hasEmbedFormContext);
+
   const typedAgent = agent as PublishedAgentDetailWithUploadCapability | undefined;
   const fileUploadEnabled = Boolean(typedAgent?.enableFileUpload);
   const promptHiddenTools = useMemo<PromptInputHiddenTool[]>(
@@ -313,13 +321,15 @@ export default function PublishChatPage() {
   );
 
   /**
-   * Auto-open the form variables popover when any form fields exist,
-   * so users see the form as soon as the page loads.
+   * Auto-open the form variables popover only when manual input is expected.
    */
   useEffect(() => {
-    if (formFields.length === 0) return;
+    if (!showFormVariablesUi) {
+      setFormPopoverOpen(false);
+      return;
+    }
     setFormPopoverOpen(true);
-  }, [formFields.length]);
+  }, [showFormVariablesUi]);
 
   const handleFormValueChange = useCallback((name: string, value: string) => {
     setFormValues((prev) => ({ ...prev, [name]: value }));
@@ -360,7 +370,7 @@ export default function PublishChatPage() {
 
   if (conversationsEmbedAccessDisabled) {
     return (
-      <div className="bg-background flex h-dvh min-h-0 w-full flex-col items-center justify-center p-6">
+      <div className={cn("bg-background flex min-h-0 w-full flex-col items-center justify-center p-6", embedHeightClass)}>
         <Empty className="max-w-md flex-none border-0 shadow-none">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -379,8 +389,12 @@ export default function PublishChatPage() {
   return (
     <div
       className={cn(
-        "flex h-dvh min-h-0 w-full gap-0 p-1 sm:p-2 md:gap-2",
-        desktopSidebarExpanded ? "bg-sidebar" : "bg-background",
+        "flex min-h-0 w-full gap-0 md:gap-2",
+        embedHeightClass,
+        isEmbeddedHost
+          ? "bg-background overflow-hidden p-0"
+          : "p-1 sm:p-2",
+        !isEmbeddedHost && (desktopSidebarExpanded ? "bg-sidebar" : "bg-background"),
       )}
     >
       <aside
@@ -405,8 +419,9 @@ export default function PublishChatPage() {
           <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
             <main
               className={cn(
-                "bg-background relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg md:rounded-xl",
-                !desktopSidebarExpanded && "md:rounded-sm",
+                "bg-background relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                isEmbeddedHost ? "rounded-none" : "rounded-lg md:rounded-xl",
+                !isEmbeddedHost && !desktopSidebarExpanded && "md:rounded-sm",
               )}
             >
               <header className="sticky top-0 z-10 flex items-center justify-between gap-2">
@@ -447,7 +462,7 @@ export default function PublishChatPage() {
                   ) : null} */}
                 </div>
 
-                {formFields.length > 0 ? (
+                {showFormVariablesUi ? (
                   <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
                     <PopoverTrigger asChild>
                       <Button
