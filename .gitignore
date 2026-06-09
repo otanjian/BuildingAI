@@ -1,46 +1,44 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # Dependencies
-node_modules
-.pnpm-store
+node_modules/
+**/node_modules/
+.pnpm-store/
 .pnp
 .pnp.js
 
-# storage (keep static assets in git)
-storage/*
-!storage/static
-
-# Local env files
+# Local env and private config
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 mcp.json
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Runtime state and logs
+/.run/
 /logs/
+integrations/sap-abap-adt-mcp/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Testing
-coverage
+# Testing and coverage
+coverage/
+**/coverage/
+.nyc_output/
 
-# Turbo
-.turbo
-
-# Vercel
-.vercel
-.cursor
-.windsurf
-.trae
-.agent
-.agents
-.kiro
-.claude
-.gemini
-
-# Build Outputs
+# Build outputs
 .next/
 out/
-build
-packages/**/dist
+build/
+dist/
+packages/**/dist/
 /public/package.json
 /public/*
 !/public/web/
@@ -48,34 +46,74 @@ packages/**/dist
 *.tsbuildinfo
 _temp_get_languages.*
 build.tsbuildinfo
+releases/
 
-# IDE
-.idea
+# Generated/local documentation
+/docs/
 
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Local process state (start.sh)
-.run/
-
-# Misc
-.DS_Store
-*.pem
-
-# ESLint cache
+# Tool caches
+.turbo/
+**/.turbo/
+.cache/
+**/.cache/
+.vite/
+**/.vite/
+.nuxt/
+**/.nuxt/
+.nitro/
+**/.nitro/
+.vercel/
 .eslintcache
+.stylelintcache
 
-# extensions — track sources; ignore deps & build artifacts
-extensions/**/node_modules
-extensions/**/.output
-extensions/**/build
-extensions/**/.temp
-extensions/**/.turbo
-extensions/**/dist
-extensions/**/.data
-extensions/**/.cache
-extensions/**/.nuxt
-extensions/**/.nitro
-releases
+# Python local artifacts
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# IDE and agent workspace files
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.cursor/
+.windsurf/
+.trae/
+.agent/
+.agents/
+.kiro/
+.claude/
+.gemini/
+
+# Storage (keep static assets in git)
+storage/*
+!storage/static
+
+# SAP integration local/vendor artifacts
+integrations/sap-abap-adt-mcp/vendor/
+integrations/sap-pyrfc-mcp/.venv/
+integrations/sap-pyrfc-mcp/.build/
+integrations/sap-pyrfc-mcp/.env.local-sdk
+integrations/sap-pyrfc-mcp/lib/nwrfcsdk/
+
+# Extensions: track sources; ignore deps, build artifacts, and runtime data
+extensions/**/node_modules/
+extensions/**/.output/
+extensions/**/build/
+extensions/**/.temp/
+extensions/**/.turbo/
+extensions/**/dist/
+extensions/**/.data/
+extensions/**/data/
+extensions/**/.cache/
+extensions/**/.nuxt/
+extensions/**/.nitro/
+
+# OS files
+.DS_Store
+**/.DS_Store
