@@ -3,7 +3,7 @@ import { DictService } from "@buildingai/dict";
 import { ConsoleController } from "@common/decorators/controller.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { PluginLinksService } from "@modules/decorate/services/plugin-links.service";
-import { Body, Get, Put } from "@nestjs/common";
+import { Body, Get, Logger, Put } from "@nestjs/common";
 import { existsSync, readJsonSync } from "fs-extra";
 import { join } from "path";
 
@@ -39,6 +39,8 @@ const DEFAULT_CONFIG: DecorateMenuConfig = {
 
 @ConsoleController("decorate-page", "布局配置")
 export class DecorateConsoleController {
+    private readonly logger = new Logger(DecorateConsoleController.name);
+
     constructor(
         private readonly pluginLinksService: PluginLinksService,
         private readonly dictService: DictService,
@@ -110,7 +112,7 @@ export class DecorateConsoleController {
 
             return { data: menus };
         } catch (error) {
-            console.error(error);
+            this.logger.error("Failed to build extension decorate menus", error);
             return { data: [] };
         }
     }

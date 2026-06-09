@@ -5,7 +5,7 @@ import { AiUserMcpServer } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { AiMcpToolService } from "@modules/ai/mcp/services/ai-mcp-tool.service";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 
 /**
  * 用户MCP服务关联服务
@@ -14,6 +14,8 @@ import { Injectable } from "@nestjs/common";
  */
 @Injectable()
 export class UserMcpServerWebService extends BaseService<AiUserMcpServer> {
+    private readonly mcpLogger = new Logger(UserMcpServerWebService.name);
+
     constructor(
         @InjectRepository(AiUserMcpServer)
         private readonly userMcpServerRepository: Repository<AiUserMcpServer>,
@@ -102,7 +104,7 @@ export class UserMcpServerWebService extends BaseService<AiUserMcpServer> {
                 mcpServer.id,
             );
             if (deletedToolsCount > 0) {
-                console.log(`🗑️  已删除 ${deletedToolsCount} 个关联的MCP工具记录`);
+                this.mcpLogger.log(`已删除 ${deletedToolsCount} 个关联的MCP工具记录`);
             }
 
             // 删除MCP服务记录

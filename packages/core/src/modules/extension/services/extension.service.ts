@@ -345,8 +345,6 @@ export class ExtensionsService extends BaseService<Extension> {
 
         const extensions = await this.extensionRepository.findBy({ id: In(ids) });
 
-        console.log("extensions", extensions);
-
         if (extensions.length === 0) {
             throw HttpErrorFactory.notFound("Extensions to update not found");
         }

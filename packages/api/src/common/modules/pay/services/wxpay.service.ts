@@ -128,20 +128,17 @@ export class WxPayService {
     }
 
     /**
-     * 处理支付回调
+     * 验证并解密支付回调
      *
-     * 处理微信支付的回调通知
-     * 验证回调签名，解密回调数据，更新订单状态
+     * 处理微信支付的回调通知基础解析，具体订单业务由 PayService 分发处理。
      *
      * 回调处理流程：
      * 1. 验证回调签名
      * 2. 解密回调数据
-     * 3. 更新订单状态
-     * 4. 返回处理结果
      *
      * @param params 支付回调参数
      * @param body 回调请求体
-     * @returns 回调处理结果
+     * @returns 解密后的回调数据
      * @throws 当回调处理失败时抛出异常
      */
     async decryptPayNotify(params: WechatPayNotifyParams, body: Record<string, any>) {
@@ -154,12 +151,10 @@ export class WxPayService {
             if (!result) {
                 throw HttpErrorFactory.internal("验证签名失败,非法请求");
             }
-            const decryptBody = await this.decryptPayNotifyBody(body);
-            console.log(decryptBody);
-
-            // TODO: 支付回调逻辑处理
+            const decryptedBody = await this.decryptPayNotifyBody(body);
 
             this.logger.log("支付回调处理成功");
+            return decryptedBody;
         } catch (error) {
             throw HttpErrorFactory.internal(`支付回调处理失败: ${error.message}`);
         }

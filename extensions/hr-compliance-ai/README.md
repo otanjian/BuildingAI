@@ -1,6 +1,6 @@
 # 人力资源合规自治系统 (`hr-compliance-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-HR-COMPLIANCE-AI.md`, DB: `docs/DB-HR-COMPLIANCE-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-HR-COMPLIANCE-AI.md`, DB: `docs/DB/DB-HR-COMPLIANCE-AI.md`.
 
 ## Entry
 

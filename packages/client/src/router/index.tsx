@@ -70,27 +70,51 @@ export const router = createBrowserRouter([
       },
       {
         path: "/agents/:id/configuration",
-        element: <AgentConfigurationPage />,
+        element: (
+          <AuthGuard>
+            <AgentConfigurationPage />
+          </AuthGuard>
+        ),
       },
       {
         path: "/agents/:id/publish",
-        element: <AgentPublishPage />,
+        element: (
+          <AuthGuard>
+            <AgentPublishPage />
+          </AuthGuard>
+        ),
       },
       {
         path: "/agents/:id/logs",
-        element: <AgentLogsPage />,
+        element: (
+          <AuthGuard>
+            <AgentLogsPage />
+          </AuthGuard>
+        ),
       },
       {
         path: "/agents/:id/monitoring",
-        element: <AgentMonitoringPage />,
+        element: (
+          <AuthGuard>
+            <AgentMonitoringPage />
+          </AuthGuard>
+        ),
       },
       {
         path: "/agents/:id/chat",
-        element: <AgentChatPage />,
+        element: (
+          <AuthGuard>
+            <AgentChatPage />
+          </AuthGuard>
+        ),
       },
       {
         path: "/agents/:id/c/:uuid",
-        element: <AgentChatPage />,
+        element: (
+          <AuthGuard>
+            <AgentChatPage />
+          </AuthGuard>
+        ),
       },
       {
         path: "/agents/:agentId/:accessToken/c/:conversationId",
@@ -101,7 +125,11 @@ export const router = createBrowserRouter([
         element: <PublishChatPage />,
       },
       {
-        element: <DefaultLayout />,
+        element: (
+          <AuthGuard>
+            <DefaultLayout />
+          </AuthGuard>
+        ),
         errorElement: (
           <DefaultLayout>
             <GlobalError />

@@ -1,6 +1,6 @@
 # 渠道库存协同自治系统 (`channel-inv-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-CHANNEL-INV-AI.md`, DB: `docs/DB-CHANNEL-INV-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-CHANNEL-INV-AI.md`, DB: `docs/DB/DB-CHANNEL-INV-AI.md`.
 
 ## Entry
 

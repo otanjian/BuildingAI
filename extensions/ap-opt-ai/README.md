@@ -1,6 +1,6 @@
 # 应付账款优化自治系统 (`ap-opt-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-AP-OPT-AI.md`, DB: `docs/DB-AP-OPT-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-AP-OPT-AI.md`, DB: `docs/DB/DB-AP-OPT-AI.md`.
 
 ## Entry
 

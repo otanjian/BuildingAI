@@ -1,6 +1,6 @@
 # 预算执行监控自治系统 (`budget-control-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-BUDGET-CONTROL-AI.md`, DB: `docs/DB-BUDGET-CONTROL-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-BUDGET-CONTROL-AI.md`, DB: `docs/DB/DB-BUDGET-CONTROL-AI.md`.
 
 ## Entry
 

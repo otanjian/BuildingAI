@@ -42,7 +42,7 @@ All EHCS-owned tables in schema `ehcs_ai` SHALL use the `ehcs-` prefix (e.g. `eh
 
 ### Requirement: Check results entity matches PRD
 
-`ehcs-check_results` SHALL include: `anomaly_id`, `rule_id`, `description`, `risk_level`, `root_cause`, `solution`, `status`, `auto_fixed`, `check_time`, `resolved_at`, `create_time`. Canonical column reference: `docs/DB-EHCS-AI.md`.
+`ehcs-check_results` SHALL include: `anomaly_id`, `rule_id`, `description`, `risk_level`, `root_cause`, `solution`, `status`, `auto_fixed`, `check_time`, `resolved_at`, `create_time`. Canonical column reference: `docs/DB/DB-EHCS-AI.md`.
 
 #### Scenario: Link to rule
 

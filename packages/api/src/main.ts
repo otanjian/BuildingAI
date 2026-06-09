@@ -22,6 +22,29 @@ import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 import { AppModule } from "./modules/app.module";
 
+function resolveCorsOrigin(): string | string[] {
+    const configuredOrigin = process.env.SERVER_CORS_ORIGIN?.trim();
+
+    if (process.env.NODE_ENV === "production") {
+        if (!configuredOrigin || configuredOrigin === "*") {
+            throw new Error(
+                "SERVER_CORS_ORIGIN must be set to explicit origin(s) in production.",
+            );
+        }
+    }
+
+    if (!configuredOrigin) {
+        return process.env.NODE_ENV === "development" ? "http://localhost:4091" : [];
+    }
+
+    return configuredOrigin.includes(",")
+        ? configuredOrigin
+              .split(",")
+              .map((origin) => origin.trim())
+              .filter(Boolean)
+        : configuredOrigin;
+}
+
 /**
  * Bootstrap the application
  */
@@ -69,14 +92,12 @@ async function bootstrap() {
 
     const corsEnabled = process.env.SERVER_CORS_ENABLED === "true";
     if (corsEnabled) {
+        const corsOrigin = resolveCorsOrigin();
         app.enableCors({
-            origin: process.env.SERVER_CORS_ORIGIN || "*",
+            origin: corsOrigin,
             credentials: true,
         });
-        appLogger.log(
-            `CORS enabled; allowed origin: ${process.env.SERVER_CORS_ORIGIN || "*"}`,
-            "Bootstrap",
-        );
+        appLogger.log(`CORS enabled; allowed origin: ${String(corsOrigin)}`, "Bootstrap");
     }
 
     await setAssetsDir(app);

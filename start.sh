@@ -12,6 +12,7 @@ SAP_PYRFC_DIR="${ROOT_DIR}/integrations/sap-pyrfc-mcp"
 SAP_PYRFC_ENV="${SAP_PYRFC_DIR}/.env"
 
 DEV_PORTS=(4090 4091)
+CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
 SAP_PORT="${MCP_PORT:-8100}"
 SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
 ERPNEXT_PORT=8000
@@ -163,18 +164,69 @@ kill_port() {
   fi
 }
 
+# Cursor IDE auto-forwards dev ports and breaks localhost:4091 (ERR_EMPTY_RESPONSE).
+kill_cursor_listeners() {
+  local port="$1"
+  local line pid comm
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    pid="${line%% *}"
+    comm="${line#* }"
+    if [[ "$comm" == Cursor ]]; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done < <(lsof -i ":${port}" -P -n 2>/dev/null | awk 'NR>1 {print $2,$1}' | sort -u)
+}
+
 free_ports() {
   local ports=("$@") port
   local found=0
   for port in "${ports[@]}"; do
+    kill_cursor_listeners "$port"
     if port_in_use "$port"; then
       found=1
       kill_port "$port"
     fi
   done
+  # Clean up legacy client port if we moved away temporarily.
+  if port_in_use 4092; then
+    kill_port 4092
+  fi
   if [[ "$found" == 1 ]]; then
     sleep 0.4
   fi
+}
+
+warn_if_web_empty() {
+  local port="${CLIENT_DEV_PORT:-4091}"
+  local i
+  kill_cursor_listeners "$port"
+  for i in $(seq 1 25); do
+    if curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1 \
+      && curl -sf --noproxy '*' --max-time 2 "http://[::1]:${port}/" >/dev/null 2>&1; then
+      return 0
+    fi
+    if [[ "$i" == 3 || "$i" == 8 ]]; then
+      kill_cursor_listeners "$port"
+    fi
+    sleep 1
+  done
+  echo ""
+  echo "WARNING: http://127.0.0.1:${port}/ returned no response (ERR_EMPTY_RESPONSE in browser)."
+  if curl -sf --noproxy '*' --max-time 2 "http://[::1]:${port}/" >/dev/null 2>&1; then
+    : # ipv6 ok
+  elif lsof -i ":${port}" -P -n 2>/dev/null | grep -qi Cursor; then
+    echo "  Cursor is forwarding port ${port} (often on IPv6 [::1]). In Cursor: Ports → stop ${port}, then:"
+    echo "    ./start.sh -f restart dev"
+  else
+    echo "  Try http://127.0.0.1:${port}/ or disable system HTTP proxy for localhost."
+    echo "  Check .run/dev.log or run: ./start.sh logs"
+  fi
+  if ! curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1 \
+    && curl -sf --noproxy '*' --max-time 2 "http://[::1]:${port}/" >/dev/null 2>&1; then
+    echo "  IPv4 works but IPv6 fails — use http://127.0.0.1:${port}/ in the browser."
+  fi
+  return 1
 }
 
 busy_ports_list() {
@@ -210,9 +262,9 @@ ensure_ports_available() {
   fi
 
   if [[ ! -t 0 ]]; then
-    echo "Port(s) in use (${busy}); killing (non-interactive)."
-    free_ports "${ports[@]}"
-    return 0
+    echo "Error: port(s) in use (${busy})."
+    echo "  Run './start.sh -f restart' to force-free ports, or stop the process manually."
+    exit 1
   fi
 
   echo "Warning: port(s) in use: ${busy}"
@@ -354,7 +406,6 @@ start_sap_mcp() {
 
 stop_sap_mcp() {
   stop_pid_file "sap-mcp"
-  kill_port "$SAP_PORT"
 }
 
 start_sap_pyrfc_mcp() {
@@ -403,7 +454,6 @@ start_sap_pyrfc_mcp() {
 
 stop_sap_pyrfc_mcp() {
   stop_pid_file "sap-pyrfc-mcp"
-  kill_port "$SAP_PYRFC_PORT"
 }
 
 check_deps() {
@@ -417,7 +467,7 @@ print_info() {
   cat <<EOF
 
 BuildingAI dev server
-  Web:  http://localhost:4091/
+  Web:  http://localhost:${CLIENT_DEV_PORT}/
   API:  http://localhost:4090/
   Install wizard (first run): http://localhost:4090/install
 
@@ -438,28 +488,31 @@ start_dev() {
   check_node
   check_env_file
   ensure_ports_available "$force" "${DEV_PORTS[@]}"
+  kill_cursor_listeners "${CLIENT_DEV_PORT:-4091}"
   check_deps
 
   if [[ "$detach" == 1 ]]; then
     stop_pid_file "dev"
     echo "Starting pnpm dev in background..."
     nohup env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
+      CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
       NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" pnpm dev >>"${RUN_DIR}/dev.log" 2>&1 &
     echo $! >"${RUN_DIR}/dev.pid"
     print_info
     echo "Dev log: .run/dev.log"
+    warn_if_web_empty || true
     return 0
   fi
 
   print_info
   clear_broken_proxy
   exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
+    CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
     NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" pnpm dev
 }
 
 stop_dev() {
   stop_pid_file "dev"
-  free_ports "${DEV_PORTS[@]}"
 }
 
 cmd_status() {

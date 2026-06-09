@@ -109,7 +109,7 @@ export class ExtensionMarketService {
             const response = await this.httpClient.get("/getPlatform");
             return response.data;
         } catch (error) {
-            console.error(error);
+            this.logger.error("Failed to get platform info", error);
             if (platformSecret) {
                 this.platformSecret = originalSecret;
             }

@@ -1,6 +1,6 @@
 /**
  * Platform agent template for APO (ERP data health autonomous system).
- * Aligned with docs/PRD-ehcs-ai.md V1.1.
+ * Aligned with docs/PRD/PRD-EHCS-AI.md V1.1.
  */
 
 import {

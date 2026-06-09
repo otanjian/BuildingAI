@@ -5,7 +5,7 @@ import { Permission, PermissionType } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { PermissionOptions } from "@common/decorators/permissions.decorator";
-import { Injectable, OnModuleInit, RequestMethod } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, RequestMethod } from "@nestjs/common";
 import { DiscoveryService, MetadataScanner, Reflector } from "@nestjs/core";
 import { InstanceWrapper } from "@nestjs/core/injector/instance-wrapper";
 
@@ -80,6 +80,8 @@ export interface ApiGroupItem {
  */
 @Injectable()
 export class PermissionService extends BaseService<Permission> implements OnModuleInit {
+    private readonly permissionLogger = new Logger(PermissionService.name);
+
     private apiRouterList: ApiRouterItem[] = [];
     private apiRouterGroupList: ApiRouterGroupItem[] = [];
 
@@ -154,7 +156,7 @@ export class PermissionService extends BaseService<Permission> implements OnModu
             });
             return permission as Permission | null;
         } catch (error) {
-            console.error(error);
+            this.permissionLogger.error("Failed to query permission by code", error);
             return null;
         }
     }

@@ -1,6 +1,6 @@
 # 生产成本偏差自治系统 (`mfg-var-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-MFG-VAR-AI.md`, DB: `docs/DB-MFG-VAR-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-MFG-VAR-AI.md`, DB: `docs/DB/DB-MFG-VAR-AI.md`.
 
 ## Entry
 

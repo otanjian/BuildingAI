@@ -1,6 +1,6 @@
 # 销售预测校准自治系统 (`forecast-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-FORECAST-AI.md`, DB: `docs/DB-FORECAST-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-FORECAST-AI.md`, DB: `docs/DB/DB-FORECAST-AI.md`.
 
 ## Entry
 

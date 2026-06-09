@@ -165,7 +165,6 @@ export const transformTongyiRequestBody = (args: Record<string, any>): Record<st
         return { ...message, content };
     });
 
-    console.log("messages", JSON.stringify(messages, null, 2));
     return { ...args, messages };
 };
 

@@ -113,7 +113,6 @@ export class RechargeOrderService extends BaseService<RechargeOrder> {
         const totalIncome = Number(
             subtract(bignumber(totalAmount), bignumber(totalRefundAmount)).toString(),
         );
-        console.log(totalAmount, totalRefundAmount, totalIncome);
         const statistics = {
             totalOrder,
             totalAmount,

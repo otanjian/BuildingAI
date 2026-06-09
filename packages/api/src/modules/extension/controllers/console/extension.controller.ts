@@ -29,7 +29,7 @@ import {
 } from "@modules/extension/dto/extension-manager.dto";
 import { ExtensionMarketService } from "@modules/extension/services/extension-market.service";
 import { ExtensionOperationService } from "@modules/extension/services/extension-operation.service";
-import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Delete, Get, Logger, Param, Patch, Post, Query } from "@nestjs/common";
 import * as fs from "fs-extra";
 import * as path from "path";
 
@@ -38,6 +38,8 @@ import * as path from "path";
  */
 @ConsoleController("extensions", "拓展管理")
 export class ExtensionConsoleController extends BaseController {
+    private readonly extensionLogger = new Logger(ExtensionConsoleController.name);
+
     constructor(
         private readonly extensionsService: ExtensionsService,
         private readonly extensionMarketService: ExtensionMarketService,
@@ -603,7 +605,7 @@ export class ExtensionConsoleController extends BaseController {
                 this.extensionOperationService.updateAuthorName(identifier, authorName),
             ]);
         } catch (error) {
-            console.error(`Failed to sync author name for ${identifier}:`, error);
+            this.extensionLogger.error(`Failed to sync author name for ${identifier}`, error);
         }
     }
 
@@ -774,7 +776,7 @@ export class ExtensionConsoleController extends BaseController {
                 consoleMenu = routerOptionsModule.consoleMenu || null;
             } catch (error) {
                 // If require fails, fall back to parsing source file
-                console.warn(`Failed to load router.options.js: ${error}`);
+                this.extensionLogger.warn(`Failed to load router.options.js: ${error}`);
             }
         }
 
@@ -801,11 +803,11 @@ export class ExtensionConsoleController extends BaseController {
                     try {
                         consoleMenu = new Function(`return ${arrayContent}`)();
                     } catch (parseError) {
-                        console.warn("Failed to parse consoleMenu:", parseError);
+                        this.extensionLogger.warn(`Failed to parse consoleMenu: ${parseError}`);
                     }
                 }
             } catch (error) {
-                console.warn(`Failed to read router.options.ts: ${error}`);
+                this.extensionLogger.warn(`Failed to read router.options.ts: ${error}`);
             }
         }
 

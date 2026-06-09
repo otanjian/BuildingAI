@@ -1,6 +1,6 @@
 # 固定资产全生命周期自治系统 (`asset-life-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-ASSET-LIFE-AI.md`, DB: `docs/DB-ASSET-LIFE-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-ASSET-LIFE-AI.md`, DB: `docs/DB/DB-ASSET-LIFE-AI.md`.
 
 ## Entry
 

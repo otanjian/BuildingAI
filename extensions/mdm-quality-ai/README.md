@@ -1,6 +1,6 @@
 # 主数据质量自治系统 (`mdm-quality-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-MDM-QUALITY-AI.md`, DB: `docs/DB-MDM-QUALITY-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-MDM-QUALITY-AI.md`, DB: `docs/DB/DB-MDM-QUALITY-AI.md`.
 
 ## Entry
 

@@ -7,11 +7,13 @@ import { WechatPayNotifyParams } from "@buildingai/wechat-sdk/interfaces/pay";
 import { WebController } from "@common/decorators/controller.decorator";
 import { PrepayDto } from "@modules/pay/dto/prepay.dto";
 import { PayService } from "@modules/pay/services/pay.service";
-import { Body, Get, Headers, Post, Query, Res } from "@nestjs/common";
+import { Body, Get, Headers, Logger, Post, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 
 @WebController("pay")
 export class PayWebController extends BaseController {
+    private readonly payLogger = new Logger(PayWebController.name);
+
     constructor(private readonly payService: PayService) {
         super();
     }
@@ -50,10 +52,13 @@ export class PayWebController extends BaseController {
             serial: headers["wechatpay-serial"],
             signature: headers["wechatpay-signature"],
         };
-        console.log("回调开始");
-        await this.payService.notifyWxPay(playload, body);
-        //商户需告知微信支付接收回调成功，HTTP应答状态码需返回200或204，无需返回应答报文
-        res.status(200).send("");
+        try {
+            await this.payService.notifyWxPay(playload, body);
+            // 商户需告知微信支付接收回调成功，HTTP 应答状态码需返回 200 或 204，无需返回应答报文
+            return res.status(200).send("");
+        } catch {
+            return res.status(500).send({ code: "FAIL", message: "支付回调处理失败" });
+        }
     }
 
     /**
@@ -74,21 +79,17 @@ export class PayWebController extends BaseController {
     @Get("returnAlipay")
     async returnAlipay(@Query() query: any, @Res() res: Response) {
         try {
-            // validate signature
-            // const alipayService = await this.payfactoryService.getPayService(
-            //     PayConfigPayType.ALIPAY,
-            // );
-            // const isValid = alipayService.checkNotifySignV2(query);
-            // if (!isValid) {
-            //     return res.redirect("/payment/fail");
-            // }
+            const isValid = await this.payService.checkAlipayReturnSign(query);
+            if (!isValid) {
+                return res.redirect("/payment/fail");
+            }
 
             const orderNo = query.out_trade_no;
             return res.redirect(
                 `/payment/success?orderNo=${orderNo}&payType=${PayConfigPayType.ALIPAY}`,
             );
         } catch (error) {
-            console.error("Alipay sync callback processing failed:", error);
+            this.payLogger.error("Alipay sync callback processing failed", error);
             return res.redirect("/payment/fail");
         }
     }

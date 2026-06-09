@@ -1,6 +1,9 @@
+import { Logger } from "@nestjs/common";
 import type { Request } from "express";
 
 class RequestUtil {
+    private static readonly logger = new Logger(RequestUtil.name);
+
     /**
      * Extract request domain from request
      *
@@ -73,7 +76,7 @@ class RequestUtil {
 
             // Handle localhost/127.0.0.1 addresses
             if (host.includes("127.0.0.1") || host.includes("localhost")) {
-                console.warn(
+                this.logger.warn(
                     `[FileUpload] Detected internal address (${host}), attempting to resolve from referer or environment variable`,
                 );
 
@@ -91,12 +94,12 @@ class RequestUtil {
                         ) {
                             host = refererHost;
                             protocol = refererUrl.protocol.replace(":", "") as "http" | "https";
-                            console.log(
+                            this.logger.log(
                                 `[FileUpload] Resolved domain from referer: ${protocol}://${host}`,
                             );
                         }
                     } catch (_error) {
-                        console.warn(`[FileUpload] Failed to parse referer: ${referer}`);
+                        this.logger.warn(`[FileUpload] Failed to parse referer: ${referer}`);
                     }
                 }
 
@@ -110,16 +113,16 @@ class RequestUtil {
                             );
                             host = domainUrl.host;
                             protocol = domainUrl.protocol.replace(":", "") as "http" | "https";
-                            console.log(
+                            this.logger.log(
                                 `[FileUpload] Using APP_DOMAIN from environment: ${protocol}://${host}`,
                             );
                         } catch {
-                            console.error(
+                            this.logger.error(
                                 `[FileUpload] Invalid APP_DOMAIN format: ${appDomain}. Using localhost as fallback.`,
                             );
                         }
                     } else {
-                        console.error(
+                        this.logger.error(
                             `[FileUpload] No APP_DOMAIN configured. File URLs will use localhost and may be inaccessible externally.`,
                         );
                     }
@@ -130,7 +133,7 @@ class RequestUtil {
 
             return result;
         } catch (error) {
-            console.error(error);
+            this.logger.error(error);
             return undefined;
         }
     }
@@ -149,9 +152,8 @@ class RequestUtil {
                 ? host.replace(/:443$/, "") // Remove https :443
                 : host.replace(/:80$/, ""); // Remove http :80
 
-        // Debug log
         if (normalizedHost !== host) {
-            console.log(`[FileUpload] Port normalized: ${host} -> ${normalizedHost}`);
+            this.logger.debug(`[FileUpload] Port normalized: ${host} -> ${normalizedHost}`);
         }
 
         return normalizedHost;

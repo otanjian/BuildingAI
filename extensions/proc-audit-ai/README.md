@@ -1,6 +1,6 @@
 # 采购合规审查自治系统 (`proc-audit-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-PROC-AUDIT-AI.md`, DB: `docs/DB-PROC-AUDIT-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-PROC-AUDIT-AI.md`, DB: `docs/DB/DB-PROC-AUDIT-AI.md`.
 
 ## Entry
 

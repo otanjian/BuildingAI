@@ -11,7 +11,7 @@ import {
     UpdateWebAiMcpServerDto,
 } from "@modules/ai/mcp/dto/web/ai-mcp-server.dto";
 import { AiMcpToolService } from "@modules/ai/mcp/services/ai-mcp-tool.service";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 
 /**
  * 前台MCP服务配置服务
@@ -20,6 +20,8 @@ import { Injectable } from "@nestjs/common";
  */
 @Injectable()
 export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
+    private readonly mcpLogger = new Logger(WebAiMcpServerWebService.name);
+
     constructor(
         @InjectRepository(AiMcpServer)
         private readonly aiMcpServerRepository: Repository<AiMcpServer>,
@@ -267,23 +269,32 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
             // 更新工具列表
             toolsInfo = await this.aiMcpToolService.updateToolsForMcpServer(id, tools);
 
-            console.log(`✅ MCP服务 ${mcpServer.name} 连接成功，更新了 ${toolsInfo.total} 个工具`);
+            this.mcpLogger.log(`MCP服务 ${mcpServer.name} 连接成功，更新了 ${toolsInfo.total} 个工具`);
         } catch (error) {
             connectable = false;
-            errorMessage = error.message || "连接失败";
-            console.error(`❌ MCP服务 ${mcpServer.name} 连接失败:`, error);
+            errorMessage = error instanceof Error ? error.message : "连接失败";
+            this.mcpLogger.error(
+                `MCP服务 ${mcpServer.name} 连接失败: ${errorMessage}`,
+                error instanceof Error ? error.stack : undefined,
+            );
 
             // 连接失败时清空工具列表
             const deletedCount = await this.aiMcpToolService.deleteToolsForMcpServer(id);
             if (deletedCount > 0) {
-                console.log(`🗑️  已清空 ${deletedCount} 个失效的工具`);
+                this.mcpLogger.log(`已清空 ${deletedCount} 个失效的工具`);
             }
         } finally {
             if (mcpClient) {
                 try {
                     await mcpClient.close();
                 } catch (disconnectError) {
-                    console.warn("断开MCP连接时出现警告:", disconnectError);
+                    this.mcpLogger.warn(
+                        `断开MCP连接时出现警告: ${
+                            disconnectError instanceof Error
+                                ? disconnectError.message
+                                : String(disconnectError)
+                        }`,
+                    );
                 }
             }
         }

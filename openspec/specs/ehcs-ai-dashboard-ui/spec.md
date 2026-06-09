@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Dashboard and global EHCS layout: metrics cockpit, charts, tables, top navigation, and agent dock entry. Aligned with `docs/PRD-EHCS-AI.md` V1.2 dashboard layout (not the legacy 70/30 split in `docs/UI-EHCS-AI.html`).
+Dashboard and global EHCS layout: metrics cockpit, charts, tables, top navigation, and agent dock entry. Aligned with `docs/PRD/PRD-EHCS-AI.md` V1.2 dashboard layout (not the legacy 70/30 split in `docs/UI-EHCS-AI.html`).
 
 ## Requirements
 

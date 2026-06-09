@@ -8,20 +8,21 @@ import { defineConfig, type ProxyOptions } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 const apiTarget = process.env.VITE_DEVELOP_APP_BASE_URL || "http://localhost:4090";
-const constantsDist = path.resolve(__dirname, "../@buildingai/constants/dist");
+// Dev: resolve TS sources so Vite can use ESM named exports (dist/*.js is CJS).
+const constantsSrc = path.resolve(__dirname, "../@buildingai/constants/src");
 
 const constantsAliases = [
   {
     find: /^@buildingai\/constants\/shared\/(.+)$/,
-    replacement: `${path.join(constantsDist, "shared")}/$1.js`,
+    replacement: `${path.join(constantsSrc, "shared")}/$1.ts`,
   },
   {
     find: "@buildingai/constants/web",
-    replacement: path.join(constantsDist, "web/index.js"),
+    replacement: path.join(constantsSrc, "web/index.ts"),
   },
   {
     find: "@buildingai/constants/shared",
-    replacement: path.join(constantsDist, "shared/index.js"),
+    replacement: path.join(constantsSrc, "shared/index.ts"),
   },
 ];
 
@@ -75,9 +76,10 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
   server: {
-    host: host || "0.0.0.0",
+    // Use "localhost" (not 127.0.0.1) so Chrome [::1] and 127.0.0.1 both hit Vite, not Cursor's ::1 forward.
+    host: host || "localhost",
     open: true,
-    port: 4091,
+    port: Number(process.env.CLIENT_DEV_PORT || process.env.VITE_DEV_SERVER_PORT) || 4091,
     strictPort: true,
     proxy: {
       // Production index.html (cached) preloads /assets/*; serve built chunks from API in dev.

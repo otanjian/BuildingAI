@@ -1,6 +1,6 @@
 # 应收账款风控自治系统 (`ar-risk-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-AR-RISK-AI.md`, DB: `docs/DB-AR-RISK-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-AR-RISK-AI.md`, DB: `docs/DB/DB-AR-RISK-AI.md`.
 
 ## Entry
 

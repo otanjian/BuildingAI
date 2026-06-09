@@ -560,8 +560,6 @@ export class AuthService extends BaseService<User> {
 
             const result = await this.userTokenService.revokeToken(token);
 
-            console.log("result", result);
-
             if (result) {
                 // 撤销成功后清理该用户的权限相关缓存（忽略清理失败，不影响主流程）
                 if (userId) {

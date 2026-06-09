@@ -1,7 +1,7 @@
 ## Context
 
 - **参考实现**：[`extensions/ehcs-ai`](../../../extensions/ehcs-ai) — 实体 6 表、`EhcsPlatformAgentSeeder`、`EhcsCheckRulesCatalogSeeder`（35 条）、内置 Streamable HTTP MCP、`ehcs-platform-agent.config.ts`。
-- **规格来源**：[`docs/enterprise-ai-apps-registry.json`](../../../docs/enterprise-ai-apps-registry.json) + `docs/PRD-{SLUG}.md` / `docs/DB-{SLUG}.md`（20 套）。
+- **规格来源**：[`docs/enterprise-ai-apps-registry.json`](../../../docs/enterprise-ai-apps-registry.json) + `docs/PRD/PRD-{SLUG}.md` / `docs/DB/DB-{SLUG}.md`（20 套）。
 - **约束**：代码英文；表名 `{prefix}check_*`；MCP 工具 `{mcp_prefix}_start_full_check` 等；不修改 EHCS 扩展行为。
 
 ## Goals / Non-Goals

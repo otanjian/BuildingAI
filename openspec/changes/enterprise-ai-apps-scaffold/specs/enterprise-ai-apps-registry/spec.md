@@ -25,5 +25,5 @@ Each application's PRD and DB documents SHALL use matching `SLUG` filenames and 
 
 #### Scenario: PRD and DB alignment
 
-- **WHEN** reviewing `docs/PRD-{SLUG}.md` and `docs/DB-{SLUG}.md` for an app
+- **WHEN** reviewing `docs/PRD/PRD-{SLUG}.md` and `docs/DB/DB-{SLUG}.md` for an app
 - **THEN** schema name and MCP tool prefix match the registry entry for that `appId`

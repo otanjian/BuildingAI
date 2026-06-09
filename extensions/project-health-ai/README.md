@@ -1,6 +1,6 @@
 # 项目交付健康自治系统 (`project-health-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-PROJECT-HEALTH-AI.md`, DB: `docs/DB-PROJECT-HEALTH-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-PROJECT-HEALTH-AI.md`, DB: `docs/DB/DB-PROJECT-HEALTH-AI.md`.
 
 ## Entry
 

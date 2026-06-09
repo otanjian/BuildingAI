@@ -1,6 +1,6 @@
 # 合同履约自治系统 (`contract-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-CONTRACT-AI.md`, DB: `docs/DB-CONTRACT-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-CONTRACT-AI.md`, DB: `docs/DB/DB-CONTRACT-AI.md`.
 
 ## Entry
 

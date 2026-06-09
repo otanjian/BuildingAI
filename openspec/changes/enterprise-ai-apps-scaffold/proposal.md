@@ -5,7 +5,7 @@
 ## Why now
 
 - EHCS-AI V1.1 已在 `extensions/ehcs-ai` 验证脚手架、Agent 绑定、规则目录 Seeder（35 条）、MCP 工具编排。
-- 20 套 PRD/DB（`docs/PRD-*.md`、`docs/DB-*.md`）已对齐表前缀、健康分、MCP 工具名。
+- 20 套 PRD/DB（`docs/PRD/PRD-*.md`、`docs/DB/DB-*.md`）已对齐表前缀、健康分、MCP 工具名。
 - 批量复制 + 参数化种子可避免 20 次手工搭扩展，并保证智能体与规则库开箱可用。
 
 ## What Changes
@@ -42,7 +42,7 @@
 
 - **新增**：`extensions/{appId}/` × 20（体积大，建议 git 分批提交或生成脚本 + CI 校验）。
 - **脚本**：`scripts/enterprise-ai-apps/`（scaffold、规则生成、校验 ≥30 条）。
-- **文档**：同步 `docs/PRD-*.md` / `docs/DB-*.md` 中种子条数为 ≥30；各扩展 README。
+- **文档**：同步 `docs/PRD/PRD-*.md` / `docs/DB/DB-*.md` 中种子条数为 ≥30；各扩展 README。
 - **数据库**：20 个 PostgreSQL schema（`inv_opt_ai` 等），与 `ehcs_ai` 隔离。
 - **平台**：20 个 `ai_agents` 记录 + 20 组 MCP 工具元数据（更新智能体时同步）。
 - **依赖**：`pnpm extension:sync`、至少一个 LLM 模型与一个 ERP MCP（与 EHCS 相同）。

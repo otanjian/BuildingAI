@@ -69,6 +69,13 @@ class NestContainerClass {
     /** Service resolution stack for detecting circular dependencies */
     private readonly resolutionStack: string[] = [];
 
+    private debug(message: string): void {
+        if (this.options.debug) {
+            // eslint-disable-next-line no-console
+            console.debug(`[NestContainer] ${message}`);
+        }
+    }
+
     /**
      * Set global NestJS application container
      *
@@ -89,9 +96,7 @@ class NestContainerClass {
             this.options = { ...this.options, ...options };
         }
 
-        if (this.options.debug) {
-            console.log("[NestContainer] Container initialized successfully");
-        }
+        this.debug("Container initialized successfully");
     }
 
     /**
@@ -155,9 +160,7 @@ class NestContainerClass {
         this.resolutionStack.push(serviceName);
 
         try {
-            if (this.options.debug) {
-                console.log(`[NestContainer] Resolving service: ${serviceName}`);
-            }
+            this.debug(`Resolving service: ${serviceName}`);
 
             const instance = strict
                 ? container.get(serviceClass)
@@ -276,9 +279,7 @@ class NestContainerClass {
         this.container = null;
         this.resolutionStack.length = 0;
 
-        if (this.options.debug) {
-            console.log("[NestContainer] Container reset");
-        }
+        this.debug("Container reset");
     }
 
     /**

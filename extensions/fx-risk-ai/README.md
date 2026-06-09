@@ -1,6 +1,6 @@
 # 外汇风险自治系统 (`fx-risk-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-FX-RISK-AI.md`, DB: `docs/DB-FX-RISK-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-FX-RISK-AI.md`, DB: `docs/DB/DB-FX-RISK-AI.md`.
 
 ## Entry
 

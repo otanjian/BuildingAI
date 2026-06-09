@@ -7,7 +7,7 @@ import { File } from "@buildingai/db/entities";
 import { StorageConfig } from "@buildingai/db/entities";
 import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type { Request } from "express";
 import * as mime from "mime-types";
 import * as path from "path";
@@ -65,6 +65,8 @@ export interface UploadFileResult {
  */
 @Injectable()
 export class FileUploadService extends BaseService<File> {
+    private readonly fileUploadLogger = new Logger(FileUploadService.name);
+
     @InjectRepository(StorageConfig)
     private readonly storageConfigRepo: Repository<StorageConfig>;
 
@@ -151,7 +153,7 @@ export class FileUploadService extends BaseService<File> {
                 extension: savedFile.extension,
             };
         } catch (error) {
-            console.error(error);
+            this.fileUploadLogger.error("Failed to save uploaded file record", error);
             // Clean up on error
             await this.fileStorageService.deleteFile(storagePath.fullPath, effectiveOptions);
             throw HttpErrorFactory.internal(

@@ -1,6 +1,6 @@
 # 售后服务 SLA 自治系统 (`service-sla-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-SERVICE-SLA-AI.md`, DB: `docs/DB-SERVICE-SLA-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-SERVICE-SLA-AI.md`, DB: `docs/DB/DB-SERVICE-SLA-AI.md`.
 
 ## Entry
 

@@ -1,6 +1,6 @@
 # 能源与碳排放自治系统 (`energy-carbon-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-ENERGY-CARBON-AI.md`, DB: `docs/DB-ENERGY-CARBON-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-ENERGY-CARBON-AI.md`, DB: `docs/DB/DB-ENERGY-CARBON-AI.md`.
 
 ## Entry
 

@@ -1,6 +1,6 @@
 ## 11. Documentation sync (V1.1.1)
 
-- [x] 11.1 Update `docs/PRD-EHCS-AI.md` (agent dock, rule-table batch, settings, layout)
+- [x] 11.1 Update `docs/PRD/PRD-EHCS-AI.md` (agent dock, rule-table batch, settings, layout)
 - [x] 11.2 Update `openspec/specs/ehcs-ai-{dashboard-ui,platform-chat,settings,extension-scaffold}.md`
 - [x] 11.3 Annotate `docs/UI-EHCS-AI.html` prototype vs implementation
 - [x] 11.4 Add implementation sync note to `openspec/changes/archive/2026-05-24-ehcs-ai-v1/design.md`

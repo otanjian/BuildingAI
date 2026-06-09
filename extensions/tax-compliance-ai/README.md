@@ -1,6 +1,6 @@
 # 税务合规自治系统 (`tax-compliance-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-TAX-COMPLIANCE-AI.md`, DB: `docs/DB-TAX-COMPLIANCE-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-TAX-COMPLIANCE-AI.md`, DB: `docs/DB/DB-TAX-COMPLIANCE-AI.md`.
 
 ## Entry
 

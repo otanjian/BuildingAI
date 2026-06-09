@@ -77,13 +77,13 @@ pnpm --filter ehcs-ai build:publish
 
 ## Architecture notes
 
-- Business data in schema `ehcs_ai` (rules, anomalies, check runs); table reference: `docs/DB-EHCS-AI.md`
+- Business data in schema `ehcs_ai` (rules, anomalies, check runs); table reference: `docs/DB/DB-EHCS-AI.md`
 - AI checks stream via platform `POST /api/ai-agents/:agentId/chat/stream`
 - **Full check:** user sends「开始检查」in the right agent dock → `GET /rules` (enabled) → `POST /check-runs` → per-rule agent stream → `ingest`
 - One `check_run` per batch; **one conversation per rule** during batch
 - UI: top nav + full-width dashboard; **🤖 FAB** opens right embedded agent panel (not floating iframe)
 - Opens from `/apps/ehcs-ai` (iframe → `/extension/ehcs-ai`); platform shell chat is disabled on ehcs routes
-- Product spec: `docs/PRD-EHCS-AI.md` (V1.1.1); UI prototype `docs/UI-EHCS-AI.html` is reference-only
+- Product spec: `docs/PRD/PRD-EHCS-AI.md` (V1.1.1); UI prototype `docs/UI-EHCS-AI.html` is reference-only
 
 ## Agent profile
 

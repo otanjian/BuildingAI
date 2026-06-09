@@ -26,6 +26,27 @@ import type { StringValue } from "ms";
 
 import { AuthWebController } from "./controller/web/auth.controller";
 
+const DEVELOPMENT_JWT_SECRET = "BuildingAI";
+const INSECURE_JWT_SECRETS = new Set(["buildingai", "BuildingAI", "change-me", "changeme"]);
+
+function resolveJwtSecret(configService: ConfigService): string {
+    const jwtSecret = configService.get<string>("JWT_SECRET")?.trim();
+
+    if (process.env.NODE_ENV === "production") {
+        if (
+            !jwtSecret ||
+            jwtSecret.length < 32 ||
+            INSECURE_JWT_SECRETS.has(jwtSecret)
+        ) {
+            throw new Error(
+                "JWT_SECRET must be set to a strong random value with at least 32 characters in production.",
+            );
+        }
+    }
+
+    return jwtSecret || DEVELOPMENT_JWT_SECRET;
+}
+
 /**
  * 认证模块
  *
@@ -50,10 +71,11 @@ import { AuthWebController } from "./controller/web/auth.controller";
         JwtModule.registerAsync({
             imports: [ConfigModule],
             inject: [ConfigService],
-            useFactory: () => ({
-                secret: process.env.JWT_SECRET || "BuildingAI",
+            useFactory: (configService: ConfigService) => ({
+                secret: resolveJwtSecret(configService),
                 signOptions: {
-                    expiresIn: (process.env.JWT_EXPIRES_IN as StringValue) || "24h",
+                    expiresIn:
+                        (configService.get<string>("JWT_EXPIRES_IN") as StringValue) || "24h",
                 },
             }),
         }),

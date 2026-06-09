@@ -1,6 +1,6 @@
 # 供应链 OTIF 自治系统 (`otif-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-OTIF-AI.md`, DB: `docs/DB-OTIF-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-OTIF-AI.md`, DB: `docs/DB/DB-OTIF-AI.md`.
 
 ## Entry
 

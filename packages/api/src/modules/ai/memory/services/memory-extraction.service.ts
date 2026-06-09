@@ -39,8 +39,6 @@ export class MemoryExtractionService {
                 temperature: 0,
             });
 
-            console.log("memory extraction output------------------", output);
-
             const memories = (output as ExtractedMemoryOutput | undefined)?.memories ?? [];
             if (memories.length > 0) {
                 this.logger.log(`Extracted ${memories.length} memories from conversation`);

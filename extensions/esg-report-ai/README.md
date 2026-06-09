@@ -1,6 +1,6 @@
 # ESG 合规披露自治系统 (`esg-report-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-ESG-REPORT-AI.md`, DB: `docs/DB-ESG-REPORT-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-ESG-REPORT-AI.md`, DB: `docs/DB/DB-ESG-REPORT-AI.md`.
 
 ## Entry
 

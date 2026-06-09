@@ -24,6 +24,8 @@ import { PrepayDto } from "@modules/pay/dto/prepay.dto";
 import { Injectable } from "@nestjs/common";
 import { Repository } from "typeorm";
 
+type PayNotifyBusinessType = "recharge" | "membership";
+
 @Injectable()
 export class PayService extends BaseService<Payconfig> {
     constructor(
@@ -43,6 +45,25 @@ export class PayService extends BaseService<Payconfig> {
         private readonly userRepository: Repository<User>,
     ) {
         super(payconfigRepository);
+    }
+
+    private async handlePaidNotify(
+        businessType: unknown,
+        analysisParams: WechatPayNotifyAnalysisParams,
+    ) {
+        const handlers: Record<
+            PayNotifyBusinessType,
+            (params: WechatPayNotifyAnalysisParams) => Promise<void>
+        > = {
+            recharge: (params) => this.recharge(params),
+            membership: (params) => this.membership(params),
+        };
+
+        if (businessType !== "recharge" && businessType !== "membership") {
+            throw new Error(`Unsupported payment business type: ${String(businessType)}`);
+        }
+
+        await handlers[businessType](analysisParams);
     }
 
     /**
@@ -153,7 +174,6 @@ export class PayService extends BaseService<Payconfig> {
                 throw new Error("验证签名失败");
             }
             const decryptBody = await this.wxpayService.decryptPayNotifyBody(body);
-            const method = decryptBody.attach;
             const analysisParams: WechatPayNotifyAnalysisParams = {
                 outTradeNo: decryptBody.out_trade_no,
                 transactionId: decryptBody.transaction_id,
@@ -161,15 +181,12 @@ export class PayService extends BaseService<Payconfig> {
                 payer: decryptBody.payer,
                 amount: decryptBody.amount,
             };
-            // 检查方法是否存在
-            if ("function" === typeof this[method]) {
-                await this[method](analysisParams); // 动态调用
-            } else {
-                throw new Error(`方法 ${method} 未定义`);
-            }
+
+            await this.handlePaidNotify(decryptBody.attach, analysisParams);
         } catch (error) {
-            this.logger.error(`微信支付回调处理失败: ${error.message}`);
-            console.log(`微信支付回调处理失败: ${error.message}`);
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`微信支付回调处理失败: ${message}`);
+            throw error;
         }
     }
 
@@ -197,8 +214,8 @@ export class PayService extends BaseService<Payconfig> {
             }
 
             // Get the business type (recharge or membership) from the passback_params field
-            const method: "recharge" | "membership" = body.passback_params || body.attach;
-            if (!method) {
+            const businessType = body.passback_params || body.attach;
+            if (!businessType) {
                 throw new Error("Business type parameter is missing");
             }
 
@@ -209,7 +226,7 @@ export class PayService extends BaseService<Payconfig> {
                 // The trade_no is similar to transaction_id
                 transactionId: body.trade_no,
 
-                attach: method,
+                attach: businessType,
 
                 // 支付宝返回的是元，需要转换为分
                 // eg: "100.00" yuan → 10000 fen
@@ -222,17 +239,17 @@ export class PayService extends BaseService<Payconfig> {
                 },
             };
 
-            // method = "recharge", Call this.recharge()
-            // method = "membership", Call this.membership()
-            if ("function" === typeof this[method]) {
-                await this[method](analysisParams);
-            } else {
-                throw new Error(`The ${method} method is undefined`);
-            }
+            await this.handlePaidNotify(businessType, analysisParams);
         } catch (error) {
-            this.logger.error(`Alipay payment callback processing failed: ${error.message}`);
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Alipay payment callback processing failed: ${message}`);
             throw error;
         }
+    }
+
+    async checkAlipayReturnSign(query: Record<string, any>): Promise<boolean> {
+        const alipayService = await this.payfactoryService.getPayService(PayConfigPayType.ALIPAY);
+        return alipayService.checkNotifySignV2(query);
     }
 
     /**

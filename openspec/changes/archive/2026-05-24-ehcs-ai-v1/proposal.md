@@ -1,6 +1,6 @@
 ## Why
 
-ERP 数据健康自治系统（EHCS-AI）需要在 BuildingAI 上交付 V1.1：驾驶舱、规则维护、异常明细、一键 AI 检查与单条根因分析。产品规格见 `docs/PRD-ehcs-ai.md`，交互原型见 `docs/UI-EHCS-AI.html`。当前仓库无独立 EHCS 扩展，且实现不得复用 `extensions/erp-healthy` 的 postMessage / Coordinator 模式。
+ERP 数据健康自治系统（EHCS-AI）需要在 BuildingAI 上交付 V1.1：驾驶舱、规则维护、异常明细、一键 AI 检查与单条根因分析。产品规格见 `docs/PRD/PRD-EHCS-AI.md`，交互原型见 `docs/UI-EHCS-AI.html`。当前仓库无独立 EHCS 扩展，且实现不得复用 `extensions/erp-healthy` 的 postMessage / Coordinator 模式。
 
 ## Why now
 
@@ -47,5 +47,5 @@ PRD 与 UI 原型已就绪；平台已具备扩展机制、PostgreSQL 隔离 sch
 - **新增**：`extensions/ehcs-ai/`（API + web + migrations）。
 - **平台只读依赖**：`POST /api/ai-chat`（SSE）、模型/MCP 列表类 Web API（用于设置页）。
 - **数据库**：新 schema `ehcs_ai`。
-- **文档**：`docs/PRD-ehcs-ai.md`、`docs/UI-EHCS-AI.html` 为需求与 UI 参考。
+- **文档**：`docs/PRD/PRD-EHCS-AI.md`、`docs/UI-EHCS-AI.html` 为需求与 UI 参考。
 - **配置**：需在 `extensions.json` 启用 `ehcs-ai` 应用。

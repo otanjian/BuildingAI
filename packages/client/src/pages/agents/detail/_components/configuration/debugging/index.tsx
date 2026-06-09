@@ -94,7 +94,6 @@ function useAnnotationContext(): AnnotationContextValue | null {
 function AnnotationActions({ messageId, message }: { messageId: string; message: UIMessage }) {
   const ctx = useAnnotationContext();
   if (!ctx) return null;
-  console.log(message.parts);
   const isQuickCommandReply = message.parts?.some((p) => p.type === "data-reply-source");
   if (isQuickCommandReply) return null;
   const metadata = message.metadata && typeof message.metadata === "object" ? message.metadata : {};

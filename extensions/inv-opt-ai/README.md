@@ -1,6 +1,6 @@
 # 库存优化自治系统 (`inv-opt-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-INV-OPT-AI.md`, DB: `docs/DB-INV-OPT-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-INV-OPT-AI.md`, DB: `docs/DB/DB-INV-OPT-AI.md`.
 
 ## Entry
 

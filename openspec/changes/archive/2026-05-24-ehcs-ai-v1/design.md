@@ -1,6 +1,6 @@
 ## Implementation sync (2026-05-24, post-archive)
 
-The following differs from this design doc’s original targets; **`docs/PRD-EHCS-AI.md` V1.1.1** and `openspec/specs/ehcs-ai-*` are authoritative:
+The following differs from this design doc’s original targets; **`docs/PRD/PRD-EHCS-AI.md` V1.1.1** and `openspec/specs/ehcs-ai-*` are authoritative:
 
 | Topic | Original design | Shipped |
 |-------|-----------------|--------|
@@ -14,7 +14,7 @@ The following differs from this design doc’s original targets; **`docs/PRD-EHC
 
 ## Context
 
-EHCS-AI V1.1 is specified in `docs/PRD-EHCS-AI.md` with UI reference `docs/UI-EHCS-AI.html` (prototype; layout superseded by V1.1.1). BuildingAI loads application extensions from `extensions/<identifier>/` with isolated PostgreSQL schemas (`ehcs_ai` for identifier `ehcs-ai`). The platform exposes streaming LLM chat at `POST /api/ai-chat` with optional `mcpServerIds`; MCP execution stays inside the platform agent layer.
+EHCS-AI V1.1 is specified in `docs/PRD/PRD-EHCS-AI.md` with UI reference `docs/UI-EHCS-AI.html` (prototype; layout superseded by V1.1.1). BuildingAI loads application extensions from `extensions/<identifier>/` with isolated PostgreSQL schemas (`ehcs_ai` for identifier `ehcs-ai`). The platform exposes streaming LLM chat at `POST /api/ai-chat` with optional `mcpServerIds`; MCP execution stays inside the platform agent layer.
 
 **Constraints from product:**
 

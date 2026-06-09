@@ -1,6 +1,6 @@
 # 质量异常追溯自治系统 (`quality-rca-ai`)
 
-Scaffolded from `ehcs-ai`. PRD: `docs/PRD-QUALITY-RCA-AI.md`, DB: `docs/DB-QUALITY-RCA-AI.md`.
+Scaffolded from `ehcs-ai`. PRD: `docs/PRD/PRD-QUALITY-RCA-AI.md`, DB: `docs/DB/DB-QUALITY-RCA-AI.md`.
 
 ## Entry
 
