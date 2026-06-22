@@ -34,8 +34,9 @@ export const createDataSourceConfig = (
         migrations: opts?.migrations || [],
         migrationsTableName: "migrations_history",
         extra: {
-            idleTimeoutMillis: 0,
-            connectionTimeoutMillis: 0,
+            max: Number(process.env.DB_POOL_MAX) || 50,
+            idleTimeoutMillis: 30_000,
+            connectionTimeoutMillis: 10_000,
         },
     };
 };

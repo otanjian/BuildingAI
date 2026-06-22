@@ -7,6 +7,7 @@ import {
   useCreateAgentAnnotationMutation,
   useDeleteAgentAnnotationMutation,
   useUpdateAgentAnnotationMutation,
+  useCreateOperatorAgentMessageMutation,
 } from "@buildingai/services/web";
 import { MessageAction as AIMessageAction } from "@buildingai/ui/components/ai-elements/message";
 import { InfiniteScrollTop } from "@buildingai/ui/components/infinite-scroll-top";
@@ -378,6 +379,85 @@ function toUIMessage(m: {
   return { ...stored, id: m.id, role, parts } as UIMessage;
 }
 
+function isOperatorReplyMessage(message: UIMessage): boolean {
+  const metadata = message.metadata as { source?: string } | undefined;
+  return message.role === "assistant" && metadata?.source === "operator";
+}
+
+function OperatorReplyBar({
+  agentId,
+  conversationId,
+}: {
+  agentId: string;
+  conversationId: string;
+}) {
+  const [content, setContent] = useState("");
+  const queryClient = useQueryClient();
+  const createOperatorMessageMutation = useCreateOperatorAgentMessageMutation(
+    agentId,
+    conversationId,
+  );
+
+  const handleSend = () => {
+    const trimmed = content.trim();
+    if (!trimmed || createOperatorMessageMutation.isPending) return;
+
+    createOperatorMessageMutation.mutate(trimmed, {
+      onSuccess: () => {
+        toast.success("已发送，访客端将自动同步");
+        setContent("");
+        void queryClient.invalidateQueries({
+          queryKey: ["agents", "chat", "messages", agentId, conversationId],
+        });
+      },
+      onError: () => {
+        toast.error("发送失败，请稍后重试");
+      },
+    });
+  };
+
+  return (
+    <div className="bg-background shrink-0 border-t p-4">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
+        <Label htmlFor="operator-reply" className="text-sm font-medium">
+          代回复访客
+        </Label>
+        <Textarea
+          id="operator-reply"
+          placeholder="代回复访客…"
+          value={content}
+          rows={3}
+          className="resize-none text-sm"
+          onChange={(event) => setContent(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              handleSend();
+            }
+          }}
+        />
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            disabled={!content.trim() || createOperatorMessageMutation.isPending}
+            onClick={handleSend}
+          >
+            {createOperatorMessageMutation.isPending ? (
+              <>
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                发送中
+              </>
+            ) : (
+              "发送"
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessageListContent({
   agentId,
   conversationId,
@@ -570,58 +650,69 @@ function MessageListContent({
         onSaved={onAnnotationEditSaved}
         container={panelContainer}
       />
-      <InfiniteScrollTop
-        className="chat-scroll flex h-full min-h-0 flex-col contain-[layout_style_paint]"
-        prependKey={allMessages[0]?.id ?? null}
-        hasMore={hasMore}
-        isLoadingMore={isLoadingMore}
-        onLoadMore={handleLoadMore}
-        hideScrollToBottomButton
-        initial="instant"
-        resize="instant"
-      >
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-4 pb-10">
-          {allMessages.map((m, index) => {
-            const uiMessage = toUIMessage(m);
-            const displayMessage: DisplayMessage = {
-              id: uiMessage.id,
-              message: uiMessage,
-              parentId: null,
-              sequence: index,
-              branchNumber: 0,
-              branchCount: 1,
-              branches: [],
-              isLast: index === allMessages.length - 1,
-            };
-            const rawFeedback = (
-              m.message as { feedback?: AgentMessageFeedback | null } | undefined
-            )?.feedback;
-            const isAssistant = uiMessage.role === "assistant";
-            return (
-              <MessageItem
-                key={`${displayMessage.id}-${annotationEnabled ? "ann-on" : "ann-off"}`}
-                displayMessage={displayMessage}
-                isStreaming={false}
-                liked={rawFeedback?.type === "like"}
-                disliked={rawFeedback?.type === "dislike"}
-                extraActions={
-                  <>
-                    {isAssistant && rawFeedback && <MessageFeedbackBadge feedback={rawFeedback} />}
-                    {annotationContextValue && isAssistant && (
-                      <AnnotationActions
-                        messageId={displayMessage.id}
-                        dbMessageId={m.id}
-                        message={uiMessage}
-                        allMessages={allMessages}
-                      />
-                    )}
-                  </>
-                }
-              />
-            );
-          })}
-        </div>
-      </InfiniteScrollTop>
+      <div className="flex h-full min-h-0 flex-col">
+        <InfiniteScrollTop
+          className="chat-scroll flex min-h-0 flex-1 flex-col contain-[layout_style_paint]"
+          prependKey={allMessages[0]?.id ?? null}
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={handleLoadMore}
+          hideScrollToBottomButton
+          initial="instant"
+          resize="instant"
+        >
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 pt-4 pb-10">
+            {allMessages.map((m, index) => {
+              const uiMessage = toUIMessage(m);
+              const displayMessage: DisplayMessage = {
+                id: uiMessage.id,
+                message: uiMessage,
+                parentId: null,
+                sequence: index,
+                branchNumber: 0,
+                branchCount: 1,
+                branches: [],
+                isLast: index === allMessages.length - 1,
+              };
+              const rawFeedback = (
+                m.message as { feedback?: AgentMessageFeedback | null } | undefined
+              )?.feedback;
+              const isAssistant = uiMessage.role === "assistant";
+              const operatorReply = isOperatorReplyMessage(uiMessage);
+              return (
+                <MessageItem
+                  key={`${displayMessage.id}-${annotationEnabled ? "ann-on" : "ann-off"}`}
+                  displayMessage={displayMessage}
+                  isStreaming={false}
+                  liked={rawFeedback?.type === "like"}
+                  disliked={rawFeedback?.type === "dislike"}
+                  extraActions={
+                    <>
+                      {operatorReply ? (
+                        <Badge variant="secondary" className="text-xs font-normal">
+                          人工回复
+                        </Badge>
+                      ) : null}
+                      {isAssistant && rawFeedback && (
+                        <MessageFeedbackBadge feedback={rawFeedback} />
+                      )}
+                      {annotationContextValue && isAssistant && !operatorReply ? (
+                        <AnnotationActions
+                          messageId={displayMessage.id}
+                          dbMessageId={m.id}
+                          message={uiMessage}
+                          allMessages={allMessages}
+                        />
+                      ) : null}
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
+        </InfiniteScrollTop>
+        <OperatorReplyBar agentId={agentId} conversationId={conversationId} />
+      </div>
     </AnnotationContext.Provider>
   );
 }

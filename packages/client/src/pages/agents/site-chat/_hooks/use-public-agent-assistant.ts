@@ -21,6 +21,15 @@ import { getPublicApiRequestErrorCode } from "../services/public-http";
 import { usePublicAgentChatStream } from "./use-public-agent-chat-stream";
 import { usePublicAgentFeedback } from "./use-public-agent-feedback";
 import { usePublicAgentMessagesPaging } from "./use-public-agent-messages-paging";
+import {
+  useEmbedConversationResume,
+  usePublicOperatorMessageSync,
+} from "./use-embed-conversation-resume";
+import {
+  clearLastConversation,
+  isEmbeddedHost,
+  writeLastConversation,
+} from "../lib/embed-conversation-storage";
 
 const AGENT_MODEL_ID = "agent";
 
@@ -142,6 +151,32 @@ export function usePublicAgentAssistant(args: {
   const canOperateMessage = Boolean(
     conversationIdForMessageOps && isUUID(conversationIdForMessageOps),
   );
+
+  const { isResuming } = useEmbedConversationResume({
+    agentId,
+    accessToken,
+    anonymousIdentifier,
+    conversationIdFromUrl: normalizedConversationId,
+    navigate,
+  });
+
+  useEffect(() => {
+    if (conversationIdForMessageOps && isUUID(conversationIdForMessageOps)) {
+      writeLastConversation(agentId, conversationIdForMessageOps);
+    }
+  }, [agentId, conversationIdForMessageOps]);
+
+  usePublicOperatorMessageSync({
+    agentId,
+    accessToken,
+    anonymousIdentifier,
+    conversationId:
+      conversationIdForMessageOps && isUUID(conversationIdForMessageOps)
+        ? conversationIdForMessageOps
+        : undefined,
+    setMessages,
+    status,
+  });
 
   const parentMapRef = useRef<Map<string, string | null>>(new Map());
   const isFirstLoadRef = useRef(true);
@@ -302,11 +337,17 @@ export function usePublicAgentAssistant(args: {
   const messages: UIMessage[] = [...repoMessages];
 
   const hasCurrentMessages = displayMessages.length > 0;
-  const isFirstSession = !hasCurrentMessages && !isLoadingMessages;
+  const isFirstSession = !hasCurrentMessages && !isLoadingMessages && !isResuming;
 
   const openConversation = (id: string) => {
+    writeLastConversation(agentId, id);
     navigate(`/agents/${agentId}/${accessToken}/c/${id}`);
   };
+
+  const startNewConversation = useCallback(() => {
+    clearLastConversation(agentId);
+    navigate(`/agents/${agentId}/${accessToken}`, { replace: true });
+  }, [agentId, accessToken, navigate]);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -486,5 +527,8 @@ export function usePublicAgentAssistant(args: {
     isFirstSession,
     canOperateMessage,
     openConversation,
+    startNewConversation,
+    isEmbedded: isEmbeddedHost(),
+    isResuming,
   };
 }

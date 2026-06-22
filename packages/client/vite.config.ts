@@ -7,7 +7,7 @@ import path from "path";
 import { defineConfig, type ProxyOptions } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
-const apiTarget = process.env.VITE_DEVELOP_APP_BASE_URL || "http://localhost:4090";
+const apiTarget = process.env.VITE_DEVELOP_APP_BASE_URL || "http://127.0.0.1:4090";
 // Dev: resolve TS sources so Vite can use ESM named exports (dist/*.js is CJS).
 const constantsSrc = path.resolve(__dirname, "../@buildingai/constants/src");
 
@@ -76,8 +76,8 @@ export default defineConfig({
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
   server: {
-    // Use "localhost" (not 127.0.0.1) so Chrome [::1] and 127.0.0.1 both hit Vite, not Cursor's ::1 forward.
-    host: host || "localhost",
+    // Use 127.0.0.1 so Vite and start.sh health checks agree (localhost may be IPv6-only on macOS).
+    host: host || "127.0.0.1",
     open: true,
     port: Number(process.env.CLIENT_DEV_PORT || process.env.VITE_DEV_SERVER_PORT) || 4091,
     strictPort: true,

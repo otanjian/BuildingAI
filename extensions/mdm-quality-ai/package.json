@@ -1,6 +1,6 @@
 {
     "name": "mdm-quality-ai",
-    "version": "0.1.0",
+    "version": "0.1.3",
     "description": "主数据质量自治系统",
     "author": "BowiAI Teams",
     "private": true,

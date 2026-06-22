@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
 
@@ -96,6 +96,17 @@ export async function listAgentConversationMessages(
     return apiHttpClient.get<ListConversationMessagesResult>(path);
 }
 
+export async function createOperatorAgentMessage(
+    agentId: string,
+    conversationId: string,
+    content: string,
+): Promise<AgentChatMessageItem> {
+    return apiHttpClient.post<AgentChatMessageItem>(
+        `/ai-agents/${agentId}/chat/conversations/${conversationId}/messages/operator`,
+        { content },
+    );
+}
+
 const CONVERSATIONS_KEY = ["agents", "chat", "conversations"] as const;
 const MESSAGES_KEY = ["agents", "chat", "messages"] as const;
 
@@ -121,5 +132,12 @@ export function useAgentConversationMessagesQuery(
         queryKey: [...MESSAGES_KEY, agentId ?? "", conversationId ?? "", params],
         queryFn: () => listAgentConversationMessages(agentId!, conversationId!, params),
         enabled: !!agentId && !!conversationId && options?.enabled !== false,
+    });
+}
+
+export function useCreateOperatorAgentMessageMutation(agentId: string, conversationId: string) {
+    return useMutation({
+        mutationFn: (content: string) =>
+            createOperatorAgentMessage(agentId, conversationId, content),
     });
 }

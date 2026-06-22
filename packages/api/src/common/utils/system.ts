@@ -75,9 +75,13 @@ export const tryListen = async (
     let currentPort = initialPort;
     let retries = 0;
 
+    const listenHost =
+        process.env.SERVER_LISTEN_HOST?.trim() ||
+        (process.env.NODE_ENV === "development" ? "127.0.0.1" : "0.0.0.0");
+
     while (retries < maxRetries) {
         try {
-            await app.listen(currentPort);
+            await app.listen(currentPort, listenHost);
             // Log when port is changed
             if (currentPort !== initialPort) {
                 TerminalLogger.success(

@@ -15,14 +15,9 @@ function resolveDevBase(): string {
         return fromEnv.trim().replace(/\/$/, "");
     }
     if (typeof window !== "undefined") {
-        if (window.location.pathname.startsWith("/extension/")) {
-            return window.location.origin;
-        }
-        if (window.location.pathname.startsWith("/apps/")) {
-            return window.location.origin;
-        }
+        return window.location.origin;
     }
-    return "http://localhost:4090";
+    return "http://127.0.0.1:4090";
 }
 
 const devBase = resolveDevBase();

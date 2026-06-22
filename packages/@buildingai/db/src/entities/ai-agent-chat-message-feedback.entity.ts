@@ -45,10 +45,10 @@ export class AgentChatMessageFeedback extends BaseEntity {
     dislikeReason?: string;
 
     @Column({
-        type: "decimal",
+        type: "numeric",
         precision: 3,
         scale: 2,
-        default: 0.5,
+        default: () => "0.5",
         comment: "置信度分数 (0-1)，用于智能判断：用户是否犹豫、是否连续点踩、是否撤销",
     })
     confidenceScore: number;

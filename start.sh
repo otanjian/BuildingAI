@@ -46,14 +46,14 @@ Commands:
 
 Targets (optional, for start/restart/stop):
   all           Dev + SAP MCPs + infra when enabled (default)
-  dev           BuildingAI only (pnpm dev)
+  dev           BuildingAI only (pnpm dev:core — API + web + deps, no extension Vite)
   sap           SAP ABAP ADT MCP only (:8100)
   sap-pyrfc     SAP PyRFC MCP only (:8200)
   infra         Docker redis + postgres only
 
 Options:
   -f, --force   Kill processes on busy ports without prompting
-  -d, --detach  Run pnpm dev in background (logs: .run/dev.log)
+  -d, --detach  Run API + web in background (logs: .run/dev.log)
 
 Environment (root .env or shell):
   START_SAP_MCP=auto|true|false         Default auto (start if integrations/sap-abap-adt-mcp/.env exists)
@@ -197,16 +197,31 @@ free_ports() {
   fi
 }
 
+api_ready() {
+  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:4090/consoleapi/health" >/dev/null 2>&1
+}
+
+web_ready() {
+  local port="${CLIENT_DEV_PORT:-4091}"
+  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1
+}
+
+web_proxy_ready() {
+  local port="${CLIENT_DEV_PORT:-4091}"
+  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/api/config" >/dev/null 2>&1
+}
+
 warn_if_web_empty() {
   local port="${CLIENT_DEV_PORT:-4091}"
+  local max_wait="${WEB_READY_MAX_WAIT:-10}"
   local i
   kill_cursor_listeners "$port"
-  for i in $(seq 1 25); do
-    if curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1 \
-      && curl -sf --noproxy '*' --max-time 2 "http://[::1]:${port}/" >/dev/null 2>&1; then
+  for i in $(seq 1 "$max_wait"); do
+    # IPv4 is enough for dev; do not block on [::1] (Cursor port-forward often breaks IPv6 only).
+    if web_ready && web_proxy_ready; then
       return 0
     fi
-    if [[ "$i" == 3 || "$i" == 8 ]]; then
+    if [[ "$i" == 3 || "$i" == 6 ]]; then
       kill_cursor_listeners "$port"
     fi
     sleep 1
@@ -227,6 +242,59 @@ warn_if_web_empty() {
     echo "  IPv4 works but IPv6 fails — use http://127.0.0.1:${port}/ in the browser."
   fi
   return 1
+}
+
+wait_for_api_ready() {
+  local max_wait="${API_READY_MAX_WAIT:-90}"
+  local i
+  for i in $(seq 1 "$max_wait"); do
+    if api_ready; then
+      return 0
+    fi
+    if [[ "$i" == "$max_wait" ]]; then
+      break
+    fi
+    sleep 1
+  done
+  echo ""
+  echo "WARNING: API :4090 did not become ready within ${max_wait}s."
+  echo "  Common causes: stale nodemon, DB schema sync stuck, or extension bootstrap hang."
+  echo "  Try: ./start.sh stop && ./start.sh -f restart dev -d"
+  echo "  Logs: ./start.sh logs  (look for 'Schema Build' or 'Startup Time')"
+  return 1
+}
+
+wait_for_dev_ready() {
+  local max_wait="${DEV_READY_MAX_WAIT:-120}"
+  local i
+  for i in $(seq 1 "$max_wait"); do
+    if api_ready && web_ready && web_proxy_ready; then
+      echo "  Dev stack ready (api + web + proxy)."
+      return 0
+    fi
+    sleep 1
+  done
+  echo ""
+  echo "WARNING: Dev stack not fully ready within ${max_wait}s."
+  api_ready && echo "  API :4090 — ok" || echo "  API :4090 — down"
+  web_ready && echo "  Web :${CLIENT_DEV_PORT:-4091} — ok" || echo "  Web :${CLIENT_DEV_PORT:-4091} — down"
+  web_proxy_ready && echo "  Proxy /api/config — ok" || echo "  Proxy /api/config — down"
+  echo "  Logs: ./start.sh logs"
+  return 1
+}
+
+nvm_bash_prelude() {
+  cat <<'EOF'
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+  # shellcheck source=/dev/null
+  . "$NVM_DIR/nvm.sh"
+  nvm use 22 >/dev/null 2>&1 || nvm use 22
+fi
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+export NO_PROXY="localhost,127.0.0.1,::1"
+export no_proxy="$NO_PROXY"
+EOF
 }
 
 busy_ports_list() {
@@ -463,13 +531,55 @@ check_deps() {
   fi
 }
 
+types_need_prebuild() {
+  local types_pkg="${ROOT_DIR}/packages/@buildingai/types"
+  local dist_mjs="${types_pkg}/dist/index.mjs"
+  local dist_dts="${types_pkg}/dist/index.d.ts"
+
+  [[ ! -f "$dist_mjs" || ! -f "$dist_dts" ]] && return 0
+
+  if find "${types_pkg}/src" "${types_pkg}/tsup.config.ts" "${types_pkg}/package.json" -type f \
+    \( -newer "$dist_mjs" -o -newer "$dist_dts" \) 2>/dev/null | grep -q .; then
+    return 0
+  fi
+
+  return 1
+}
+
+prebuild_types() {
+  if types_need_prebuild; then
+    echo "Prebuilding @buildingai/types (avoids API waiting on DTS watch)..."
+    pnpm --filter @buildingai/types build >/dev/null 2>&1 || pnpm --filter @buildingai/types build
+  else
+    echo "Skipping @buildingai/types prebuild (dist is up to date)."
+  fi
+}
+
+db_need_prebuild() {
+  local db_pkg="${ROOT_DIR}/packages/@buildingai/db"
+  local marker="${db_pkg}/dist/utils/file-url.service.js"
+  [[ ! -f "$marker" ]] && return 0
+  if find "${db_pkg}/src/utils/file-url.service.ts" "${db_pkg}/src/entities" -type f \
+    -newer "$marker" 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+prebuild_db() {
+  if db_need_prebuild; then
+    echo "Prebuilding @buildingai/db (API loads compiled dist)..."
+    pnpm --filter @buildingai/db build >/dev/null 2>&1 || pnpm --filter @buildingai/db build
+  fi
+}
+
 print_info() {
   cat <<EOF
 
 BuildingAI dev server
-  Web:  http://localhost:${CLIENT_DEV_PORT}/
-  API:  http://localhost:4090/
-  Install wizard (first run): http://localhost:4090/install
+  Web:  http://127.0.0.1:${CLIENT_DEV_PORT}/
+  API:  http://127.0.0.1:4090/
+  Install wizard (first run): http://127.0.0.1:4090/install
 
 $(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/mcp")
 $(should_start_sap_pyrfc && echo "  SAP PyRFC MCP: http://127.0.0.1:${SAP_PYRFC_PORT}/mcp")
@@ -478,6 +588,33 @@ $(port_in_use "$ERPNEXT_PORT" && echo "  ERPNext MCP: http://127.0.0.1:${ERPNEXT
 Commands: ./start.sh restart | stop | status | logs [dev|sap|sap-pyrfc]
 
 EOF
+}
+
+start_dev_detached() {
+  local prelude web_cmd api_cmd
+
+  stop_pid_file "dev"
+  stop_pid_file "dev-web"
+  stop_pid_file "dev-api"
+
+  prelude="$(nvm_bash_prelude)"
+  web_cmd="${prelude}
+cd '${ROOT_DIR}/packages/client'
+export CLIENT_DEV_PORT='${CLIENT_DEV_PORT}'
+exec pnpm dev"
+  api_cmd="${prelude}
+cd '${ROOT_DIR}/packages/api'
+export NODE_ENV=development SERVER_LISTEN_HOST=127.0.0.1
+exec pnpm exec nest start -b swc"
+
+  echo "Starting dev stack in background (API + web as separate processes)..."
+  : >"${RUN_DIR}/dev.log"
+  nohup bash -lc "$web_cmd" >>"${RUN_DIR}/dev.log" 2>&1 &
+  echo $! >"${RUN_DIR}/dev-web.pid"
+  nohup bash -lc "$api_cmd" >>"${RUN_DIR}/dev.log" 2>&1 &
+  echo $! >"${RUN_DIR}/dev-api.pid"
+  # Legacy single PID file (API) for scripts that only read dev.pid
+  cp "${RUN_DIR}/dev-api.pid" "${RUN_DIR}/dev.pid"
 }
 
 start_dev() {
@@ -490,17 +627,14 @@ start_dev() {
   ensure_ports_available "$force" "${DEV_PORTS[@]}"
   kill_cursor_listeners "${CLIENT_DEV_PORT:-4091}"
   check_deps
+  prebuild_types
+  prebuild_db
 
   if [[ "$detach" == 1 ]]; then
-    stop_pid_file "dev"
-    echo "Starting pnpm dev in background..."
-    nohup env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
-      CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
-      NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" pnpm dev >>"${RUN_DIR}/dev.log" 2>&1 &
-    echo $! >"${RUN_DIR}/dev.pid"
+    start_dev_detached
     print_info
     echo "Dev log: .run/dev.log"
-    warn_if_web_empty || true
+    wait_for_dev_ready || true
     return 0
   fi
 
@@ -508,11 +642,20 @@ start_dev() {
   clear_broken_proxy
   exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
     CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
-    NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" pnpm dev
+    SERVER_LISTEN_HOST=127.0.0.1 \
+    NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" pnpm dev:core
 }
 
 stop_dev() {
   stop_pid_file "dev"
+  stop_pid_file "dev-web"
+  stop_pid_file "dev-api"
+  pkill -f "turbo run dev" 2>/dev/null || true
+  pkill -f "nodemon -q" 2>/dev/null || true
+  pkill -f "packages/client.*vite" 2>/dev/null || true
+  pkill -f "packages/api/dist/main" 2>/dev/null || true
+  pkill -f "@nestjs/cli/bin/nest.js start" 2>/dev/null || true
+  free_ports "${DEV_PORTS[@]}"
 }
 
 cmd_status() {
@@ -546,7 +689,7 @@ cmd_status() {
     echo "  :${ERPNEXT_PORT}  ERPNext   down (external)"
   fi
 
-  for name in dev sap-mcp sap-pyrfc-mcp; do
+  for name in dev dev-web dev-api sap-mcp sap-pyrfc-mcp; do
     local pid file="${RUN_DIR}/${name}.pid"
     pid="$(read_pid "$file")"
     if [[ -n "$pid" ]]; then

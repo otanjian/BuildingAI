@@ -38,6 +38,10 @@ export interface StorageConfig {
 @Injectable()
 export class FileUrlService {
     private readonly logger = new Logger(FileUrlService.name);
+    private static sharedStorageConfigCache: { config: StorageConfig; expiresAt: number } | null =
+        null;
+    private static sharedStorageConfigLoadPromise: Promise<StorageConfig> | null = null;
+    private readonly storageConfigTtlMs = 60_000;
 
     constructor(
         @InjectRepository(Dict)
@@ -120,6 +124,51 @@ export class FileUrlService {
      * @returns 存储配置对象
      */
     private async getStorageConfig(): Promise<StorageConfig> {
+        const now = Date.now();
+        if (
+            FileUrlService.sharedStorageConfigCache &&
+            FileUrlService.sharedStorageConfigCache.expiresAt > now
+        ) {
+            return FileUrlService.sharedStorageConfigCache.config;
+        }
+
+        if (!FileUrlService.sharedStorageConfigLoadPromise) {
+            FileUrlService.sharedStorageConfigLoadPromise = this.loadStorageConfig(now).finally(
+                () => {
+                    FileUrlService.sharedStorageConfigLoadPromise = null;
+                },
+            );
+        }
+
+        return FileUrlService.sharedStorageConfigLoadPromise;
+    }
+
+    private resolveDevStorageConfig(now: number): StorageConfig | null {
+        if (process.env.NODE_ENV !== "development") {
+            return null;
+        }
+        const appDomain = process.env.APP_DOMAIN?.trim();
+        if (appDomain) {
+            return null;
+        }
+        const port = process.env.SERVER_PORT || "4090";
+        const config: StorageConfig = {
+            engine: STORAGE_ENGINE.LOCAL,
+            domain: `http://127.0.0.1:${port}`,
+        };
+        FileUrlService.sharedStorageConfigCache = {
+            config,
+            expiresAt: now + this.storageConfigTtlMs,
+        };
+        return config;
+    }
+
+    private async loadStorageConfig(now: number): Promise<StorageConfig> {
+        const devConfig = this.resolveDevStorageConfig(now);
+        if (devConfig) {
+            return devConfig;
+        }
+
         try {
             // Query storage configuration from dict table
             const configs = await this.dictRepository.find({
@@ -142,20 +191,30 @@ export class FileUrlService {
                 {} as Record<string, any>,
             );
 
-            return {
+            const config: StorageConfig = {
                 engine: configMap.engine || STORAGE_ENGINE.LOCAL,
                 domain:
                     configMap.domain ||
                     process.env.APP_DOMAIN ||
                     `http://localhost:${process.env.SERVER_PORT}`,
             };
+            FileUrlService.sharedStorageConfigCache = {
+                config,
+                expiresAt: now + this.storageConfigTtlMs,
+            };
+            return config;
         } catch (error) {
             this.logger.warn("Failed to load storage config from database, using defaults", error);
             // Fallback to default configuration
-            return {
+            const config: StorageConfig = {
                 engine: STORAGE_ENGINE.LOCAL,
                 domain: process.env.APP_DOMAIN || `http://localhost:${process.env.SERVER_PORT}`,
             };
+            FileUrlService.sharedStorageConfigCache = {
+                config,
+                expiresAt: now + this.storageConfigTtlMs,
+            };
+            return config;
         }
     }
 

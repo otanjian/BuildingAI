@@ -2,6 +2,6 @@
     "watch": ["../../extensions/*/build/**"],
     "ext": "ts,js",
     "ignore": ["src/**/*.spec.ts", "node_modules", ".turbo"],
-    "exec": "nest start --watch -b swc --type-check",
+    "exec": "nest start --watch -b swc",
     "delay": 500
 }

@@ -22,6 +22,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { validate as isUUID } from "uuid";
 
+import { CreateOperatorMessageDto } from "../../dto/web/chat/create-operator-message.dto";
 import { AgentChatRequestDto } from "../../dto/web/chat/agent-chat-request.dto";
 import { CreateAgentMessageFeedbackDto } from "../../dto/web/chat/agent-message-feedback.dto";
 import { AgentSpeechRequestDto } from "../../dto/web/chat/agent-speech-request.dto";
@@ -33,6 +34,7 @@ import { AgentChatMessageFeedbackService } from "../../services/agent-chat-messa
 import type { AgentChatRecordWithUser } from "../../services/agent-chat-record.service";
 import { AgentChatRecordService } from "../../services/agent-chat-record.service";
 import { AgentVoiceService } from "../../services/agent-voice.service";
+import { AgentsService } from "../../services/agents.service";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
@@ -42,6 +44,7 @@ export class AgentChatWebController {
         private readonly agentChatRecordService: AgentChatRecordService,
         private readonly agentChatMessageService: AgentChatMessageService,
         private readonly agentChatMessageFeedbackService: AgentChatMessageFeedbackService,
+        private readonly agentsService: AgentsService,
     ) {}
 
     @AgentPublicAccess({ route: "chat-messages", targetPath: ":id/chat/stream" })
@@ -374,6 +377,26 @@ export class AgentChatWebController {
             query,
             playground.id,
         );
+    }
+
+    @Post(":id/chat/conversations/:conversationId/messages/operator")
+    async createOperatorMessage(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Body() dto: CreateOperatorMessageDto,
+        @Playground() playground: UserPlayground,
+    ): Promise<AgentChatMessage> {
+        const agent = await this.agentsService.getAgentByIdOrThrow(agentId);
+        if (agent.createBy !== playground.id) {
+            throw HttpErrorFactory.forbidden("无权限操作该智能体");
+        }
+        return this.agentChatRecordService.createOperatorReply({
+            agentId,
+            conversationId,
+            content: dto.content,
+            operatorId: playground.id,
+            operatorName: playground.username,
+        });
     }
 
     private extractAnonymousIdentifier(req: Request): string | undefined {

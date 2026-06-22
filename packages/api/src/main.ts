@@ -34,7 +34,9 @@ function resolveCorsOrigin(): string | string[] {
     }
 
     if (!configuredOrigin) {
-        return process.env.NODE_ENV === "development" ? "http://localhost:4091" : [];
+        return process.env.NODE_ENV === "development"
+            ? ["http://localhost:4091", "http://127.0.0.1:4091"]
+            : [];
     }
 
     return configuredOrigin.includes(",")

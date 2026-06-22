@@ -27,7 +27,7 @@ import {
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
-import { Bot, ClipboardPenLine, ListIndentDecrease, PanelLeft } from "lucide-react";
+import { Bot, ClipboardPenLine, ListIndentDecrease, MessageSquarePlus, PanelLeft } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
@@ -42,6 +42,7 @@ import {
 
 import { useEmbedFormContext, useEmbedHostDocumentClass, useHasEmbedFormContext } from "./_hooks/use-embed-form-context";
 import { usePublicAgentAssistant } from "./_hooks/use-public-agent-assistant";
+import { isOperatorMessage } from "./lib/embed-conversation-storage";
 
 const AGENT_MODEL_ID = "agent";
 
@@ -270,6 +271,9 @@ export default function PublishChatPage() {
     isFirstSession,
     canOperateMessage,
     openConversation,
+    startNewConversation,
+    isEmbedded,
+    isResuming,
   } = usePublicAgentAssistant({
     agentId,
     accessToken,
@@ -448,6 +452,18 @@ export default function PublishChatPage() {
                   >
                     <ListIndentDecrease className="size-4 rotate-180" />
                   </Button>
+                  {isEmbedded ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground shrink-0 text-xs"
+                      onClick={startNewConversation}
+                    >
+                      <MessageSquarePlus className="mr-1 size-3.5" />
+                      新对话
+                    </Button>
+                  ) : null}
                   {/* {assistantAvatar ? (
                     <Avatar className="size-8 shrink-0 rounded-lg after:rounded-lg">
                       <AvatarImage src={assistantAvatar} alt="" className="rounded-lg" />
@@ -546,7 +562,7 @@ export default function PublishChatPage() {
                         : "mx-auto flex w-full max-w-3xl flex-col gap-4 px-0 pt-6 pb-3 sm:px-4 sm:pt-8 sm:pb-4"
                     }
                   >
-                    {isFirstSession && !isAgentLoading ? (
+                    {isFirstSession && !isAgentLoading && !isResuming ? (
                       <>
                         {hasOpening ? (
                           <div className="flex w-full gap-3">
@@ -588,7 +604,7 @@ export default function PublishChatPage() {
                           </div>
                         ) : null}
                       </>
-                    ) : isLoadingHistory && displayMessages.length === 0 ? (
+                    ) : (isLoadingHistory || isResuming) && displayMessages.length === 0 ? (
                       <div className="flex w-full flex-1 flex-col gap-4">
                         <div className="flex gap-3">
                           <Skeleton className="size-8 shrink-0 rounded-lg" />
@@ -613,6 +629,7 @@ export default function PublishChatPage() {
                       <div className="flex w-full flex-col gap-4">
                         {displayMessages.map((dm) => {
                           const isStreaming = streamingMessageId === dm.id;
+                          const operatorReply = isOperatorMessage(dm.message);
                           return (
                             <MessageItem
                               key={dm.id}
@@ -626,6 +643,11 @@ export default function PublishChatPage() {
                               onSwitchBranch={canOperateMessage ? onSwitchBranch : undefined}
                               onLike={canOperateMessage ? onLike : undefined}
                               onDislike={canOperateMessage ? onDislike : undefined}
+                              extraActions={
+                                operatorReply ? (
+                                  <span className="text-muted-foreground text-xs">人工客服</span>
+                                ) : undefined
+                              }
                             />
                           );
                         })}

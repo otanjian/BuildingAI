@@ -8,7 +8,7 @@ export class FileUrlProcessorUtil {
     /**
      * Maximum concurrency for batch URL processing
      */
-    private static readonly MAX_CONCURRENT_REQUESTS = 10;
+    private static readonly MAX_CONCURRENT_REQUESTS = 3;
 
     /**
      * Cache of processed URLs to avoid duplicate work
@@ -122,9 +122,14 @@ export class FileUrlProcessorUtil {
 
         // Wildcard matching
         if (fieldPath.includes("*")) {
-            // Handle deep wildcard **
+            // Handle deep wildcard ** or ***
             if (fieldPath.includes("**")) {
-                // Special handling for **.fieldName: match any depth including root
+                // ***.fieldName and **.fieldName: match any depth including root
+                if (fieldPath.startsWith("***.")) {
+                    const fieldName = fieldPath.substring(4);
+                    const patterns = [`^${fieldName}$`, `^.*\\.${fieldName}$`];
+                    return patterns.some((pattern) => new RegExp(pattern).test(targetPath));
+                }
                 if (fieldPath.startsWith("**.")) {
                     const fieldName = fieldPath.substring(3); // strip "**."
                     // Match at root level or any depth

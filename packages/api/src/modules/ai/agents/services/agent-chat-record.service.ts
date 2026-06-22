@@ -9,7 +9,9 @@ import {
 } from "@buildingai/db/entities";
 import { In, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
+import type { ChatUIMessage } from "@buildingai/types";
 import { Injectable } from "@nestjs/common";
+import { generateId } from "ai";
 
 import type { ListAgentConversationsDto } from "../dto/web/chat/list-agent-conversations.dto";
 import { AgentChatMessageService } from "./agent-chat-message.service";
@@ -323,6 +325,57 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         } catch (error) {
             this.logger.error(`更新对话统计失败: ${error.message}`, error.stack);
         }
+    }
+
+    async createOperatorReply(params: {
+        agentId: string;
+        conversationId: string;
+        content: string;
+        operatorId: string;
+        operatorName: string;
+    }): Promise<AgentChatMessage> {
+        const trimmed = params.content.trim();
+        if (!trimmed) {
+            throw HttpErrorFactory.badRequest("content is required");
+        }
+
+        const record = await this.getConversation(params.conversationId);
+        if (!record || record.agentId !== params.agentId) {
+            throw HttpErrorFactory.notFound("对话不存在");
+        }
+
+        const recentMessages = await this.agentChatMessageService.getConversationMessages(
+            params.conversationId,
+            1,
+        );
+        const lastMessage = recentMessages.at(-1);
+
+        const message: ChatUIMessage = {
+            id: generateId(),
+            role: "assistant",
+            parts: [{ type: "text", text: trimmed }],
+            metadata: {
+                source: "operator",
+                operatorId: params.operatorId,
+                operatorName: params.operatorName,
+            },
+        };
+
+        const saved = await this.agentChatMessageService.createMessage({
+            conversationId: params.conversationId,
+            agentId: params.agentId,
+            userId: record.userId,
+            anonymousIdentifier: record.anonymousIdentifier,
+            message,
+            status: "completed",
+            parentId: lastMessage?.id,
+        });
+
+        await this.updateStats(params.conversationId);
+        this.logger.log(
+            `Operator reply agentId=${params.agentId} conversationId=${params.conversationId} messageId=${saved.id} operatorId=${params.operatorId}`,
+        );
+        return saved;
     }
 
     async updateFeedbackStatus(
