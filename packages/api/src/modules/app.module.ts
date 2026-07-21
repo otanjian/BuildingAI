@@ -39,6 +39,7 @@ import { join } from "path";
 
 import { AiModule } from "./ai/ai.module";
 import { ConfigModule as AppConfigModule } from "./config/config.module";
+import { ConsoleMcpModule } from "./console-mcp/console-mcp.module";
 import { DecorateModule } from "./decorate/decorate.module";
 import { FinanceModule } from "./finance/finance.module";
 import { MenuModule } from "./menu/menu.module";
@@ -101,6 +102,7 @@ export class AppModule {
                 CDKModule, //
                 ChannelModule,
                 AiModule,
+                ConsoleMcpModule,
                 AppConfigModule,
                 DecorateModule,
                 FinanceModule,

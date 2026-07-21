@@ -108,6 +108,7 @@ extensions/**/build/
 extensions/**/.temp/
 extensions/**/.turbo/
 extensions/**/dist/
+extensions/**/tsup.config.bundled_*.mjs
 extensions/**/.data/
 extensions/**/data/
 extensions/**/.cache/

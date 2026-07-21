@@ -6,6 +6,7 @@ export * from "./apps-decorate";
 export * from "./award";
 export * from "./cdk";
 export * from "./chat";
+export * from "./console-mcp-keys";
 export * from "./datasets";
 export * from "./datasets-config";
 export * from "./datasets-document";

@@ -22,6 +22,7 @@ import AgentIndexPage from "@/pages/console/ai/agent/list";
 import DatasetsConfigPage from "@/pages/console/ai/datasets/config";
 import DatasetsIndexPage from "@/pages/console/ai/datasets/list";
 import AiMcpIndexPage from "@/pages/console/ai/mcp";
+import AiConsoleMcpKeysPage from "@/pages/console/ai/console-mcp-keys";
 import AiProviderIndexPage from "@/pages/console/ai/provider";
 import AiSecretIndexPage from "@/pages/console/ai/secret";
 import ChannelWechatOaIndexPage from "@/pages/console/channel/wechat-oa";
@@ -103,6 +104,7 @@ function ConsoleRoutes() {
       { path: "/datasets/config", element: <DatasetsConfigPage /> },
       { path: "/provider", element: <AiProviderIndexPage /> },
       { path: "/mcp", element: <AiMcpIndexPage /> },
+      { path: "/console-mcp-keys", element: <AiConsoleMcpKeysPage /> },
       { path: "/extension", element: <ExtensionIndexPage /> },
       { path: "/secret", element: <AiSecretIndexPage /> },
       { path: "/operation", element: <OperationIndexPage /> },
@@ -289,17 +291,22 @@ export default function ConsoleLayout({ children }: { children?: React.ReactNode
 
   if (!userInfo) return null;
 
-  if (!hasConsoleAccess(userInfo)) {
-    return <Navigate to={WEB_HOME_PATH} replace />;
-  }
+  // Platform iframe already gates AI Brain menus. Do not apply BuildingAI console RBAC
+  // here — a failed check used to Navigate to `/` and render DefaultLayout chat
+  // (sidebar + welcome) inside the iframe, which looks like a broken floating card.
+  if (!embedMode) {
+    if (!hasConsoleAccess(userInfo)) {
+      return <Navigate to={WEB_HOME_PATH} replace />;
+    }
 
-  const currentPath = location.pathname.replace(/\/$/, "") || WEB_HOME_PATH;
-  if (currentPath === "/console" && currentPath !== firstConsolePath) {
-    return <Navigate to={firstConsolePath} replace />;
-  }
+    const currentPath = location.pathname.replace(/\/$/, "") || WEB_HOME_PATH;
+    if (currentPath === "/console" && currentPath !== firstConsolePath) {
+      return <Navigate to={firstConsolePath} replace />;
+    }
 
-  if (!hasConsoleRouteAccess(userInfo, currentPath) && currentPath !== firstConsolePath) {
-    return <Navigate to={firstConsolePath} replace />;
+    if (!hasConsoleRouteAccess(userInfo, currentPath) && currentPath !== firstConsolePath) {
+      return <Navigate to={firstConsolePath} replace />;
+    }
   }
 
   // Platform iframe embed: content only (no BuildingAI console sidebar / navbar).
