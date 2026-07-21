@@ -33,6 +33,10 @@ export interface ChatProps {
   footerText?: string;
 }
 
+/** Fill the available content width (no reading-column cap). */
+const CHAT_COLUMN_CLASS = "w-full max-w-full px-4 md:px-8";
+const CHAT_COLUMN_STYLE = { maxWidth: "100%", width: "100%" } as const;
+
 const ChatHeader = memo(function ChatHeader({
   title,
   models,
@@ -230,7 +234,7 @@ const InputArea = memo(function InputArea({
   return (
     <div className={cn("sticky z-10", id ? "bottom-13" : "bottom-0")}>
       <InfiniteScrollTopScrollButton className="-top-12 z-20" />
-      <div className="bg-background mx-auto w-full max-w-3xl rounded-t-lg">
+      <div className={cn("bg-background rounded-t-lg", CHAT_COLUMN_CLASS)} style={CHAT_COLUMN_STYLE}>
         {!hasMessages && suggestions.length > 0 && !isLoading && (
           <Suggestions suggestions={suggestions} onSuggestionClick={handleSuggestionClick} />
         )}
@@ -352,10 +356,12 @@ export const Chat = memo(function Chat({
       >
         <div
           className={cn(
-            "mx-auto flex w-full max-w-3xl flex-1 flex-col gap-4 pb-10",
+            "flex flex-1 flex-col gap-4 pb-10",
+            CHAT_COLUMN_CLASS,
             "transition-opacity duration-200 ease-out",
             smooth ? "opacity-100" : "opacity-0",
           )}
+          style={CHAT_COLUMN_STYLE}
         >
           {renderContent()}
         </div>

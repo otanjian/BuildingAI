@@ -88,8 +88,9 @@ read_env_var() {
   line="$(grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -1 || true)"
   [[ -z "$line" ]] && return 1
   value="${line#*=}"
-  value="${value#"${value%%[![:space:]]*}"}}"
-  value="${value%"${value##*[![:space:]]}"}}"
+  # Trim leading/trailing whitespace and matching surrounding quotes
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
   if [[ "${value#\"}" != "$value" && "${value%\"}" != "$value" ]]; then
     value="${value:1:${#value}-2}"
   fi
@@ -590,31 +591,106 @@ Commands: ./start.sh restart | stop | status | logs [dev|sap|sap-pyrfc]
 EOF
 }
 
-start_dev_detached() {
-  local prelude web_cmd api_cmd
+run_as_daemon() {
+  # Spawn a command that survives the parent shell exit (SIGHUP).
+  # Uses a Python helper for cross-platform double-fork daemon behavior.
+  local name="$1"
+  shift
+  local envfile="${RUN_DIR}/${name}.env"
+  local pidfile="${RUN_DIR}/${name}.pid"
+  local logfile="${RUN_DIR}/dev.log"
+  local node_dir pnpm_bin
+  node_dir="$(dirname "$(command -v node)")"
+  pnpm_bin="$(command -v pnpm)"
 
+  # Persist environment the child needs; avoids quoting hell.
+  {
+    echo "export PATH='${node_dir}:${PATH}'"
+    echo "export NO_PROXY='${NO_PROXY}'"
+    echo "export no_proxy='${no_proxy}'"
+  } >"$envfile"
+
+  local daemon_py="${RUN_DIR}/daemon.py"
+  cat >"$daemon_py" <<'PY'
+import os, sys, subprocess, signal, time, atexit
+
+def daemonize(cmd, cwd, pidfile, envfile, logfile):
+    env = os.environ.copy()
+    env.pop('http_proxy', None)
+    env.pop('https_proxy', None)
+    env.pop('HTTP_PROXY', None)
+    env.pop('HTTPS_PROXY', None)
+    env.pop('ALL_PROXY', None)
+    env.pop('all_proxy', None)
+    env['NO_PROXY'] = 'localhost,127.0.0.1,::1'
+    env['no_proxy'] = 'localhost,127.0.0.1,::1'
+
+    # First fork.
+    pid1 = os.fork()
+    if pid1 > 0:
+        sys.exit(0)
+
+    os.chdir(cwd)
+    os.setsid()
+    os.umask(0)
+
+    # Second fork.
+    pid2 = os.fork()
+    if pid2 > 0:
+        sys.exit(0)
+
+    # Write child PID immediately.
+    with open(pidfile, 'w') as f:
+        f.write(str(os.getpid()))
+
+    # Clean up streams.
+    devnull = open('/dev/null', 'r')
+    os.dup2(devnull.fileno(), sys.stdin.fileno())
+    devnull.close()
+
+    log = open(logfile, 'a')
+    os.dup2(log.fileno(), sys.stdout.fileno())
+    os.dup2(log.fileno(), sys.stderr.fileno())
+    log.close()
+
+    # Run the shell wrapper that sources env file and execs the command.
+    subprocess.Popen(
+        ['/bin/bash', '-lc', f"source '{envfile}' && cd '{cwd}' && exec {cmd}"],
+        env=env,
+        cwd=cwd,
+        close_fds=True,
+    )
+    sys.exit(0)
+
+if __name__ == '__main__':
+    daemonize(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+PY
+
+  python3 "$daemon_py" "$*" "$PWD" "$pidfile" "$envfile" "$logfile" >/dev/null 2>&1
+  # Give the daemon a moment to write the child PID.
+  sleep 0.5
+}
+
+start_dev_detached() {
   stop_pid_file "dev"
   stop_pid_file "dev-web"
   stop_pid_file "dev-api"
 
-  prelude="$(nvm_bash_prelude)"
-  web_cmd="${prelude}
-cd '${ROOT_DIR}/packages/client'
-export CLIENT_DEV_PORT='${CLIENT_DEV_PORT}'
-exec pnpm dev"
-  api_cmd="${prelude}
-cd '${ROOT_DIR}/packages/api'
-export NODE_ENV=development SERVER_LISTEN_HOST=127.0.0.1
-exec pnpm exec nest start -b swc"
+  echo "DEBUG start_dev_detached: SERVER_PORT=[${SERVER_PORT:-unset}] APP_DOMAIN=[${APP_DOMAIN:-unset}]"
+  echo "Starting dev stack in background via PM2 (API + web)..."
+  : >>"${RUN_DIR}/dev.log"
 
-  echo "Starting dev stack in background (API + web as separate processes)..."
-  : >"${RUN_DIR}/dev.log"
-  nohup bash -lc "$web_cmd" >>"${RUN_DIR}/dev.log" 2>&1 &
-  echo $! >"${RUN_DIR}/dev-web.pid"
-  nohup bash -lc "$api_cmd" >>"${RUN_DIR}/dev.log" 2>&1 &
-  echo $! >"${RUN_DIR}/dev-api.pid"
-  # Legacy single PID file (API) for scripts that only read dev.pid
-  cp "${RUN_DIR}/dev-api.pid" "${RUN_DIR}/dev.pid"
+  cd "${ROOT_DIR}"
+  clear_broken_proxy
+  # PM2 runs as a daemon. We record the PM2 God daemon PID so stop can shut it down.
+  CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
+    NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" \
+    pnpm exec pm2 start ecosystem.config.js 2>&1 | tee -a "${RUN_DIR}/dev.log" >/dev/null
+  local pm2_home="${PM2_HOME:-$HOME/.pm2}"
+  if [[ -f "${pm2_home}/pm2.pid" ]]; then
+    cp "${pm2_home}/pm2.pid" "${RUN_DIR}/dev.pid"
+  fi
+  pnpm exec pm2 save 2>/dev/null || true
 }
 
 start_dev() {
@@ -650,11 +726,16 @@ stop_dev() {
   stop_pid_file "dev"
   stop_pid_file "dev-web"
   stop_pid_file "dev-api"
+  if cd "${ROOT_DIR}" 2>/dev/null && [[ -f ecosystem.config.js ]]; then
+    load_nvm
+    pnpm exec pm2 delete ecosystem.config.js 2>/dev/null || true
+    pnpm exec pm2 kill 2>/dev/null || true
+  fi
   pkill -f "turbo run dev" 2>/dev/null || true
   pkill -f "nodemon -q" 2>/dev/null || true
-  pkill -f "packages/client.*vite" 2>/dev/null || true
-  pkill -f "packages/api/dist/main" 2>/dev/null || true
-  pkill -f "@nestjs/cli/bin/nest.js start" 2>/dev/null || true
+  pkill -f "${ROOT_DIR}/packages/client.*vite" 2>/dev/null || true
+  pkill -f "${ROOT_DIR}/packages/api/dist/main" 2>/dev/null || true
+  pkill -f "${ROOT_DIR}/packages/api/node_modules/.bin/../@nestjs/cli/bin/nest.js start" 2>/dev/null || true
   free_ports "${DEV_PORTS[@]}"
 }
 

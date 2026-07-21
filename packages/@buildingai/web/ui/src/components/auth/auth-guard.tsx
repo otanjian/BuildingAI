@@ -1,5 +1,8 @@
-import { useAuthStore } from "@buildingai/stores";
+import { consumeTokenFromUrl, useAuthStore } from "@buildingai/stores";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+
+// Run before isLogin() so iframe embeds with ?_t= are authenticated on first paint
+consumeTokenFromUrl();
 
 const isDev = import.meta.env.DEV;
 const devBase = import.meta.env.VITE_DEVELOP_APP_BASE_URL;

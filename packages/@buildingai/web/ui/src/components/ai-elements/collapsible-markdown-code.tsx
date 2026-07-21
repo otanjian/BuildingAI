@@ -9,19 +9,21 @@ import { cn } from "@buildingai/ui/lib/utils";
 import { BracesIcon, ChevronDownIcon } from "lucide-react";
 import {
   cloneElement,
+  type ComponentProps,
   isValidElement,
   memo,
+  type ReactElement,
+  type ReactNode,
   useEffect,
   useMemo,
   useState,
-  type ComponentProps,
-  type ReactElement,
-  type ReactNode,
 } from "react";
 import type { BundledLanguage } from "shiki";
 import { useIsCodeFenceIncomplete } from "streamdown";
 
 import { CodeBlock, CodeBlockCopyButton } from "./code-block";
+import { EchartsBlock } from "./echarts-block";
+import { isEchartsFenceLanguage, parseEchartsOption } from "./parse-echarts-option";
 
 const LANGUAGE_CLASS_RE = /language-([\w-]+)/;
 
@@ -123,17 +125,17 @@ function BlockCodePanel({
   return (
     <div
       className={cn(
-        "group relative my-4 flex w-full flex-col gap-0 overflow-hidden rounded-xl border border-border bg-sidebar",
+        "group border-border bg-sidebar relative my-4 flex w-full flex-col gap-0 overflow-hidden rounded-xl border",
         className,
       )}
       data-streamdown="code-block"
     >
-      <div className="flex h-8 items-center border-b border-border px-3 text-xs text-muted-foreground">
+      <div className="border-border text-muted-foreground flex h-8 items-center border-b px-3 text-xs">
         <span className="font-mono lowercase">{language || "text"}</span>
       </div>
       <CodeBlock className="my-0 rounded-none border-0" code={code} language={shikiLanguage}>
         <div className="pointer-events-none sticky top-2 z-10 -mt-10 flex h-8 items-center justify-end">
-          <div className="pointer-events-auto flex shrink-0 items-center gap-2 rounded-md border border-sidebar bg-sidebar/80 px-1.5 py-1 supports-[backdrop-filter]:bg-sidebar/70 supports-[backdrop-filter]:backdrop-blur">
+          <div className="border-sidebar bg-sidebar/80 supports-[backdrop-filter]:bg-sidebar/70 pointer-events-auto flex shrink-0 items-center gap-2 rounded-md border px-1.5 py-1 supports-[backdrop-filter]:backdrop-blur">
             <CodeBlockCopyButton />
           </div>
         </div>
@@ -175,21 +177,28 @@ const CollapsibleJsonCodeBlock = memo(function CollapsibleJsonCodeBlock({
     >
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 rounded-xl border border-border bg-sidebar px-3 py-2.5 text-left text-sm",
+          "border-border bg-sidebar flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm",
           "hover:bg-sidebar/80 transition-colors",
           open && "rounded-b-none border-b-0",
         )}
         type="button"
       >
         <ChevronDownIcon
-          className={cn("text-muted-foreground size-4 shrink-0 transition-transform", open && "rotate-180")}
+          className={cn(
+            "text-muted-foreground size-4 shrink-0 transition-transform",
+            open && "rotate-180",
+          )}
         />
         <BracesIcon className="text-muted-foreground size-4 shrink-0" />
         <span className="font-medium">Structured result (JSON)</span>
         <span className="text-muted-foreground ml-auto truncate text-xs">{summary}</span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <BlockCodePanel className="my-0 rounded-t-none border-t-0" code={code} language={language || "json"} />
+        <BlockCodePanel
+          className="my-0 rounded-t-none border-t-0"
+          code={code}
+          language={language || "json"}
+        />
       </CollapsibleContent>
     </Collapsible>
   );
@@ -205,7 +214,7 @@ export const CollapsibleMarkdownCode = memo(function CollapsibleMarkdownCode({
   if (isInline) {
     return (
       <code
-        className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-sm", className)}
+        className={cn("bg-muted rounded px-1.5 py-0.5 font-mono text-sm", className)}
         data-streamdown="inline-code"
         {...props}
       >
@@ -217,6 +226,22 @@ export const CollapsibleMarkdownCode = memo(function CollapsibleMarkdownCode({
   const language = className?.match(LANGUAGE_CLASS_RE)?.[1] ?? "";
   const code = extractCodeText(children);
   const isStreaming = useIsCodeFenceIncomplete();
+
+  if (isEchartsFenceLanguage(language)) {
+    if (isStreaming) {
+      return <BlockCodePanel className={className} code={code} language={language} />;
+    }
+    const parsed = parseEchartsOption(code);
+    if (parsed.ok === false) {
+      return (
+        <div className="my-4 w-full">
+          <p className="text-muted-foreground mb-2 text-xs">{parsed.error}</p>
+          <BlockCodePanel className={cn(className, "my-0")} code={code} language={language} />
+        </div>
+      );
+    }
+    return <EchartsBlock className={className} option={parsed.option} />;
+  }
 
   if (shouldCollapseJsonBlock(language, code)) {
     return (

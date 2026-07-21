@@ -1,5 +1,10 @@
 import { definePageMeta, useDocumentHead } from "@buildingai/hooks";
-import { useDatasetTags, useSquareDatasetsInfiniteQuery } from "@buildingai/services/web";
+import {
+  useDatasetTags,
+  useMyCreatedDatasetsInfiniteQuery,
+  useSquareDatasetsInfiniteQuery,
+  useTeamDatasetsInfiniteQuery,
+} from "@buildingai/services/web";
 import { InfiniteScroll } from "@buildingai/ui/components/infinite-scroll";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
@@ -21,10 +26,114 @@ import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { cn } from "@buildingai/ui/lib/utils";
 import { ChevronLeft, ChevronRight, FileText, Loader2, Search, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useDebounceValue } from "usehooks-ts";
 
 const PAGE_SIZE = 20;
+const SCOPE_PAGE_SIZE = 20;
+
+function datasetDetailTo(id: string, searchParams: URLSearchParams) {
+  const embed = searchParams.get("_embed");
+  return embed === "1" ? `/datasets/${id}?_embed=1` : `/datasets/${id}`;
+}
+
+function ScopedDatasetsList({ scope }: { scope: "mine" | "team" }) {
+  const [searchParams] = useSearchParams();
+  const title = scope === "mine" ? "我的知识库" : "团队知识库";
+  const subtitle = scope === "mine" ? "管理你创建的知识库" : "你加入的团队知识库";
+  useDocumentHead({ title });
+
+  const mineQuery = useMyCreatedDatasetsInfiniteQuery(SCOPE_PAGE_SIZE);
+  const teamQuery = useTeamDatasetsInfiniteQuery(SCOPE_PAGE_SIZE);
+  const query = scope === "mine" ? mineQuery : teamQuery;
+
+  const items = useMemo(
+    () => query.data?.pages.flatMap((p) => p.items) ?? [],
+    [query.data?.pages],
+  );
+
+  return (
+    <ScrollArea className="h-dvh" viewportClassName="[&_>div]:block!">
+      <div className="flex w-full flex-col items-center">
+        <div className="w-full max-w-4xl px-4 py-8 pt-12 sm:pt-20 md:px-6">
+          <div className="mb-6 flex flex-col gap-2 sm:px-3">
+            <h1 className="text-2xl">{title}</h1>
+            <p className="text-muted-foreground text-sm">{subtitle}</p>
+          </div>
+          <div className="sm:px-3">
+            {query.isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="text-muted-foreground size-8 animate-spin" />
+              </div>
+            ) : items.length === 0 ? (
+              <p className="text-muted-foreground py-12 text-center text-sm">暂无知识库</p>
+            ) : (
+              <InfiniteScroll
+                loading={query.isFetchingNextPage}
+                hasMore={query.hasNextPage ?? false}
+                onLoadMore={() => query.fetchNextPage()}
+                emptyText=""
+                showEmptyText={!(query.hasNextPage ?? false)}
+              >
+                <div className="grid gap-x-4 sm:grid-cols-2">
+                  {items.map((dataset) => {
+                    const displayName = dataset.name ?? "知识库";
+                    const initial = displayName.slice(0, 1).toUpperCase();
+                    return (
+                      <Item
+                        key={dataset.id}
+                        asChild
+                        className="group/apps-item hover:bg-accent cursor-pointer px-0 transition-[padding]! hover:px-4"
+                      >
+                        <Link to={datasetDetailTo(dataset.id, searchParams)}>
+                          <ItemMedia>
+                            <Avatar className="size-10 rounded-lg after:rounded-lg">
+                              <AvatarImage
+                                className="rounded-lg"
+                                src={dataset.coverUrl ?? undefined}
+                              />
+                              <AvatarFallback className="rounded-lg">{initial}</AvatarFallback>
+                            </Avatar>
+                          </ItemMedia>
+                          <ItemContent>
+                            <ItemTitle>{dataset.name}</ItemTitle>
+                            <ItemDescription className="line-clamp-1">
+                              {dataset.description?.trim() || "暂无描述"}
+                            </ItemDescription>
+                            <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-3 text-xs">
+                              <span className="inline-flex items-center gap-1">
+                                <FileText className="size-3.5 shrink-0 opacity-70" />
+                                {dataset.documentCount ?? 0}
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <Users className="size-3.5 shrink-0 opacity-70" />
+                                {dataset.memberCount ?? 0}
+                              </span>
+                            </div>
+                          </ItemContent>
+                          <ItemActions className="opacity-0 group-hover/apps-item:opacity-100">
+                            <Button
+                              size="icon-sm"
+                              variant="outline"
+                              className="rounded-full"
+                              aria-label="进入"
+                            >
+                              <ChevronRight />
+                            </Button>
+                          </ItemActions>
+                        </Link>
+                      </Item>
+                    );
+                  })}
+                </div>
+              </InfiniteScroll>
+            )}
+          </div>
+        </div>
+      </div>
+    </ScrollArea>
+  );
+}
 
 export const meta = definePageMeta({
   title: "知识库广场",
@@ -33,6 +142,16 @@ export const meta = definePageMeta({
 });
 
 const KnowledgeIndexPage = () => {
+  const [searchParams] = useSearchParams();
+  const scope = searchParams.get("scope");
+  if (scope === "mine" || scope === "team") {
+    return <ScopedDatasetsList scope={scope} />;
+  }
+  return <KnowledgePlazaPage />;
+};
+
+const KnowledgePlazaPage = () => {
+  const [searchParams] = useSearchParams();
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword] = useDebounceValue(keyword.trim(), 300);
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null);
@@ -243,7 +362,7 @@ const KnowledgeIndexPage = () => {
                         asChild
                         className="group/apps-item hover:bg-accent cursor-pointer px-0 transition-[padding]! hover:px-4"
                       >
-                        <Link to={`/datasets/${dataset.id}`}>
+                        <Link to={datasetDetailTo(dataset.id, searchParams)}>
                           <ItemMedia>
                             <Avatar className="size-10 rounded-lg after:rounded-lg">
                               <AvatarImage

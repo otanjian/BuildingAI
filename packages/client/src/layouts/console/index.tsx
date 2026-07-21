@@ -12,7 +12,7 @@ import type { MenuItem } from "@buildingai/web-types";
 import type { ComponentType } from "react";
 import { useMemo } from "react";
 import type { RouteObject } from "react-router-dom";
-import { Navigate, useLocation, useRoutes } from "react-router-dom";
+import { Navigate, useLocation, useRoutes, useSearchParams } from "react-router-dom";
 
 import AccessMenuIndexPage from "@/pages/console/access/menu";
 import AccessPermissionIndexPage from "@/pages/console/access/permission";
@@ -279,6 +279,8 @@ function ConsoleRoutes() {
 
 export default function ConsoleLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const embedMode = searchParams.get("_embed") === "1";
   const { userInfo } = useAuthStore((state) => state.auth);
   const firstConsolePath = useMemo(
     () => getFirstConsoleMenuPath(userInfo?.menus ?? []),
@@ -299,6 +301,18 @@ export default function ConsoleLayout({ children }: { children?: React.ReactNode
   if (!hasConsoleRouteAccess(userInfo, currentPath) && currentPath !== firstConsolePath) {
     return <Navigate to={firstConsolePath} replace />;
   }
+
+  // Platform iframe embed: content only (no BuildingAI console sidebar / navbar).
+  if (embedMode) {
+    return (
+      <div className="bd-console-layout h-dvh overflow-hidden bg-background">
+        <ScrollArea className="h-full" viewportClassName="[&>div]:block!">
+          {children ? children : <ConsoleRoutes />}
+        </ScrollArea>
+      </div>
+    );
+  }
+
   return (
     <SidebarProvider storageKey="layout-console-sidebar" className="bd-console-layout h-dvh">
       <AppSidebar />

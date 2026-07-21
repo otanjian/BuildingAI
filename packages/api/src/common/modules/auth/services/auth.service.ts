@@ -330,6 +330,28 @@ export class AuthService extends BaseService<User> {
     }
 
     /**
+     * Password-less login by username for trusted platform SSO.
+     */
+    async loginByUsername(
+        username: string,
+        terminal: UserTerminalType = UserTerminal.PC,
+        ipAddress?: string,
+        userAgent?: string,
+    ) {
+        const user = await this.findOne({
+            where: { username },
+            relations: ["role", "permissions"],
+        });
+        if (!user) {
+            throw HttpErrorFactory.unauthorized(
+                "Invalid email, account, or phone number.",
+                BusinessCode.LOGIN_FAILED,
+            );
+        }
+        return this.loginByUser(user, terminal, ipAddress, userAgent);
+    }
+
+    /**
      * 通过 openid 查找用户，如果没有绑定则自动注册，有则直接登录
      *
      * @param openid 微信 openid

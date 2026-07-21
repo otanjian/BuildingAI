@@ -1,6 +1,6 @@
 import { useDocumentHead, useHeadRenderer, useRefreshUser } from "@buildingai/hooks";
 import { useWebExtensionDetailQuery } from "@buildingai/services/web";
-import { useAuthStore } from "@buildingai/stores";
+import { consumeTokenFromUrl } from "@buildingai/stores";
 import { ThemeProvider } from "@buildingai/ui/components/theme-provider";
 import { Toaster } from "@buildingai/ui/components/ui/sonner";
 import { TooltipProvider } from "@buildingai/ui/components/ui/tooltip";
@@ -8,42 +8,8 @@ import { AlertDialogProvider } from "@buildingai/ui/hooks/use-alert-dialog";
 import { parseExtensionIdentifierFromLocation } from "@buildingai/utils/extension";
 import { ReactNode, useMemo } from "react";
 
-/**
- * Synchronously extract and consume the base64-encoded auth token from URL search params (_t).
- * Runs at module load time (before React rendering) to ensure the token is available
- * in the store before any HTTP requests are fired by child components.
- */
-(function consumeTokenFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const encoded = params.get("_t");
-  if (!encoded) return;
-
-  try {
-    let token = atob(encoded);
-    if (token.includes("%")) {
-      token = decodeURIComponent(token);
-    }
-    if (token) {
-      useAuthStore.getState().authActions.setToken(token);
-    }
-  } catch {
-    try {
-      const token = decodeURIComponent(atob(encoded));
-      if (token) {
-        useAuthStore.getState().authActions.setToken(token);
-      }
-    } catch {
-      // ignore invalid token payload
-    }
-  }
-
-  params.delete("_t");
-  const cleanUrl =
-    window.location.pathname +
-    (params.toString() ? `?${params.toString()}` : "") +
-    window.location.hash;
-  window.history.replaceState({}, "", cleanUrl);
-})();
+// Keep extension embeds working when AuthGuard is not on the route tree
+consumeTokenFromUrl();
 
 export const ExtensionMainLayout = ({ children }: { children: ReactNode }) => {
   useHeadRenderer();

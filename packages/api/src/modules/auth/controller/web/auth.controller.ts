@@ -14,6 +14,7 @@ import { isDevelopment } from "@buildingai/utils";
 import { WebController } from "@common/decorators";
 import { ChangePasswordDto } from "@common/modules/auth/dto/change-password.dto";
 import { LoginDto } from "@common/modules/auth/dto/login.dto";
+import { PlatformSsoDto } from "@common/modules/auth/dto/platform-sso.dto";
 import { RegisterDto } from "@common/modules/auth/dto/register.dto";
 import { SendSmsCodeDto, SmsLoginDto } from "@common/modules/auth/dto/sms.dto";
 import { AuthService } from "@common/modules/auth/services/auth.service";
@@ -101,6 +102,26 @@ export class AuthWebController extends BaseController {
             ipAddress,
             userAgent,
         );
+    }
+
+    /**
+     * Trusted platform SSO: mint JWT for an existing username using shared secret.
+     * Used by aiplatform iframe auto-login (no password round-trip).
+     */
+    @Public()
+    @Post("platform-sso")
+    @BuildFileUrl(["**.avatar"])
+    async platformSso(
+        @Body() body: PlatformSsoDto,
+        @Headers("user-agent") userAgent?: string,
+        @Headers("x-real-ip") ipAddress?: string,
+    ) {
+        const expected = process.env.PLATFORM_SSO_SECRET;
+        if (!expected || body.secret !== expected) {
+            throw HttpErrorFactory.unauthorized("Invalid platform SSO secret");
+        }
+        const terminalType = body.terminal ? (body.terminal as typeof UserTerminal.PC) : UserTerminal.PC;
+        return this.authService.loginByUsername(body.username, terminalType, ipAddress, userAgent);
     }
 
     /**
