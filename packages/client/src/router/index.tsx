@@ -19,6 +19,7 @@ import DatasetsLayout from "@/pages/datasets/_layouts";
 import DatasetsDetailPage from "@/pages/datasets/detail";
 import InstallPage from "@/pages/install";
 
+import { usePlatformEmbedNavBridge } from "../helpers/platformEmbedNav";
 import ConsoleLayout from "../layouts/console";
 import DynamicHomePage from "../pages";
 import AppIframePage from "../pages/apps/[identifier]";
@@ -35,9 +36,15 @@ function RedirectLegacyEmbedChat() {
   return <Navigate to={query ? `/embed/chat?${query}` : "/embed/chat"} replace />;
 }
 
+/** Hosts platform iframe postMessage nav while reusing MainLayout. */
+function PlatformEmbedAwareLayout() {
+  usePlatformEmbedNavBridge();
+  return <MainLayout />;
+}
+
 export const router = createBrowserRouter([
   {
-    element: <MainLayout />,
+    element: <PlatformEmbedAwareLayout />,
     errorElement: <GlobalError />,
     children: [
       {
