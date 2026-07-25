@@ -11,6 +11,8 @@ import { buildWhere } from "@buildingai/utils";
 import { isEnabled } from "@buildingai/utils";
 import { Injectable, Logger } from "@nestjs/common";
 
+import { withTimeout } from "@common/utils/with-timeout";
+
 import {
     CreateAiMcpServerDto,
     ImportAiMcpServerDto,
@@ -18,6 +20,9 @@ import {
     UpdateAiMcpServerDto,
 } from "../dto/ai-mcp-server.dto";
 import { AiMcpToolService } from "./ai-mcp-tool.service";
+
+/** Max wait for MCP handshake + listTools during connection checks. */
+const MCP_CHECK_CONNECTION_TIMEOUT_MS = 15_000;
 
 /**
  * MCP服务配置服务
@@ -271,22 +276,31 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
         let errorMessage = "";
 
         try {
-            mcpClient = await createMcpClient({
-                transport: {
-                    type: mcpServer.communicationType === McpCommunicationType.SSE ? "sse" : "http",
-                    url: mcpServer.url,
-                    ...(mcpServer.headers && { headers: mcpServer.headers }),
-                },
-                name: mcpServer.name,
-            });
+            const connected = await withTimeout(
+                (async () => {
+                    const client = await createMcpClient({
+                        transport: {
+                            type:
+                                mcpServer.communicationType === McpCommunicationType.SSE
+                                    ? "sse"
+                                    : "http",
+                            url: mcpServer.url,
+                            ...(mcpServer.headers && { headers: mcpServer.headers }),
+                        },
+                        name: mcpServer.name,
+                    });
+                    const tools = await client.listTools();
+                    return { client, tools };
+                })(),
+                MCP_CHECK_CONNECTION_TIMEOUT_MS,
+                `MCP connection timed out after ${MCP_CHECK_CONNECTION_TIMEOUT_MS / 1000}s`,
+            );
 
+            mcpClient = connected.client;
             connectable = true;
 
-            // 获取原始工具列表
-            const tools = await mcpClient.listTools();
-
             // 更新工具列表
-            toolsInfo = await this.aiMcpToolService.updateToolsForMcpServer(id, tools);
+            toolsInfo = await this.aiMcpToolService.updateToolsForMcpServer(id, connected.tools);
 
             this.mcpLogger.log(`MCP服务 ${mcpServer.name} 连接成功，更新了 ${toolsInfo.total} 个工具`);
         } catch (error) {
