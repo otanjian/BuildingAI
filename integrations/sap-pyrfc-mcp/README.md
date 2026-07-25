@@ -1,10 +1,16 @@
 # SAP PyRFC MCP (BuildingAI)
 
-Connect BuildingAI chat to SAP via **PyRFC** and **SAP NW RFC SDK** (`libsapnwrfc`). Complements the ADT-based integration for arbitrary RFC/BAPI calls.
+Connect BuildingAI chat to SAP via **PyRFC** and **SAP NW RFC SDK** (`libsapnwrfc`). Complements the ADT-based `sap-abap` integration for arbitrary RFC/BAPI calls.
+
+Supports **dynamic multi-user connections** (same chat UX as sap-abap):
 
 ```
-BuildingAI Chat → streamable-http → supergateway :8200 → stdio → sap-pyrfc-mcp (Python) → SAP RFC
+BuildingAI Chat → streamable-http → sap-pyrfc-mcp :8200/mcp (single Python process)
+                                      ├─ sap_connect → connection_id
+                                      └─ call_rfc / read_table / … (require connection_id)
 ```
+
+Design: [`docs/design-dynamic-connections.md`](docs/design-dynamic-connections.md)
 
 ## Adaptability (PyRFC + ADT fallback)
 
@@ -25,13 +31,14 @@ BuildingAI Chat → streamable-http → supergateway :8200 → stdio → sap-pyr
 
 **Tool availability by backend:**
 
-| Tool | PyRFC | ADT fallback |
-|------|-------|--------------|
-| `healthcheck` | yes | yes |
-| `read_table` | yes | yes |
-| `run_query` | no | yes |
-| `call_rfc` | yes | no |
-| `get_rfc_function_description` | yes | no |
+| Tool | PyRFC | ADT fallback | Needs `connection_id` |
+|------|-------|--------------|------------------------|
+| `sap_connect` / `sap_disconnect` / `sap_whoami` | — | — | connect returns id |
+| `healthcheck` | yes | yes | optional |
+| `read_table` | yes | yes | **required** |
+| `run_query` | no | yes | **required** |
+| `call_rfc` | yes | no | **required** |
+| `get_rfc_function_description` | yes | no | **required** |
 
 ## When to use PyRFC vs ADT
 
@@ -42,10 +49,23 @@ BuildingAI Chat → streamable-http → supergateway :8200 → stdio → sap-pyr
 | ABAP source, transports, syntax check | No | Yes |
 | Requires NW RFC SDK | Yes | No |
 
+## Chat usage (multi-user)
+
+```text
+1) sap_connect(ashost, sysnr, user, password, client[, saprouter][, url])
+   → { connection_id, … }   # password never echoed
+
+2) read_table({ connection_id, table_name: "T001", … })
+   call_rfc({ connection_id, function_name: "BAPI_…", … })
+
+3) sap_disconnect({ connection_id })
+```
+
+Reuse `connection_id` across turns in the same conversation. Concurrent users each call `sap_connect` and keep their own id.
+
 ## Prerequisites
 
 - Python 3.10+ and `python3-venv` (Debian/Ubuntu: `sudo apt install python3-venv`)
-- Node.js 18+ (for supergateway HTTP bridge)
 - **SAP NW RFC SDK** from [SAP Support Portal](https://support.sap.com/en/product/connectors/nwrfcsdk.html) (S-user required to download)
 - SAP application user with RFC authorization (when connecting to a real system)
 
@@ -126,7 +146,7 @@ pip install pyrfc
    - **Name:** `SAP-PyRFC`
    - **Type:** Streamable HTTP
    - **URL:** `http://127.0.0.1:8200/mcp`
-3. Enable in chat and call `healthcheck`, `read_table`, `call_rfc`, `get_rfc_function_description`.
+3. Enable in chat, call `sap_connect`, then `read_table` / `call_rfc` with the returned `connection_id`.
 
 Root `mcp.json` includes the same URL for local Cursor use.
 

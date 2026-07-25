@@ -11,7 +11,7 @@ load_dotenv() {
     [[ "$line" =~ ^[[:space:]]*$ ]] && continue
     case "$line" in
       SAP_URL=*|SAP_USER=*|SAP_PASSWORD=*|SAP_CLIENT=*|SAP_LANGUAGE=*|SAP_SESSION_TYPE=*|\
-NODE_TLS_REJECT_UNAUTHORIZED=*|MCP_HOST=*|MCP_PORT=*|MCP_PATH=*|MCP_ABAP_ADT_REPO=*|MCP_ABAP_ADT_REF=*)
+NODE_TLS_REJECT_UNAUTHORIZED=*|MCP_HOST=*|MCP_PORT=*|MCP_PATH=*|MCP_SSE_PATH=*|MCP_MESSAGE_PATH=*|MCP_ABAP_ADT_REPO=*|MCP_ABAP_ADT_REF=*)
         key="${line%%=*}"
         val="${line#*=}"
         key="${key#"${key%%[![:space:]]*}"}"
@@ -100,7 +100,10 @@ fi
 
 MCP_HOST="${MCP_HOST:-127.0.0.1}"
 MCP_PORT="${MCP_PORT:-8100}"
-MCP_PATH="${MCP_PATH:-/mcp}"
+# BuildingAI's @ai-sdk/mcp HTTP (streamable-http) client hangs against supergateway's
+# streamableHttp mode; SSE is the compatible local transport.
+MCP_SSE_PATH="${MCP_SSE_PATH:-/sse}"
+MCP_MESSAGE_PATH="${MCP_MESSAGE_PATH:-/message}"
 
 export SAP_URL SAP_USER SAP_PASSWORD
 export SAP_CLIENT="${SAP_CLIENT:-}"
@@ -110,13 +113,14 @@ export NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-0}"
 
 STDIO_CMD="node $VENDOR/dist/index.js"
 
-echo "Starting Streamable HTTP gateway on http://${MCP_HOST}:${MCP_PORT}${MCP_PATH}"
-echo "Register in BuildingAI console: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
+echo "Starting SSE gateway on http://${MCP_HOST}:${MCP_PORT}${MCP_SSE_PATH}"
+echo "Register in BuildingAI console: type=sse, url=http://127.0.0.1:${MCP_PORT}${MCP_SSE_PATH}"
 
 exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
   npx -y supergateway@latest \
   --stdio "$STDIO_CMD" \
-  --outputTransport streamableHttp \
+  --outputTransport sse \
   --port "$MCP_PORT" \
-  --streamableHttpPath "$MCP_PATH" \
+  --ssePath "$MCP_SSE_PATH" \
+  --messagePath "$MCP_MESSAGE_PATH" \
   --logLevel info

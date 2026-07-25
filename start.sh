@@ -74,7 +74,7 @@ Examples:
   ./start.sh -f restart           # force-free ports, then start
 
 MCP endpoints (register in console when running):
-  SAP ADT:    http://127.0.0.1:8100/mcp
+  SAP ADT:    http://127.0.0.1:8100/sse
   SAP PyRFC:  http://127.0.0.1:8200/mcp
   ERPNext:    http://127.0.0.1:8000/... (external; not started by this script)
 
@@ -582,7 +582,7 @@ BuildingAI dev server
   API:  http://127.0.0.1:4090/
   Install wizard (first run): http://127.0.0.1:4090/install
 
-$(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/mcp")
+$(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/sse")
 $(should_start_sap_pyrfc && echo "  SAP PyRFC MCP: http://127.0.0.1:${SAP_PYRFC_PORT}/mcp")
 $(port_in_use "$ERPNEXT_PORT" && echo "  ERPNext MCP: http://127.0.0.1:${ERPNEXT_PORT}/ (detected)" || echo "  ERPNext MCP: port ${ERPNEXT_PORT} not listening (start ERPNext separately)")
 

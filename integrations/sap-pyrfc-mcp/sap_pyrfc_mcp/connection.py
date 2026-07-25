@@ -8,6 +8,7 @@ from typing import Any, Iterator, Literal
 
 from sap_pyrfc_mcp import adt_fallback
 from sap_pyrfc_mcp.config import (
+    AdtConnectionConfig,
     SapConnectionConfig,
     backend_mode,
     is_adt_configured,
@@ -43,10 +44,17 @@ def pyrfc_installed() -> bool:
     return _pyrfc_import_error is None
 
 
-def resolve_backend(preferred: str | None = None) -> BackendName:
+def resolve_backend(
+    preferred: str | None = None,
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+) -> BackendName:
     mode = (preferred or backend_mode()).lower()
-    rfc_ready = pyrfc_installed() and is_sap_configured()
-    adt_ready = adt_fallback.adt_available()
+    rfc_cfg = rfc if rfc is not None else (load_config() if is_sap_configured() else None)
+    adt_cfg = adt if adt is not None else (load_adt_config() if is_adt_configured() else None)
+    rfc_ready = pyrfc_installed() and bool(rfc_cfg and is_sap_configured(rfc_cfg))
+    adt_ready = bool(adt_cfg and is_adt_configured(adt_cfg) and adt_fallback.adt_available())
 
     if mode == "pyrfc":
         return "pyrfc" if rfc_ready else ("adt" if adt_ready else "none")
@@ -80,6 +88,10 @@ def pyrfc_status() -> dict[str, Any]:
         "connection_params": load_config().redacted() if configured else None,
         "adt_params": load_adt_config().redacted() if adt_configured else None,
         "local_hostname_warning": os.environ.get("SAP_LOCAL_HOSTNAME_WARNING"),
+        "note": (
+            "Prefer sap_connect in chat for multi-user dynamic credentials; "
+            ".env is only a local fallback for discovery/health."
+        ),
     }
 
 
@@ -89,17 +101,24 @@ def _require_pyrfc():
     return Connection
 
 
-def connection_error_message(backend: BackendName | None = None) -> str:
-    active = backend or resolve_backend()
+def connection_error_message(
+    backend: BackendName | None = None,
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+) -> str:
+    active = backend or resolve_backend(rfc=rfc, adt=adt)
     if active == "pyrfc":
         return ""
     if active == "adt":
         return adt_fallback.adt_error_message()
 
     _check_pyrfc_import()
-    if not _pyrfc_import_error and is_sap_configured():
+    rfc_ok = rfc is not None and is_sap_configured(rfc)
+    adt_ok = adt is not None and is_adt_configured(adt)
+    if not _pyrfc_import_error and rfc_ok:
         return ""
-    if is_adt_configured():
+    if adt_ok:
         return adt_fallback.adt_error_message()
 
     parts = []
@@ -108,20 +127,20 @@ def connection_error_message(backend: BackendName | None = None) -> str:
             f"PyRFC unavailable ({_pyrfc_import_error or 'not installed'}). "
             "Run ./install-nwrfcsdk.sh && ./install-pyrfc.sh"
         )
-    if not is_sap_configured() and not is_adt_configured():
+    if not rfc_ok and not adt_ok:
         parts.append(
-            "Configure SAP_ASHOST + credentials for RFC, or SAP_URL (ADT HTTPS) for fallback."
+            "Call sap_connect with ashost/sysnr (RFC) and/or url (ADT), plus user/password/client."
         )
     return " ".join(parts)
 
 
 @contextmanager
 def sap_connection(config: SapConnectionConfig | None = None) -> Iterator[Any]:
-    if resolve_backend() != "pyrfc":
-        raise RuntimeError(connection_error_message())
+    cfg = config or load_config()
+    if resolve_backend("pyrfc", rfc=cfg, adt=None) != "pyrfc":
+        raise RuntimeError(connection_error_message("none", rfc=cfg, adt=None))
 
     Connection = _require_pyrfc()
-    cfg = config or load_config()
     conn = Connection(**cfg.to_connection_params())
     try:
         yield conn
@@ -129,34 +148,61 @@ def sap_connection(config: SapConnectionConfig | None = None) -> Iterator[Any]:
         conn.close()
 
 
-def ping_sap() -> dict[str, Any]:
-    backend = resolve_backend()
+def ping_sap(
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+    preferred: str | None = None,
+) -> dict[str, Any]:
+    backend = resolve_backend(preferred, rfc=rfc, adt=adt)
     if backend == "adt":
-        return adt_fallback.AdtClient().ping()
-    with sap_connection() as conn:
-        result = conn.call("RFC_PING")
-        return {"backend": "pyrfc", "result": result}
+        cfg = adt or load_adt_config()
+        return adt_fallback.AdtClient(cfg).ping()
+    if backend == "pyrfc":
+        with sap_connection(rfc or load_config()) as conn:
+            result = conn.call("RFC_PING")
+            return {"backend": "pyrfc", "result": result}
+    raise RuntimeError(connection_error_message(backend, rfc=rfc, adt=adt))
 
 
-def call_rfc(function_name: str, parameters: dict[str, Any] | None = None) -> Any:
-    if resolve_backend() == "adt":
+def call_rfc(
+    function_name: str,
+    parameters: dict[str, Any] | None = None,
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+    preferred: str | None = None,
+) -> Any:
+    backend = resolve_backend(preferred, rfc=rfc, adt=adt)
+    if backend == "adt":
         raise RuntimeError(
             f"call_rfc({function_name}) requires PyRFC backend. "
             "Arbitrary RFC/BAPI calls are not available via ADT. "
-            "Install PyRFC (./install-pyrfc.sh) or use sap-abap-adt-mcp for ADT tools."
+            "Install PyRFC (./install-pyrfc.sh) or use sap-abap for ADT tools."
         )
+    if backend != "pyrfc":
+        raise RuntimeError(connection_error_message(backend, rfc=rfc, adt=adt))
     params = parameters or {}
-    with sap_connection() as conn:
+    with sap_connection(rfc or load_config()) as conn:
         return conn.call(function_name, **params)
 
 
-def get_function_description(function_name: str) -> dict[str, Any]:
-    if resolve_backend() == "adt":
+def get_function_description(
+    function_name: str,
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+    preferred: str | None = None,
+) -> dict[str, Any]:
+    backend = resolve_backend(preferred, rfc=rfc, adt=adt)
+    if backend == "adt":
         raise RuntimeError(
             "get_rfc_function_description requires PyRFC backend. "
-            "Use sap-abap-adt-mcp searchObject / DDIC tools via ADT instead."
+            "Use sap-abap ADT tools instead."
         )
-    with sap_connection() as conn:
+    if backend != "pyrfc":
+        raise RuntimeError(connection_error_message(backend, rfc=rfc, adt=adt))
+    with sap_connection(rfc or load_config()) as conn:
         description = conn.get_function_description(function_name)
         parameters = []
         for param in description.parameters:
@@ -187,14 +233,19 @@ def read_table(
     where: str = "",
     row_count: int = 20,
     row_skip: int = 0,
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+    preferred: str | None = None,
 ) -> dict[str, Any]:
-    backend = resolve_backend()
+    backend = resolve_backend(preferred, rfc=rfc, adt=adt)
     if backend == "none":
-        raise RuntimeError(connection_error_message())
+        raise RuntimeError(connection_error_message(backend, rfc=rfc, adt=adt))
     if backend == "adt":
         if row_skip:
             raise RuntimeError("ADT fallback does not support row_skip; refine SQL WHERE instead.")
-        return adt_fallback.AdtClient().read_table(
+        cfg = adt or load_adt_config()
+        return adt_fallback.AdtClient(cfg).read_table(
             table_name=table_name,
             fields=fields,
             where=where,
@@ -214,7 +265,7 @@ def read_table(
     if field_rows:
         params["FIELDS"] = field_rows
 
-    result = call_rfc("RFC_READ_TABLE", params)
+    result = call_rfc("RFC_READ_TABLE", params, rfc=rfc, adt=adt, preferred="pyrfc")
     columns = [item.get("FIELDNAME", "") for item in result.get("FIELDS", [])]
     rows = []
     for raw in result.get("DATA", []):
@@ -230,7 +281,16 @@ def read_table(
     }
 
 
-def run_query(sql_query: str, row_count: int = 20) -> dict[str, Any]:
-    if resolve_backend() != "adt":
+def run_query(
+    sql_query: str,
+    row_count: int = 20,
+    *,
+    rfc: SapConnectionConfig | None = None,
+    adt: AdtConnectionConfig | None = None,
+    preferred: str | None = None,
+) -> dict[str, Any]:
+    backend = resolve_backend(preferred, rfc=rfc, adt=adt)
+    if backend != "adt":
         raise RuntimeError("run_query is available only when active backend is ADT.")
-    return adt_fallback.AdtClient().run_query(sql_query, row_count=row_count)
+    cfg = adt or load_adt_config()
+    return adt_fallback.AdtClient(cfg).run_query(sql_query, row_count=row_count)

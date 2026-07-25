@@ -207,6 +207,72 @@ def load_adt_config() -> AdtConnectionConfig:
     )
 
 
+def build_rfc_config(
+    *,
+    ashost: str = "",
+    sysnr: str = "00",
+    client: str = "100",
+    user: str = "",
+    password: str = "",
+    language: str = "EN",
+    saprouter: str = "",
+    mshost: str = "",
+    msserv: str = "",
+    group: str = "",
+    r3name: str = "",
+) -> SapConnectionConfig:
+    return SapConnectionConfig(
+        ashost=(ashost or "").strip(),
+        sysnr=(sysnr or "00").strip() or "00",
+        client=(client or "100").strip() or "100",
+        user=(user or "").strip(),
+        password=password or "",
+        lang=(language or "EN").strip() or "EN",
+        saprouter=(saprouter or "").strip(),
+        mshost=(mshost or "").strip(),
+        msserv=(msserv or "").strip(),
+        group=(group or "").strip(),
+        r3name=(r3name or "").strip(),
+    )
+
+
+def build_adt_config(
+    *,
+    url: str = "",
+    user: str = "",
+    password: str = "",
+    client: str = "100",
+    language: str = "EN",
+    session_type: str = "stateless",
+    tls_verify: bool = False,
+    timeout: int = 60,
+) -> AdtConnectionConfig:
+    return AdtConnectionConfig(
+        url=(url or "").strip().rstrip("/"),
+        user=(user or "").strip(),
+        password=password or "",
+        client=(client or "100").strip() or "100",
+        language=(language or "EN").strip() or "EN",
+        session_type=(session_type or "stateless").strip() or "stateless",
+        tls_verify=bool(tls_verify),
+        timeout=int(timeout) if timeout else 60,
+    )
+
+
+def derive_adt_url_from_rfc(ashost: str, sysnr: str = "00", https: bool = True) -> str:
+    """Best-effort ADT URL when only RFC host/sysnr is provided."""
+    host = (ashost or "").strip()
+    if not host:
+        return ""
+    try:
+        sn = int(sysnr or "00")
+    except ValueError:
+        sn = 0
+    port = 44300 + sn if https else 8000 + sn
+    scheme = "https" if https else "http"
+    return f"{scheme}://{host}:{port}"
+
+
 def backend_mode() -> BackendMode:
     mode = _env("SAP_BACKEND", "auto").lower()
     if mode in ("pyrfc", "adt", "auto"):
