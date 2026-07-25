@@ -44,7 +44,7 @@ export const GenericTool = memo(function GenericTool({
   }
 
   return (
-    <Tool>
+    <Tool defaultOpen={false}>
       <ToolHeader state={toolPart.state as never} title={toolName} type="tool-invocation" />
       <ToolContent>
         <ToolInput input={toolPart.input} />
