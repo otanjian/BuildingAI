@@ -63,7 +63,7 @@ export const CONSOLE_MCP_TOOL_CATALOG: ConsoleMcpToolDefinition[] = [
                 name: { type: "string" },
                 description: { type: "string" },
                 avatar: { type: "string" },
-                createMode: { type: "string", enum: ["direct", "coze", "dify"] },
+                createMode: { type: "string", enum: ["direct", "coze", "dify", "opencode"] },
                 modelConfig: { type: "object" },
                 thirdPartyIntegration: { type: "object" },
                 tagIds: { type: "array", items: { type: "string" } },

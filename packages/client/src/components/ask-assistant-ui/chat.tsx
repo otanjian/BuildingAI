@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { PromptInput } from "./components/input/prompt-input";
 import { Suggestions } from "./components/input/suggestions";
 import { MessageItem } from "./components/message/message-item";
+import { StreamingIndicator } from "./components/message/streaming-indicator";
 import { ModelSelector } from "./components/model-selector";
 import { useAssistantContext } from "./context";
 
@@ -185,8 +186,16 @@ const InputArea = memo(function InputArea({
   footerText?: string;
 }) {
   const { websiteConfig } = useConfigStore((state) => state.config);
-  const { suggestions, status, textareaRef, isLoading, onSend, onStop, selectedModelId } =
-    useAssistantContext();
+  const {
+    suggestions,
+    status,
+    streamingMessageId,
+    textareaRef,
+    isLoading,
+    onSend,
+    onStop,
+    selectedModelId,
+  } = useAssistantContext();
   const { id } = useParams<{ id: string }>();
   const { isLogin } = useAuthStore((state) => state.authActions);
   const location = useLocation();
@@ -238,6 +247,9 @@ const InputArea = memo(function InputArea({
         {!hasMessages && suggestions.length > 0 && !isLoading && (
           <Suggestions suggestions={suggestions} onSuggestionClick={handleSuggestionClick} />
         )}
+        {(status === "submitted" || status === "streaming") ? (
+          <StreamingIndicator />
+        ) : null}
         <PromptInput
           textareaRef={textareaRef}
           status={status}

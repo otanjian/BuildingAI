@@ -101,7 +101,7 @@ export class AgentsWebController {
     }
 
     @Get(":id")
-    @BuildFileUrl(["**.avatar"])
+    @BuildFileUrl(["**.avatar", "**.chatAvatar"])
     async detail(@Playground() user: UserPlayground, @Param("id") id: string): Promise<Agent> {
         return this.agentsService.getAgentDetail(user, id);
     }

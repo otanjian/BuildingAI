@@ -9,11 +9,6 @@ import {
   MessageToolbar as AIMessageToolbar,
 } from "@buildingai/ui/components/ai-elements/message";
 import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "@buildingai/ui/components/ai-elements/reasoning";
-import {
   Source,
   Sources,
   SourcesContent,
@@ -22,20 +17,21 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@buildingai/ui/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Button } from "@buildingai/ui/components/ui/button";
-import type { ReasoningUIPart, UIMessage } from "ai";
+import type { UIMessage } from "ai";
 import { AlertCircleIcon, Bot } from "lucide-react";
 import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { useOptionalAssistantContext } from "../../context";
 import { useSmoothText } from "../../hooks/use-smooth-text";
 import { convertUIMessageToMessage } from "../../libs/message-converter";
-import { isReasoningPartStreaming } from "../../libs/reasoning-streaming";
 import { InlineCitation } from "../tools/inline-citation";
 import type { KnowledgeReferenceItem } from "../tools/knowledge-references";
 // import { FileParseQueue } from "./file-parse-queue";
 import { MessageActions } from "./message-actions";
 import { MessageBranch } from "./message-branch";
 import { FeedbackCard, MessageFeedback } from "./message-feedback";
+import { MessageArtifacts } from "./message-artifacts";
+import { MessageReasoning } from "./message-reasoning";
 import { MessageTools } from "./message-tools";
 import { StreamingIndicator } from "./streaming-indicator";
 import { UserMessageActions } from "./user-message-actions";
@@ -391,8 +387,12 @@ export const Message = memo(function Message({
   const followUpMessageId = resolvedMessageId || message.id;
   const followUpClientMessageId = message.id;
   const isCurrentTailMessage = assistantContext
-    ? assistantContext.displayMessages[assistantContext.displayMessages.length - 1]?.id ===
-      message.id
+    ? (() => {
+        const tail = assistantContext.displayMessages[assistantContext.displayMessages.length - 1];
+        return Boolean(
+          tail && (tail.id === message.id || tail.message.id === message.id || isLast),
+        );
+      })()
     : isLast;
   const followUpSignature = useMemo(
     () => getFollowUpSignature(followUpSuggestions),
@@ -538,20 +538,9 @@ export const Message = memo(function Message({
       {/* {isAssistant && (
         <FileParseQueue messageId={message.id} parts={message.parts} isStreaming={isStreaming} />
       )} */}
-      {isAssistant &&
-        message.parts
-          ?.filter((part): part is ReasoningUIPart => part.type === "reasoning")
-          .filter((part) => part.text && part.text.trim().length > 0)
-          .map((part, index, arr) => (
-            <Reasoning
-              key={`${message.id}-reasoning-${index}`}
-              defaultOpen={isReasoningPartStreaming(message.parts, index, isStreaming)}
-              isStreaming={isReasoningPartStreaming(message.parts, index, isStreaming)}
-            >
-              <ReasoningTrigger />
-              <ReasoningContent>{part.text || ""}</ReasoningContent>
-            </Reasoning>
-          ))}
+      {isAssistant && message.parts && (
+        <MessageReasoning messageId={message.id} parts={message.parts} isStreaming={isStreaming} />
+      )}
 
       {isAssistant && sources && sources.length > 0 && (
         <Sources>
@@ -651,39 +640,6 @@ export const Message = memo(function Message({
           </AIMessageContent>
         )}
 
-        {isAssistant && (
-          <AIMessageToolbar className="mt-2 min-w-0">
-            {onSwitchBranch && (
-              <MessageBranch
-                branchNumber={branchNumber}
-                branchCount={branchCount}
-                branches={branches}
-                onSwitchBranch={onSwitchBranch}
-                disabled={isProcessing}
-              />
-            )}
-            {!isProcessing && (
-              <MessageActions
-                messageId={resolvedMessageId}
-                liked={liked}
-                disliked={disliked}
-                content={content}
-                errorMessage={errorMessage}
-                usage={usage}
-                conversationContext={showConversationContext ? conversationContext : undefined}
-                userConsumedPower={userConsumedPower}
-                provider={provider}
-                modelName={modelName}
-                onLikeChange={onLikeChange}
-                onDislikeChange={onDislikeChange}
-                onRetry={onRetry}
-                onShowFeedbackCard={setShowFeedbackCard}
-                onSpeak={onSpeak}
-                extraActions={extraActions}
-              />
-            )}
-          </AIMessageToolbar>
-        )}
         {isAssistant && showFeedbackCard && onDislikeChange && (
           <FeedbackCard
             onSelectReason={async (reason) => {
@@ -697,6 +653,40 @@ export const Message = memo(function Message({
           />
         )}
       </div>
+      {isAssistant && message.parts && <MessageArtifacts parts={message.parts} />}
+      {isAssistant && (
+        <AIMessageToolbar className="mt-2 min-w-0">
+          {onSwitchBranch && (
+            <MessageBranch
+              branchNumber={branchNumber}
+              branchCount={branchCount}
+              branches={branches}
+              onSwitchBranch={onSwitchBranch}
+              disabled={isProcessing}
+            />
+          )}
+          {!isProcessing && (
+            <MessageActions
+              messageId={resolvedMessageId}
+              liked={liked}
+              disliked={disliked}
+              content={content}
+              errorMessage={errorMessage}
+              usage={usage}
+              conversationContext={showConversationContext ? conversationContext : undefined}
+              userConsumedPower={userConsumedPower}
+              provider={provider}
+              modelName={modelName}
+              onLikeChange={onLikeChange}
+              onDislikeChange={onDislikeChange}
+              onRetry={onRetry}
+              onShowFeedbackCard={setShowFeedbackCard}
+              onSpeak={onSpeak}
+              extraActions={extraActions}
+            />
+          )}
+        </AIMessageToolbar>
+      )}
       {isAssistant && (
         <MessageFeedback
           open={feedbackDialogOpen}

@@ -19,10 +19,10 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { UploadDropzone, UploadRoot, UploadTrigger } from "@buildingai/ui/components/upload";
 import { cn } from "@buildingai/ui/lib/utils";
-import { ChevronsLeftRight, Loader2, Pencil, UploadIcon, X } from "lucide-react";
+import { ChevronsLeftRight, Loader2, Pencil, Terminal, UploadIcon, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 
-export type CreationMethod = "direct" | "coze" | "dify";
+export type CreationMethod = "direct" | "coze" | "dify" | "opencode";
 
 export interface AgentEditFormValues {
   name: string;
@@ -71,12 +71,19 @@ const creationMethods: {
     description: "从第三方平台导入智能体",
     icon: <SvgIcons.dify className="size-4" />,
   },
+  {
+    value: "opencode",
+    label: "OpenCode智能体",
+    description: "委托本机 OpenCode 执行并产出报告",
+    icon: <Terminal className="size-4" />,
+  },
 ];
 
-const creationMethodConfigKeyMap: Record<CreationMethod, "direct" | "coze" | "dify"> = {
+const creationMethodConfigKeyMap: Record<CreationMethod, CreationMethod> = {
   direct: "direct",
   coze: "coze",
   dify: "dify",
+  opencode: "opencode",
 };
 
 export function AgentModal({
@@ -160,6 +167,20 @@ export function AgentModal({
             form.creationMethod === "direct" && selectedModelId
               ? { id: selectedModelId }
               : undefined,
+          thirdPartyIntegration:
+            form.creationMethod === "opencode"
+              ? {
+                  provider: "opencode",
+                  baseURL: "http://127.0.0.1:4096",
+                  useExternalConversation: true,
+                  extendedConfig: {
+                    provider: "opencode",
+                    workspace: "/home/opencodework",
+                    artifactDirTemplate: "artifacts/{conversationId}",
+                    model: "volcengine/ark-code-latest",
+                  },
+                }
+              : undefined,
         });
         onOpenChange(false);
         onSuccess?.(agent);
@@ -198,7 +219,7 @@ export function AgentModal({
                 暂无可创建的智能体类型
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {displayCreationMethods.map((method) => (
                   <button
                     key={method.value}

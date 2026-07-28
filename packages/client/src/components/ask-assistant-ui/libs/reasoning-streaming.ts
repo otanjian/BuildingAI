@@ -1,6 +1,12 @@
-import type { UIMessage } from "ai";
+import type { ReasoningUIPart, UIMessage } from "ai";
 
 type MessagePart = NonNullable<UIMessage["parts"]>[number];
+
+export type PartitionedReasoningPart = {
+  part: ReasoningUIPart;
+  /** Index among all reasoning parts in the message (including empty). */
+  reasoningIndex: number;
+};
 
 /**
  * Reasoning UI should stop showing "Thinking..." once the model has moved on to
@@ -46,4 +52,48 @@ export function isReasoningPartStreaming(
   });
 
   return !hasActivityAfterReasoning;
+}
+
+/**
+ * Split reasoning parts so finished thoughts can be collapsed behind a single toggle.
+ */
+export function partitionReasoningPartsForDisplay(
+  parts: UIMessage["parts"] | undefined,
+  messageIsStreaming: boolean,
+): {
+  completed: PartitionedReasoningPart[];
+  active: PartitionedReasoningPart[];
+  shouldCollapseCompleted: boolean;
+} {
+  const reasoningEntries = (parts ?? [])
+    .map((part, index) => ({ part, index }))
+    .filter(
+      (entry): entry is { part: ReasoningUIPart; index: number } => entry.part.type === "reasoning",
+    );
+
+  const completed: PartitionedReasoningPart[] = [];
+  const active: PartitionedReasoningPart[] = [];
+
+  reasoningEntries.forEach((entry, reasoningIndex) => {
+    if (!entry.part.text?.trim()) {
+      return;
+    }
+
+    const item: PartitionedReasoningPart = {
+      part: entry.part,
+      reasoningIndex,
+    };
+
+    if (isReasoningPartStreaming(parts, reasoningIndex, messageIsStreaming)) {
+      active.push(item);
+    } else {
+      completed.push(item);
+    }
+  });
+
+  return {
+    completed,
+    active,
+    shouldCollapseCompleted: completed.length > 0,
+  };
 }

@@ -35,6 +35,7 @@ import type { AgentChatRecordWithUser } from "../../services/agent-chat-record.s
 import { AgentChatRecordService } from "../../services/agent-chat-record.service";
 import { AgentVoiceService } from "../../services/agent-voice.service";
 import { AgentsService } from "../../services/agents.service";
+import { OpencodeArtifactService } from "../../services/opencode-artifact.service";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
@@ -45,6 +46,7 @@ export class AgentChatWebController {
         private readonly agentChatMessageService: AgentChatMessageService,
         private readonly agentChatMessageFeedbackService: AgentChatMessageFeedbackService,
         private readonly agentsService: AgentsService,
+        private readonly opencodeArtifactService: OpencodeArtifactService,
     ) {}
 
     @AgentPublicAccess({ route: "chat-messages", targetPath: ":id/chat/stream" })
@@ -397,6 +399,50 @@ export class AgentChatWebController {
             operatorId: playground.id,
             operatorName: playground.username,
         });
+    }
+
+    /**
+     * Serve OpenCode L2 HTML/report artifacts for a conversation (iframe preview).
+     * Example: GET /ai-agents/:id/conversations/:conversationId/artifacts/index.html
+     */
+    @Get(":id/conversations/:conversationId/artifacts/*")
+    @AgentPublicAccess({
+        route: "artifacts/:conversationId/*",
+        targetPath: ":id/conversations/:conversationId/artifacts/*",
+        method: "GET",
+    })
+    async getConversationArtifact(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+        @Res() res: Response,
+    ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const marker = `/artifacts/`;
+        const urlPath = (req.originalUrl || req.url || "").split("?")[0] ?? "";
+        const markerIndex = urlPath.lastIndexOf(marker);
+        const relativePath =
+            markerIndex >= 0
+                ? decodeURIComponent(urlPath.slice(markerIndex + marker.length))
+                : "";
+        if (!relativePath) {
+            throw HttpErrorFactory.badRequest("产物路径不能为空");
+        }
+
+        const file = await this.opencodeArtifactService.openArtifactFile({
+            agentId,
+            conversationId,
+            userId: playground.id,
+            anonymousIdentifier,
+            relativePath,
+        });
+
+        res.setHeader("Content-Type", file.contentType);
+        res.setHeader("Content-Length", String(file.size));
+        res.setHeader("Cache-Control", "private, max-age=60");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        file.stream.pipe(res);
     }
 
     private extractAnonymousIdentifier(req: Request): string | undefined {

@@ -38,6 +38,7 @@ import {
   MessageItem,
   PromptInput,
   type PromptInputHiddenTool,
+  StreamingIndicator,
 } from "@/components/ask-assistant-ui";
 
 import { useEmbedFormContext, useEmbedHostDocumentClass, useHasEmbedFormContext } from "./_hooks/use-embed-form-context";
@@ -658,6 +659,9 @@ export default function PublishChatPage() {
 
                 <div className="bg-background relative z-10 shrink-0">
                   <div className="mx-auto w-full max-w-3xl px-0 py-2 sm:px-4 sm:py-3">
+                    {(status === "submitted" || status === "streaming") ? (
+                      <StreamingIndicator />
+                    ) : null}
                     <PromptInput
                       textareaRef={undefined}
                       status={status}

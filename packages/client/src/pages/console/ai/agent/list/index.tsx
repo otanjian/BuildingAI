@@ -61,12 +61,14 @@ export const AgentCreateMode = {
   DIRECT: "direct",
   COZE: "coze",
   DIFY: "dify",
+  OPENCODE: "opencode",
 } as const;
 
 const CREATE_MODE_MAP: Record<string, string> = {
   [AgentCreateMode.DIRECT]: "系统智能体",
   [AgentCreateMode.COZE]: "Coze智能体",
   [AgentCreateMode.DIFY]: "Dify智能体",
+  [AgentCreateMode.OPENCODE]: "OpenCode智能体",
 };
 
 const PAGE_SIZE = 30;

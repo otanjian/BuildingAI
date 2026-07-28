@@ -3,116 +3,17 @@ import { usePromptInputAttachments } from "@buildingai/ui/components/ai-elements
 import type { FileUIPart } from "ai";
 import { useCallback, useMemo } from "react";
 
-const FILE_TYPES = [
-  { type: "image" as const, accept: "image/*", feature: "vision", label: "图片" },
-  { type: "video" as const, accept: "video/*", feature: "video", label: "视频" },
-  { type: "audio" as const, accept: "audio/*", feature: "audio", label: "音频" },
-  {
-    type: "file" as const,
-    accept: ".pdf,.docx,.doc,.ppt,.pptx,.md,.txt,.xlsx,.csv",
-    feature: undefined,
-    label: "文件",
-  },
-] as const;
+import {
+  FILE_TYPES,
+  type FileType,
+  type FileValidationResult,
+  getAvailableFileTypes,
+  resolveAvailableFileTypes,
+  validateFilesAgainstTypes,
+} from "./file-upload-types";
 
-export type FileType = (typeof FILE_TYPES)[number]["type"];
-
-export function getAvailableFileTypes(features?: string[]): FileType[] {
-  const availableTypes: FileType[] = ["file"];
-
-  if (!features?.length) {
-    return availableTypes;
-  }
-
-  FILE_TYPES.forEach((fileType) => {
-    if (fileType.feature && features.includes(fileType.feature)) {
-      availableTypes.push(fileType.type);
-    }
-  });
-
-  return availableTypes;
-}
-
-/**
- * Result of file validation
- */
-export interface FileValidationResult {
-  /** Files that passed validation */
-  validFiles: File[];
-  /** Files that failed validation */
-  invalidFiles: File[];
-  /** Human-readable labels of unsupported file types */
-  unsupportedTypeLabels: string[];
-}
-
-/**
- * Validate files against available file types
- * @param files Files to validate
- * @param availableTypes Available file types based on model features
- * @returns Validation result with valid/invalid files and unsupported type labels
- */
-export function validateFilesAgainstTypes(
-  files: File[],
-  availableTypes: FileType[],
-): FileValidationResult {
-  const validFiles: File[] = [];
-  const invalidFiles: File[] = [];
-  const unsupportedTypeSet = new Set<string>();
-
-  for (const file of files) {
-    const mimeType = file.type;
-    let isValid = false;
-
-    for (const type of availableTypes) {
-      const fileTypeConfig = FILE_TYPES.find((ft) => ft.type === type);
-      if (!fileTypeConfig) continue;
-
-      const { accept } = fileTypeConfig;
-      // Check wildcard patterns like "image/*"
-      if (accept.endsWith("/*")) {
-        const prefix = accept.slice(0, -1); // "image/"
-        if (mimeType.startsWith(prefix)) {
-          isValid = true;
-          break;
-        }
-      } else {
-        // Check file extensions like ".docx,.ppt"
-        const extensions = accept.split(",").map((ext) => ext.trim().toLowerCase());
-        const fileName = file.name.toLowerCase();
-        if (extensions.some((ext) => fileName.endsWith(ext))) {
-          isValid = true;
-          break;
-        }
-      }
-    }
-
-    if (isValid) {
-      validFiles.push(file);
-    } else {
-      invalidFiles.push(file);
-      // Determine which type this file belongs to
-      for (const ft of FILE_TYPES) {
-        if (ft.accept.endsWith("/*")) {
-          const prefix = ft.accept.slice(0, -1);
-          if (mimeType.startsWith(prefix)) {
-            unsupportedTypeSet.add(ft.label);
-            break;
-          }
-        }
-      }
-      // If no match found, it's a generic file
-      if (unsupportedTypeSet.size === 0 || !mimeType) {
-        unsupportedTypeSet.add("文件");
-      }
-    }
-  }
-
-  return {
-    invalidFiles,
-    unsupportedTypeLabels: Array.from(unsupportedTypeSet),
-    validFiles,
-  };
-}
+export type { FileType, FileValidationResult };
+export { getAvailableFileTypes, resolveAvailableFileTypes, validateFilesAgainstTypes };
 
 /**
  * @param multiple Allow multiple file selection
@@ -128,13 +29,10 @@ export function useFileUpload(
   const attachments = usePromptInputAttachments();
 
   const availableFileTypes = useMemo(
-    () => supportedUploadTypesOverride ?? getAvailableFileTypes(features),
+    () => resolveAvailableFileTypes(features, supportedUploadTypesOverride),
     [features, supportedUploadTypesOverride],
   );
 
-  /**
-   * Validate files against current model's supported types
-   */
   const validateFiles = useCallback(
     (files: File[]): FileValidationResult => {
       return validateFilesAgainstTypes(files, availableFileTypes);
@@ -147,7 +45,6 @@ export function useFileUpload(
   const handleFileSelect = useCallback(() => {
     if (availableFileTypes.length === 0) return;
 
-    // 组合所有可用文件类型的 accept 属性
     const acceptList: string[] = [];
     availableFileTypes.forEach((type) => {
       const fileType = FILE_TYPES.find((ft) => ft.type === type);

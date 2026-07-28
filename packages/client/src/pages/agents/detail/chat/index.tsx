@@ -32,6 +32,7 @@ import {
   MessageItem,
   PromptInput,
   type PromptInputHiddenTool,
+  StreamingIndicator,
   useAssistantContext,
 } from "@/components/ask-assistant-ui";
 
@@ -513,6 +514,9 @@ function ChatContent({
         <div className="bg-background sticky bottom-0 z-10">
           <InfiniteScrollTopScrollButton className="-top-12 z-20" />
           <div className="mx-auto w-full max-w-3xl px-4 py-3">
+            {(status === "submitted" || status === "streaming") ? (
+              <StreamingIndicator />
+            ) : null}
             <PromptInput
               textareaRef={textareaRef}
               status={status}

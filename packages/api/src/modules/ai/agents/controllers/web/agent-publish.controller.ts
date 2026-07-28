@@ -14,6 +14,10 @@ import { UpdatePublishConfigDto } from "../../dto/web/publish/update-publish-con
 import { AgentBillingHandler } from "../../handlers/agent-billing";
 import { AgentChatRecordService } from "../../services/agent-chat-record.service";
 import { AgentsService } from "../../services/agents.service";
+import {
+    deriveUploadTypesFromModelFeatures,
+    type UploadMediaType,
+} from "../../utils/derive-upload-types";
 
 const SENSITIVE_KEYS = [
     "createBy",
@@ -87,7 +91,11 @@ export class AgentPublishWebController {
             }
         }
 
-        if (agent.createMode === "coze" || agent.createMode === "dify") {
+        if (
+            agent.createMode === "coze" ||
+            agent.createMode === "dify" ||
+            agent.createMode === "opencode"
+        ) {
             const agentConfig = await this.agentConfigService.getConfig();
             const currentType = agentConfig.createTypes.find(
                 (item) => item.key === agent.createMode,
@@ -98,12 +106,7 @@ export class AgentPublishWebController {
                     tokens: 1000,
                 };
             }
-            const extConfig = (agent.thirdPartyIntegration as Record<string, any> | undefined)
-                ?.extendedConfig as Record<string, any> | undefined;
-            const syncedTypes = Array.isArray(extConfig?.supportedUploadTypes)
-                ? (extConfig.supportedUploadTypes as string[])
-                : ["file"];
-            out.uploadCapability = { supportedUploadTypes: syncedTypes };
+            // uploadCapability is set after chat model features are loaded (see below)
         }
 
         const chatModelId = agent.modelConfig?.id;
@@ -173,6 +176,42 @@ export class AgentPublishWebController {
                 out.estimatedUsage = {
                     tokensPerRound: estimatedTokensPerRound,
                     powerPerRound: estimatedPowerPerRound,
+                };
+            }
+        }
+
+        if (
+            agent.createMode === "coze" ||
+            agent.createMode === "dify" ||
+            agent.createMode === "opencode"
+        ) {
+            const extConfig = (agent.thirdPartyIntegration as Record<string, any> | undefined)
+                ?.extendedConfig as Record<string, any> | undefined;
+            const explicitTypes = Array.isArray(extConfig?.supportedUploadTypes)
+                ? (extConfig.supportedUploadTypes as string[])
+                : null;
+            const chatFeatures =
+                (
+                    (out.models as Array<{ role?: string; features?: string[] }> | undefined)?.find(
+                        (m) => m.role === "chat",
+                    )?.features
+                ) ??
+                [];
+
+            if (agent.createMode === "opencode") {
+                const fromFeatures = deriveUploadTypesFromModelFeatures(chatFeatures);
+                const supportedUploadTypes = explicitTypes?.length
+                    ? Array.from(
+                          new Set<UploadMediaType>([
+                              ...(explicitTypes as UploadMediaType[]),
+                              ...fromFeatures,
+                          ]),
+                      )
+                    : fromFeatures;
+                out.uploadCapability = { supportedUploadTypes };
+            } else {
+                out.uploadCapability = {
+                    supportedUploadTypes: explicitTypes?.length ? explicitTypes : ["file"],
                 };
             }
         }

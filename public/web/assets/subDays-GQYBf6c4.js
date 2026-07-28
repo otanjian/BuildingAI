@@ -1,0 +1,1 @@
+import{n as e}from"./calendar-BwU_jsXR.js";function t(t,n,r){return e(t,-n,r)}export{t};

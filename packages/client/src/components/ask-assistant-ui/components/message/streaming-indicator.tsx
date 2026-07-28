@@ -1,27 +1,26 @@
+import { cn } from "@buildingai/ui/lib/utils";
 import { memo } from "react";
 
-export const StreamingIndicator = memo(function StreamingIndicator() {
+type StreamingIndicatorProps = {
+  className?: string;
+};
+
+/** Compact animated cue shown while an assistant turn is still in progress. */
+export const StreamingIndicator = memo(function StreamingIndicator({
+  className,
+}: StreamingIndicatorProps) {
   return (
-    <div className="flex items-center p-2">
-      <div
-        className="bg-foreground size-2 rounded-full"
-        style={{
-          animation: "streaming-pulse 1.2s ease-in-out infinite",
-          transformOrigin: "center",
-        }}
-      />
-      <style>{`
-        @keyframes streaming-pulse {
-          0%, 100% {
-            transform: scale(1);
-            opacity: 1;
-          }
-          50% {
-            transform: scale(1.6);
-            opacity: 0.6;
-          }
-        }
-      `}</style>
+    <div
+      className={cn(
+        "text-muted-foreground flex items-center gap-2 px-1 py-2 text-sm",
+        className,
+      )}
+      role="status"
+      aria-live="polite"
+      aria-label="正在处理"
+    >
+      <span className="bg-foreground size-1.5 shrink-0 animate-pulse rounded-full" aria-hidden />
+      <span className="animate-pulse">正在处理...</span>
     </div>
   );
 });

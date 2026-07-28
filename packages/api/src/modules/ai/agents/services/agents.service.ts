@@ -83,17 +83,43 @@ export class AgentsService extends BaseService<Agent> {
 
         await this.checkNameUniqueness(name);
 
+        let thirdPartyIntegration = (dto.thirdPartyIntegration || {}) as Record<string, unknown>;
+        if (createMode === "opencode") {
+            const extended = {
+                ...((thirdPartyIntegration.extendedConfig as Record<string, unknown>) || {}),
+                provider: "opencode",
+                workspace:
+                    (thirdPartyIntegration.extendedConfig as Record<string, unknown> | undefined)
+                        ?.workspace ||
+                    process.env.OPENCODE_WORKSPACE ||
+                    "/home/opencodework",
+                artifactDirTemplate:
+                    (thirdPartyIntegration.extendedConfig as Record<string, unknown> | undefined)
+                        ?.artifactDirTemplate || "artifacts/{conversationId}",
+            };
+            thirdPartyIntegration = {
+                ...thirdPartyIntegration,
+                provider: "opencode",
+                baseURL:
+                    (thirdPartyIntegration.baseURL as string | undefined) ||
+                    process.env.OPENCODE_BASE_URL ||
+                    "http://127.0.0.1:4096",
+                useExternalConversation: true,
+                extendedConfig: extended,
+            };
+        }
+
         const agent = this.agentRepository.create({
             name,
             description: description || undefined,
             avatar: dto.avatar || this.defaultAvatar,
             createMode,
             modelConfig: createMode === "direct" ? dto.modelConfig : undefined,
-            thirdPartyIntegration: dto.thirdPartyIntegration || {},
+            thirdPartyIntegration,
             showContext: true,
             showReference: true,
             enableWebSearch: false,
-            enableFileUpload: false,
+            enableFileUpload: createMode === "opencode",
             chatAvatarEnabled: false,
             autoQuestions:
                 createMode === "direct"
@@ -213,6 +239,24 @@ export class AgentsService extends BaseService<Agent> {
         }
         if (agent.createMode === "dify" && dto.thirdPartyIntegration !== undefined) {
             this.difyAgentSyncService.normalizeConfig(agent);
+        }
+        if (agent.createMode === "opencode" && dto.thirdPartyIntegration !== undefined) {
+            const normalized = {
+                ...(agent.thirdPartyIntegration ?? {}),
+                provider: "opencode" as const,
+                extendedConfig: {
+                    ...(agent.thirdPartyIntegration?.extendedConfig ?? {}),
+                    provider: "opencode",
+                    workspace:
+                        agent.thirdPartyIntegration?.extendedConfig?.workspace ||
+                        process.env.OPENCODE_WORKSPACE ||
+                        "/home/opencodework",
+                    artifactDirTemplate:
+                        agent.thirdPartyIntegration?.extendedConfig?.artifactDirTemplate ||
+                        "artifacts/{conversationId}",
+                },
+            };
+            agent.thirdPartyIntegration = normalized;
         }
 
         await this.syncAgentTags(agent, dto.tagIds);

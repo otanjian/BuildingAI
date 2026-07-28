@@ -45,9 +45,11 @@ import { CozeAgentSyncService } from "./integrations/coze-agent-sync.service";
 import { CozeApiService } from "./integrations/coze-api.service";
 import { DifyAgentSyncService } from "./integrations/dify-agent-sync.service";
 import { DifyApiService } from "./integrations/dify-api.service";
+import { OpencodeApiService } from "./integrations/opencode-api.service";
 import { AgentAliasRewriteMiddleware } from "./middleware/agent-alias-rewrite.middleware";
 import { CozeChatProvider } from "./providers/coze-chat.provider";
 import { DifyChatProvider } from "./providers/dify-chat.provider";
+import { OpencodeChatProvider } from "./providers/opencode-chat.provider";
 import { AgentAnnotationService } from "./services/agent-annotation.service";
 import { AgentChatCompletionService } from "./services/agent-chat-completion.service";
 import { AgentChatMessageService } from "./services/agent-chat-message.service";
@@ -56,6 +58,7 @@ import { AgentChatRecordService } from "./services/agent-chat-record.service";
 import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
+import { OpencodeArtifactService } from "./services/opencode-artifact.service";
 @Module({
     imports: [
         TypeOrmModule.forFeature([
@@ -114,6 +117,9 @@ import { AgentsService } from "./services/agents.service";
         DifyApiService,
         DifyAgentSyncService,
         DifyChatProvider,
+        OpencodeApiService,
+        OpencodeChatProvider,
+        OpencodeArtifactService,
         // Shared services (same pattern as AiChatModule)
         AiModelService,
         AiProviderService,

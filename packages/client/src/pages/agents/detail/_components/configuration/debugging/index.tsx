@@ -40,6 +40,7 @@ import {
   MessageItem,
   PromptInput,
   type PromptInputHiddenTool,
+  StreamingIndicator,
   useAssistantContext,
 } from "@/components/ask-assistant-ui";
 import { RightFloatingPanel } from "@/components/right-floating-panel";
@@ -522,6 +523,9 @@ function DebugPanelContent({
               ))}
             </div>
           )}
+          {(status === "submitted" || status === "streaming") ? (
+            <StreamingIndicator />
+          ) : null}
           <PromptInput
             textareaRef={textareaRef}
             status={status}

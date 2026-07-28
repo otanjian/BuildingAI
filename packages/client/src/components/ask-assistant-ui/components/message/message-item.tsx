@@ -114,6 +114,10 @@ export const MessageItem = memo(
             const data = (p as { data?: unknown }).data;
             return `${type}:${Array.isArray(data) ? data.join("\n") : ""}`;
           }
+          if (type === "data-artifact") {
+            const data = (p as { data?: { url?: string; relativePath?: string } }).data;
+            return `${type}:${data?.url || ""}:${data?.relativePath || ""}`;
+          }
           return String(type);
         })
         .join("|") || "";

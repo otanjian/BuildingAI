@@ -14,7 +14,7 @@ import type {
 } from "@buildingai/types";
 import { EditorDndScope } from "@buildingai/ui/components/editor";
 import { Button } from "@buildingai/ui/components/ui/button";
-// import { Switch } from "@buildingai/ui/components/ui/switch";
+import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
 import { TooltipProvider } from "@buildingai/ui/components/ui/tooltip";
 import { ArrowBigUp, Loader2, RefreshCcw } from "lucide-react";
@@ -246,7 +246,7 @@ export default function Configuration() {
   const [saveError, setSaveError] = useState(false);
 
   const createMode = agent?.createMode ?? "direct";
-  const isThirdPartyMode = createMode === "coze" || createMode === "dify";
+  const isThirdPartyMode = createMode === "coze" || createMode === "dify" || createMode === "opencode";
 
   const createConfigFromAgent = useCallback(
     (currentAgent: NonNullable<typeof agent>): ConfigState => ({
@@ -332,7 +332,7 @@ export default function Configuration() {
           voiceConfig: next.voiceConfig ?? undefined,
         };
 
-        if (agent?.createMode === "coze" || agent?.createMode === "dify") {
+        if (agent?.createMode === "coze" || agent?.createMode === "dify" || agent?.createMode === "opencode") {
           payload.thirdPartyIntegration = next.thirdPartyIntegration ?? undefined;
         }
 
@@ -354,7 +354,7 @@ export default function Configuration() {
           toast.error(`${extConfig.difySyncError}`);
         }
 
-        if (savedAgent?.createMode === "coze" || savedAgent?.createMode === "dify") {
+        if (savedAgent?.createMode === "coze" || savedAgent?.createMode === "dify" || savedAgent?.createMode === "opencode") {
           const refreshedAgentResult = await refetchAgentDetail();
           const latestAgent =
             !refreshedAgentResult.error && refreshedAgentResult.data
@@ -522,11 +522,27 @@ export default function Configuration() {
                 <TooltipProvider>
                   <div className="space-y-4">
                     {isThirdPartyMode ? (
-                      <ThirdPartyIntegration
-                        mode={createMode as "coze" | "dify"}
-                        value={config.thirdPartyIntegration as any}
-                        onChange={(v: any) => updateConfig("thirdPartyIntegration", v)}
-                      />
+                      <>
+                        <ThirdPartyIntegration
+                          mode={createMode as "coze" | "dify" | "opencode"}
+                          value={config.thirdPartyIntegration as any}
+                          onChange={(v: any) => updateConfig("thirdPartyIntegration", v)}
+                        />
+                        <div className="bg-secondary flex items-center justify-between rounded-lg px-3 py-2.5">
+                          <div className="flex flex-col">
+                            <h3 className="text-sm font-medium">文件上传</h3>
+                            <p className="text-muted-foreground mt-0.5 text-xs">
+                              开启后用户可在对话中上传图片与文件
+                            </p>
+                          </div>
+                          <Switch
+                            checked={config.enableFileUpload}
+                            onCheckedChange={(checked) =>
+                              updateMultiple({ enableFileUpload: checked })
+                            }
+                          />
+                        </div>
+                      </>
                     ) : (
                       <>
                         <RolePrompt
