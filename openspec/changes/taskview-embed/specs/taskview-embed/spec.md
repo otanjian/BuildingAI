@@ -16,7 +16,35 @@ The BuildingAI console sidebar SHALL display a top-level "我的待办" (My Task
 #### Scenario: Menu items navigate to Taskview iframe
 
 - **WHEN** user clicks a Taskview child menu item (e.g., "看板")
-- **THEN** the main content area renders an iframe loading the corresponding Taskview page (e.g., `/:orgSlug/kanban`)
+- **THEN** the main content area renders an iframe loading the corresponding Taskview page (e.g., `/{orgSlug}/default/kanban`)
+
+### Requirement: In-page secondary tab navigation
+
+The TaskviewIframePage SHALL include in-page tab navigation so users can switch between Taskview views without returning to the sidebar.
+
+#### Scenario: User switches views via tabs
+
+- **WHEN** the TaskviewIframePage is rendered
+- **THEN** a horizontal tab bar is displayed above the iframe with tabs: 任务列表, 看板, 图表, 冲刺, 协作, 集成, Webhooks, 消息, 项目时间报告, 分析, 时间报告, 设置, 账户
+
+#### Scenario: Tab click navigates and updates iframe
+
+- **WHEN** user clicks a tab (e.g., "图表")
+- **THEN** the URL updates to `/console/taskview/graph` and the iframe reloads with the corresponding Taskview route
+
+### Requirement: Configurable Taskview base URL
+
+The Taskview server URL SHALL be configurable via environment variable.
+
+#### Scenario: Development environment
+
+- **WHEN** `VITE_TASKVIEW_BASE_URL` is not set
+- **THEN** the TaskviewIframePage uses `http://localhost:5174` as the Taskview base URL
+
+#### Scenario: Production environment
+
+- **WHEN** `VITE_TASKVIEW_BASE_URL` is set to `https://taskview.example.com`
+- **THEN** iframe src URLs use `https://taskview.example.com` as the base
 
 ### Requirement: Single sign-on from BuildingAI to Taskview
 

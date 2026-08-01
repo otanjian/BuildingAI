@@ -145,6 +145,10 @@ export const router = createBrowserRouter([
         ),
         children: [
           {
+            path: "/taskview/*",
+            element: <TaskviewIframePage />,
+          },
+          {
             element: <DynamicHomePage />,
             children: [
               {
@@ -205,10 +209,6 @@ export const router = createBrowserRouter([
           {
             path: "/agents/workspace",
             element: <AgentsWorkspacePage />,
-          },
-          {
-            path: "/taskview/*",
-            element: <TaskviewIframePage />,
           },
           {
             path: "*",

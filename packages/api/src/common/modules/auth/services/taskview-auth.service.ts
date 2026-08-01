@@ -4,6 +4,7 @@ import { firstValueFrom } from "rxjs";
 
 export interface TaskviewSession {
     taskviewToken: string;
+    taskviewRefreshToken: string;
     taskviewOrgSlug: string;
 }
 
@@ -23,7 +24,7 @@ export class TaskviewAuthService {
      */
     async getSession(username: string): Promise<TaskviewSession | null> {
         try {
-            const taskviewBaseUrl = process.env.TASKVIEW_API_URL || "http://localhost:8080";
+            const taskviewBaseUrl = process.env.TASKVIEW_API_URL || "http://localhost:1401";
             const ssoSecret = process.env.TASKVIEW_SSO_SECRET;
 
             if (!ssoSecret) {
@@ -42,7 +43,7 @@ export class TaskviewAuthService {
                 }),
             );
 
-            const { access } = ssoResponse.data;
+            const { access, refresh } = ssoResponse.data;
             if (!access) {
                 this.logger.error("Taskview platform-sso returned no access token");
                 return null;
@@ -50,7 +51,7 @@ export class TaskviewAuthService {
 
             // Step 2: Fetch user's organizations to get orgSlug
             const orgsResponse = await firstValueFrom(
-                this.httpService.get<Array<{ slug: string }>>(
+                this.httpService.get<{ response?: Array<{ slug: string }> }>(
                     `${taskviewBaseUrl}/module/organizations`,
                     {
                         headers: { Authorization: `Bearer ${access}` },
@@ -68,6 +69,7 @@ export class TaskviewAuthService {
 
             return {
                 taskviewToken: access,
+                taskviewRefreshToken: refresh || "",
                 taskviewOrgSlug: orgSlug,
             };
         } catch (error) {

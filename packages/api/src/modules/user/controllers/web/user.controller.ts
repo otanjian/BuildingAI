@@ -135,6 +135,7 @@ export class UserWebController extends BaseController {
             menus: menuTree,
             hasPassword: !!userInfo.password,
             taskviewToken: taskviewSession?.taskviewToken ?? "",
+            taskviewRefreshToken: taskviewSession?.taskviewRefreshToken ?? "",
             taskviewOrgSlug: taskviewSession?.taskviewOrgSlug ?? "",
         };
     }
