@@ -11,6 +11,7 @@ import {
     Delete,
     Get,
     Param,
+    Patch,
     Post,
     Query,
     Req,
@@ -379,6 +380,36 @@ export class AgentChatWebController {
             query,
             playground.id,
         );
+    }
+
+    @Patch(":id/chat/conversations/:conversationId")
+    async updateConversation(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Body("title") title: string,
+        @Playground() playground: UserPlayground,
+    ) {
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权修改该对话");
+        if (!title?.trim()) throw HttpErrorFactory.badRequest("标题不能为空");
+        await this.agentChatRecordService.updateTitle(conversationId, title.trim());
+        return { message: "对话已更新" };
+    }
+
+    @Delete(":id/chat/conversations/:conversationId")
+    async deleteConversation(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+    ) {
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权删除该对话");
+        await this.agentChatRecordService.softDelete(conversationId, playground.id);
+        return { message: "对话已删除" };
     }
 
     @Post(":id/chat/conversations/:conversationId/messages/operator")

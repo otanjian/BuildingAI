@@ -1,1 +1,0 @@
-import{c as e,l as t}from"./purify.es-awENeDPr.js";var n=(n,r)=>t.lang.round(e.parse(n)[r]);export{n as t};

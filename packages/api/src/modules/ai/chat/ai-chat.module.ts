@@ -8,6 +8,8 @@ import { SecretTemplate } from "@buildingai/db/entities";
 import { Dict } from "@buildingai/db/entities";
 import {
     AccountLog,
+    Agent,
+    AgentChatRecord,
     AiChatFeedback,
     AiChatMessage,
     AiChatRecord,
@@ -54,6 +56,8 @@ import { ChatConfigService } from "./services/chat-config.service";
         AiMemoryModule,
         UserModule,
         TypeOrmModule.forFeature([
+            Agent,
+            AgentChatRecord,
             AiModel,
             AiProvider,
             AiUserMcpServer,

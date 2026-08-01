@@ -7,7 +7,7 @@ import {
     SquarePublishStatus,
     User,
 } from "@buildingai/db/entities";
-import { ILike, In, Repository } from "@buildingai/db/typeorm";
+import { In, Repository } from "@buildingai/db/typeorm";
 import { DictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable } from "@nestjs/common";
@@ -253,54 +253,60 @@ export class AgentDecorateService extends BaseService<Agent> {
 
     async paginateItems(
         query: QueryAgentDecorateItemsDto,
-        options: { forPublic: true },
+        options: { forPublic: true; userId?: string; isRoot?: boolean },
     ): Promise<PaginationResult<AgentDecoratePublicItem>>;
     async paginateItems(
         query: QueryAgentDecorateItemsDto,
-        options?: { forPublic?: false },
+        options?: { forPublic?: false; userId?: string; isRoot?: boolean },
     ): Promise<PaginationResult<Agent>>;
     async paginateItems(
         query: QueryAgentDecorateItemsDto,
-        options?: { forPublic?: boolean },
+        options?: { forPublic?: boolean; userId?: string; isRoot?: boolean },
     ): Promise<PaginationResult<Agent> | PaginationResult<AgentDecoratePublicItem>> {
-        const baseWhere = {
-            squarePublishStatus: SquarePublishStatus.APPROVED,
-            publishedToSquare: true,
-            tags: query.tagId
-                ? {
-                      id: query.tagId,
-                  }
-                : undefined,
-        };
+        const { forPublic = false, userId, isRoot } = options || {};
 
-        const where = query.keyword?.trim()
-            ? [
-                  { ...baseWhere, name: ILike(`%${query.keyword.trim()}%`) },
-                  { ...baseWhere, description: ILike(`%${query.keyword.trim()}%`) },
-              ]
-            : baseWhere;
+        const qb = this.agentRepository.createQueryBuilder("agent")
+            .leftJoinAndSelect("agent.tags", "tags")
+            .where("agent.squarePublishStatus = :status", { status: SquarePublishStatus.APPROVED })
+            .andWhere("agent.publishedToSquare = :published", { published: true });
 
-        const result = await this.paginate(
-            { page: query.page ?? 1, pageSize: query.pageSize ?? 20 },
-            {
-                where,
-                relations: ["tags"],
-                order: {
-                    decorateSort: { direction: "ASC", nulls: "LAST" },
-                    updatedAt: "DESC",
-                },
-            },
-        );
-
-        if (options?.forPublic) {
-            const items = await this.enrichPublicItems(result.items);
-            return {
-                ...result,
-                items,
-            };
+        if (query.tagId) {
+            qb.andWhere("tags.id = :tagId", { tagId: query.tagId });
         }
 
-        return result;
+        if (query.keyword?.trim()) {
+            qb.andWhere("(agent.name ILIKE :keyword OR agent.description ILIKE :keyword)", {
+                keyword: `%${query.keyword.trim()}%`,
+            });
+        }
+
+        // Visibility filter: root sees all, assigned-only for non-root, unauthed sees "all" only
+        if (userId) {
+            if (!isRoot) {
+                qb.andWhere(
+                    `(agent.squareVisibility = 'all' OR (agent.squareVisibility = 'assigned' AND EXISTS (SELECT 1 FROM ai_agent_assignments aa WHERE aa.agent_id = agent.id AND aa.user_id = :userId)))`,
+                    { userId },
+                );
+            }
+            // Root users: no filter — see everything
+        } else {
+            qb.andWhere("agent.squareVisibility = :visibility", { visibility: "all" });
+        }
+
+        qb.orderBy("agent.decorateSort", "ASC", "NULLS LAST")
+            .addOrderBy("agent.updatedAt", "DESC");
+
+        const result = await this.paginateQueryBuilder(
+            qb,
+            { page: query.page ?? 1, pageSize: query.pageSize ?? 20 },
+        );
+
+        if (forPublic) {
+            const items = await this.enrichPublicItems(result.items);
+            return { ...result, items };
+        }
+
+        return result as PaginationResult<Agent>;
     }
 
     async batchUpdateSort(dto: BatchUpdateAgentDecorateSortDto) {

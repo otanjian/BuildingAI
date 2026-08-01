@@ -25,6 +25,7 @@ export interface DecorateMenuItem {
     title: string;
     link: DecorateMenuLink;
     isHidden?: boolean;
+    permissions?: string[];
 }
 
 export interface DecorateMenuConfig {

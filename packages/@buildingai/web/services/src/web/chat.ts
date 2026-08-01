@@ -6,12 +6,13 @@ import type {
 } from "@buildingai/web-types";
 import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
 import { validate as isUUID } from "uuid";
 
 import { apiHttpClient } from "../base";
 
-function isValidConversationId(conversationId: string | undefined | null): conversationId is string {
+function isValidConversationId(
+    conversationId: string | undefined | null,
+): conversationId is string {
     return Boolean(conversationId?.trim() && isUUID(conversationId.trim()));
 }
 
@@ -154,8 +155,7 @@ export function useConversationQuery(
     const validId = isValidConversationId(conversationId) ? conversationId : "";
     return useQuery<ConversationRecord>({
         queryKey: ["conversation", validId],
-        queryFn: () =>
-            apiHttpClient.get<ConversationRecord>(`/ai-conversations/${validId}/info`),
+        queryFn: () => apiHttpClient.get<ConversationRecord>(`/ai-conversations/${validId}/info`),
         enabled: !!validId && options?.enabled !== false,
         ...options,
     });
@@ -227,6 +227,80 @@ export function useUpdateConversation(): UseMutationResult<
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             queryClient.invalidateQueries({ queryKey: ["conversation", variables.id] });
+        },
+    });
+}
+
+export type UnifiedConversationItem = {
+    id: string;
+    title: string;
+    type: "direct" | "agent";
+    agentId?: string;
+    agentName?: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type QueryUnifiedConversationsParams = PaginationParams & {
+    keyword?: string;
+};
+
+export function useUnifiedConversationsQuery(
+    params: QueryUnifiedConversationsParams,
+    options?: PaginatedQueryOptionsUtil<UnifiedConversationItem>,
+): UseQueryResult<PaginatedResponse<UnifiedConversationItem>, unknown> {
+    const { isLogin } = useAuthStore((state) => state.authActions);
+
+    return useQuery<PaginatedResponse<UnifiedConversationItem>>({
+        queryKey: ["unified-conversations", params],
+        queryFn: () =>
+            apiHttpClient.get<PaginatedResponse<UnifiedConversationItem>>(
+                "/ai-conversations/unified",
+                { params },
+            ),
+        enabled: isLogin() && options?.enabled !== false,
+        ...options,
+    });
+}
+
+export function useDeleteAgentConversation(): UseMutationResult<
+    unknown,
+    unknown,
+    { agentId: string; conversationId: string },
+    unknown
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ agentId, conversationId }: { agentId: string; conversationId: string }) =>
+            apiHttpClient.delete(`/ai-agents/${agentId}/chat/conversations/${conversationId}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["unified-conversations"] });
+        },
+    });
+}
+
+export function useUpdateAgentConversation(): UseMutationResult<
+    unknown,
+    unknown,
+    { agentId: string; conversationId: string; title: string },
+    unknown
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            agentId,
+            conversationId,
+            title,
+        }: {
+            agentId: string;
+            conversationId: string;
+            title: string;
+        }) =>
+            apiHttpClient.patch(`/ai-agents/${agentId}/chat/conversations/${conversationId}`, {
+                title,
+            }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["unified-conversations"] });
         },
     });
 }

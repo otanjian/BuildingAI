@@ -269,6 +269,7 @@ export class CozeChatProvider {
                     userConsumedPower = await this.agentBillingHandler.deduct({
                         userId: params.userId,
                         conversationId: localConversationId,
+                        agentId: params.agentId,
                         usage,
                         billingRule,
                     });

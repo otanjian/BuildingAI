@@ -1,6 +1,6 @@
-import { BaseService } from "@buildingai/base";
+import { BaseService, type PaginationResult } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { AiChatFeedback, AiChatMessage, AiChatRecord } from "@buildingai/db/entities";
+import { Agent, AgentChatRecord, AiChatFeedback, AiChatMessage, AiChatRecord } from "@buildingai/db/entities";
 import { In, Repository } from "@buildingai/db/typeorm";
 import { PaginationDto } from "@buildingai/dto/pagination.dto";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -24,6 +24,10 @@ export class AiChatRecordService extends BaseService<AiChatRecord> {
         conversationRepository: Repository<AiChatRecord>,
         @InjectRepository(AiChatFeedback)
         private readonly feedbackRepository: Repository<AiChatFeedback>,
+        @InjectRepository(AgentChatRecord)
+        private readonly agentChatRecordRepository: Repository<AgentChatRecord>,
+        @InjectRepository(Agent)
+        private readonly agentRepository: Repository<Agent>,
         private readonly aiChatsMessageService: AiChatsMessageService,
     ) {
         super(conversationRepository);
@@ -497,6 +501,68 @@ export class AiChatRecordService extends BaseService<AiChatRecord> {
             this.logger.error(`删除消息失败: ${error.message}`, error.stack);
             throw HttpErrorFactory.badRequest("Failed to delete message.");
         }
+    }
+
+    /**
+     * Get a merged, time-sorted list of direct conversations and non-anonymous
+     * agent conversations for the current user, with pagination and keyword search.
+     */
+    async findUnifiedConversations(
+        userId: string,
+        params: { page?: number; pageSize?: number; keyword?: string },
+    ): Promise<PaginationResult<Record<string, unknown>>> {
+        const page = Math.max(params.page ?? 1, 1);
+        const pageSize = Math.min(Math.max(params.pageSize ?? 20, 1), 50);
+        const offset = (page - 1) * pageSize;
+
+        const hasKeyword = !!params.keyword?.trim();
+        const likePattern = hasKeyword ? `%${params.keyword!.trim()}%` : "";
+
+        const directWhere = hasKeyword
+            ? "WHERE user_id = $1 AND is_deleted = false AND title ILIKE $2"
+            : "WHERE user_id = $1 AND is_deleted = false";
+
+        const agentWhere = hasKeyword
+            ? "WHERE r.user_id = $1 AND r.is_deleted = false AND r.anonymous_identifier IS NULL AND r.title ILIKE $2"
+            : "WHERE r.user_id = $1 AND r.is_deleted = false AND r.anonymous_identifier IS NULL";
+
+        const directQuery = `SELECT id, title, 'direct' AS type, NULL AS agent_id, NULL AS agent_name, created_at, updated_at FROM ai_chat_record ${directWhere}`;
+        const agentQuery = `SELECT r.id, r.title, 'agent' AS type, r.agent_id, a.name AS agent_name, r.created_at, r.updated_at FROM ai_agent_chat_record r JOIN ai_agent a ON a.id = r.agent_id ${agentWhere}`;
+
+        const countParams: unknown[] = [userId];
+        if (hasKeyword) countParams.push(likePattern);
+        const countSql = `SELECT COUNT(*) AS total FROM (${directQuery} UNION ALL ${agentQuery}) AS unified`;
+
+        const dataParams: unknown[] = [userId];
+        if (hasKeyword) dataParams.push(likePattern);
+        dataParams.push(pageSize, offset);
+
+        const limitIdx = hasKeyword ? 3 : 2;
+        const offsetIdx = hasKeyword ? 4 : 3;
+        const dataSql = `SELECT * FROM (${directQuery} UNION ALL ${agentQuery}) AS unified ORDER BY updated_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`;
+
+        const [countResult, items] = await Promise.all([
+            this.repository.manager.query(countSql, countParams),
+            this.repository.manager.query(dataSql, dataParams),
+        ]);
+
+        const total = parseInt((countResult as Array<{ total: string }>)[0]?.total ?? "0", 10);
+
+        return {
+            items: (items as Array<Record<string, unknown>>).map((item) => ({
+                id: item.id as string,
+                title: (item.title as string) ?? "新对话",
+                type: item.type as "direct" | "agent",
+                agentId: item.agent_id ?? undefined,
+                agentName: item.agent_name ?? undefined,
+                createdAt: item.created_at as string,
+                updatedAt: item.updated_at as string,
+            })),
+            total,
+            page,
+            pageSize,
+            totalPages: Math.ceil(total / pageSize),
+        };
     }
 
     private async attachConversationStats(items: AiChatRecord[]): Promise<void> {

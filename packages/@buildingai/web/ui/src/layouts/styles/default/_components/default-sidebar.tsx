@@ -1,5 +1,5 @@
 import type { DecorateMenuItem } from "@buildingai/services/web";
-import { useConversationsQuery, useDecorateMenuQuery } from "@buildingai/services/web";
+import { useDecorateMenuQuery, useUnifiedConversationsQuery } from "@buildingai/services/web";
 import { useAuthStore } from "@buildingai/stores";
 import {
   Sidebar,
@@ -13,6 +13,7 @@ import {
   SidebarRail,
 } from "@buildingai/ui/components/ui/sidebar";
 import { isEnabled } from "@buildingai/utils/is";
+import { BooleanNumber } from "@buildingai/constants/shared";
 import { ArrowUpRight, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import * as React from "react";
@@ -70,15 +71,30 @@ const DEFAULT_CHAT_COMPONENT = "/src/pages/index.tsx";
 /**
  * Convert DecorateMenuItem to NavItem format used by DefaultNavMain.
  * Handles special menu_history_fixed item by injecting conversation sub-items.
+ * Filters out items whose required permissions the user does not have.
+ * Root users bypass permission checks.
  */
 function useMenuItems(
   menus: DecorateMenuItem[],
-  conversationItems: { id: string; title: string; path: string }[],
+  conversationItems: { id: string; title: string; path: string; type?: string; agentId?: string; agentName?: string }[],
   homeAction?: React.ReactNode,
+  userPermissions?: string[],
+  isRoot?: boolean,
 ): NavItem[] {
   return useMemo(() => {
     return menus
-      .filter((menu) => !menu.isHidden)
+      .filter((menu) => {
+        if (menu.isHidden) return false;
+        if (isRoot) return true;
+        // Guard "新对话" with agent.manage permission by default
+        if (menu.id === MENU_HOME_FIXED) {
+          return userPermissions?.includes("agent.manage") ?? false;
+        }
+        if (menu.permissions && menu.permissions.length > 0) {
+          return menu.permissions.some((p) => userPermissions?.includes(p));
+        }
+        return true;
+      })
       .map((menu): NavItem => {
         if (menu.id === MENU_HISTORY_FIXED) {
           return {
@@ -99,25 +115,34 @@ function useMenuItems(
           ...(menu.id === MENU_HOME_FIXED && homeAction ? { action: homeAction } : {}),
         };
       });
-  }, [menus, conversationItems, homeAction]);
+  }, [menus, conversationItems, homeAction, userPermissions, isRoot]);
 }
 
 export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate();
   const { userInfo } = useAuthStore((state) => state.auth);
   const { data: menuConfig, isLoading: isMenuLoading } = useDecorateMenuQuery();
-  const { data: conversationsData } = useConversationsQuery(
-    { page: 1, pageSize: 6 },
+  const { data: conversationsData } = useUnifiedConversationsQuery(
+    { page: 1, pageSize: 20 },
     { refetchOnWindowFocus: false },
   );
 
   const conversationItems = useMemo(
     () =>
-      conversationsData?.items?.map((conversation) => ({
-        id: `conversation-${conversation.id}`,
-        title: conversation.title || "新对话",
-        path: `/c/${conversation.id}`,
-      })) || [],
+      conversationsData?.items?.map((item) => {
+        const isAgent = item.type === "agent";
+        const path = isAgent
+          ? `/agents/${item.agentId}/c/${item.id}`
+          : `/c/${item.id}`;
+        return {
+          id: `${item.type}-${item.id}`,
+          title: item.title || "新对话",
+          path,
+          type: item.type,
+          agentId: item.agentId,
+          agentName: item.agentName,
+        };
+      }) || [],
     [conversationsData],
   );
 
@@ -132,7 +157,9 @@ export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Side
     />
   ) : undefined;
 
-  const navMain = useMenuItems(menuConfig?.menus ?? [], conversationItems, homeAction);
+  const permissionsCodes = userInfo?.permissionsCodes ?? [];
+  const isRoot = userInfo?.isRoot === BooleanNumber.YES;
+  const navMain = useMenuItems(menuConfig?.menus ?? [], conversationItems, homeAction, permissionsCodes, isRoot);
 
   const consoleLink = useMemo(() => {
     const menus = userInfo?.menus || [];

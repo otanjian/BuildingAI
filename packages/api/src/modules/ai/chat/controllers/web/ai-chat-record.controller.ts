@@ -46,6 +46,21 @@ export class AiChatRecordWebController extends BaseController {
     }
 
     /**
+     * Get merged conversation history (direct + agent, non-anonymous only).
+     */
+    @Get("unified")
+    async getUnifiedConversations(
+        @Query() queryDto: QueryAIChatRecordDto,
+        @Playground() playground: UserPlayground,
+    ) {
+        return await this.AiChatRecordService.findUnifiedConversations(playground.id, {
+            page: queryDto.page,
+            pageSize: queryDto.pageSize,
+            keyword: queryDto.keyword,
+        });
+    }
+
+    /**
      * 获取对话详情（包含消息）
      */
     @Get(":id")

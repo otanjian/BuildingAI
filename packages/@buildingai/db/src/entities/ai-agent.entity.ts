@@ -317,6 +317,15 @@ export class Agent extends BaseEntity {
     })
     createBy: string;
 
+    /**
+     * 广场可见性
+     *
+     * - "all": 所有用户可见（默认）
+     * - "assigned": 仅分配给指定用户可见
+     */
+    @Column({ type: "varchar", length: 20, default: "assigned", comment: "广场可见性：all-所有人可见，assigned-仅分配用户可见" })
+    squareVisibility: string;
+
     @Column({ type: "json", nullable: true, comment: "发布配置" })
     publishConfig?: {
         enableSite?: boolean;

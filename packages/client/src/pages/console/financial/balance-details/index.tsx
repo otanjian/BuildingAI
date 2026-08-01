@@ -117,6 +117,7 @@ const BalanceDetailsIndexPage = () => {
                   <TableHead>变动数量</TableHead>
                   <TableHead>剩余数量</TableHead>
                   <TableHead>变动类型</TableHead>
+                  <TableHead>智能体名称</TableHead>
                   <TableHead>来源/关联</TableHead>
                   <TableHead>操作人</TableHead>
                   <TableHead>记录时间</TableHead>
@@ -125,13 +126,13 @@ const BalanceDetailsIndexPage = () => {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-muted-foreground h-32 text-center">
+                    <TableCell colSpan={9} className="text-muted-foreground h-32 text-center">
                       加载中...
                     </TableCell>
                   </TableRow>
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-muted-foreground h-32 text-center">
+                    <TableCell colSpan={9} className="text-muted-foreground h-32 text-center">
                       {hasActiveFilters
                         ? "没有找到符合条件的记录，请尝试调整筛选条件"
                         : "暂无余额变动记录"}
@@ -176,6 +177,9 @@ const BalanceDetailsIndexPage = () => {
                       <TableCell className="tabular-nums">{item.leftAmount}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {item.accountTypeDesc}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground truncate text-sm">
+                        {item.agentName || "—"}
                       </TableCell>
                       <TableCell className="text-muted-foreground truncate text-sm">
                         {item.consumeSourceDesc || item.associationUser || "—"}

@@ -7,7 +7,9 @@ import { BuildFileUrl } from "@buildingai/decorators";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { Public } from "@buildingai/decorators/public.decorator";
 import { WebController } from "@common/decorators/controller.decorator";
-import { Body, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Permissions } from "@common/decorators/permissions.decorator";
+import { Body, Delete, Get, Param, Patch, Post, Query, Req } from "@nestjs/common";
+import type { Request } from "express";
 
 import { AgentDashboardQueryDto } from "../../dto/web/agent/agent-dashboard-query.dto";
 import { CopyAgentFromSquareDto } from "../../dto/web/agent/copy-agent-from-square.dto";
@@ -22,6 +24,8 @@ import {
 } from "../../services/agent-dashboard.service";
 import { AgentsService } from "../../services/agents.service";
 
+const AGENT_MANAGE_PERMISSION = { code: "agent.manage", name: "管理智能体", description: "创建和管理自己的智能体" };
+
 @WebController("ai-agents")
 export class AgentsWebController {
     constructor(
@@ -32,6 +36,7 @@ export class AgentsWebController {
     ) {}
 
     @Get("my-created")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     @BuildFileUrl(["**.avatar", "**.chatAvatar"])
     async listMyCreated(
         @Playground() user: UserPlayground,
@@ -41,11 +46,13 @@ export class AgentsWebController {
     }
 
     @Post()
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async create(@Playground() user: UserPlayground, @Body() dto: CreateAgentDto): Promise<Agent> {
         return this.agentsService.createAgent(user, dto);
     }
 
     @Post(":id/copy-from-square")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async copyFromSquare(
         @Playground() user: UserPlayground,
         @Param("id") id: string,
@@ -57,14 +64,18 @@ export class AgentsWebController {
     @BuildFileUrl(["**.avatar", "**.chatAvatar"])
     @Get("square")
     @Public()
-    async listSquare(@Query() query: ListSquareAgentsDto): Promise<
+    async listSquare(
+        @Req() req: Request,
+        @Query() query: ListSquareAgentsDto,
+    ): Promise<
         PaginationResult<
             Agent & {
                 creator: { id: string; nickname: string | null; avatar: string | null } | null;
             }
         >
     > {
-        const result = await this.agentsService.listSquare(query);
+        const user = req.user as UserPlayground | undefined;
+        const result = await this.agentsService.listSquare(query, user?.id, user?.isRoot === 1);
         const creatorIds = [...new Set(result.items.map((a) => a.createBy).filter(Boolean))];
 
         if (creatorIds.length === 0) {
@@ -91,6 +102,7 @@ export class AgentsWebController {
     }
 
     @Get(":id/dashboard")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async dashboard(
         @Playground() user: UserPlayground,
         @Param("id") id: string,
@@ -101,12 +113,14 @@ export class AgentsWebController {
     }
 
     @Get(":id")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     @BuildFileUrl(["**.avatar", "**.chatAvatar"])
     async detail(@Playground() user: UserPlayground, @Param("id") id: string): Promise<Agent> {
         return this.agentsService.getAgentDetail(user, id);
     }
 
     @Patch(":id")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async update(
         @Playground() user: UserPlayground,
         @Param("id") id: string,
@@ -116,6 +130,7 @@ export class AgentsWebController {
     }
 
     @Post(":id/publish-to-square")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async publishToSquare(
         @Playground() user: UserPlayground,
         @Param("id") id: string,
@@ -127,6 +142,7 @@ export class AgentsWebController {
     }
 
     @Post(":id/unpublish-from-square")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async unpublishFromSquare(
         @Playground() user: UserPlayground,
         @Param("id") id: string,
@@ -135,6 +151,7 @@ export class AgentsWebController {
     }
 
     @Delete(":id")
+    @Permissions(AGENT_MANAGE_PERMISSION)
     async deleteAgent(@Playground() user: UserPlayground, @Param("id") id: string): Promise<void> {
         await this.agentsService.deleteAgent(id, user.id);
     }

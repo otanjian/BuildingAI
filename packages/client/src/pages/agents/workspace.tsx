@@ -1,6 +1,7 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { useDeleteAgentMutation, useMyAgentsInfiniteQuery } from "@buildingai/services/web";
 import { InfiniteScroll } from "@buildingai/ui/components/infinite-scroll";
+import { useAuthStore } from "@buildingai/web/stores";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
@@ -21,7 +22,7 @@ import { SidebarTrigger } from "@buildingai/ui/components/ui/sidebar";
 import { useAlertDialog } from "@buildingai/ui/hooks/use-alert-dialog";
 import { cn } from "@buildingai/ui/lib/utils";
 import { Bot, ChevronRight, Loader2, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -99,6 +100,15 @@ const AgentsWorkspacePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { confirm: alertConfirm } = useAlertDialog();
 
+  const permissionsCodes = useAuthStore((state) => state.auth.userInfo?.permissionsCodes ?? []);
+  const hasAgentManagePermission = permissionsCodes.includes("agent.manage");
+
+  useEffect(() => {
+    if (!hasAgentManagePermission) {
+      navigate("/agents", { replace: true });
+    }
+  }, [hasAgentManagePermission, navigate]);
+
   useDocumentHead({
     title: "我的智能体",
   });
@@ -155,6 +165,10 @@ const AgentsWorkspacePage = () => {
       "h-9 px-4 font-medium text-nowrap sm:font-normal cursor-pointer",
       selected ? "bg-primary text-primary-foreground" : "bg-accent text-accent-foreground",
     );
+
+  if (!hasAgentManagePermission) {
+    return null;
+  }
 
   return (
     <div className="flex w-full flex-col items-center">

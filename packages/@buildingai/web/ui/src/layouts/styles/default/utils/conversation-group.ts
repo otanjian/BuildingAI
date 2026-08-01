@@ -1,5 +1,3 @@
-import type { ConversationRecord } from "@buildingai/services/web";
-
 export type TimeGroup = "today" | "yesterday" | "3days" | "7days" | "30days" | "older";
 
 export const TIME_GROUP_LABELS: Record<TimeGroup, string> = {
@@ -40,10 +38,10 @@ export function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString("zh-CN");
 }
 
-export function groupConversationsByTime(
-  conversations: ConversationRecord[],
-): Map<TimeGroup, ConversationRecord[]> {
-  const groups = new Map<TimeGroup, ConversationRecord[]>();
+export function groupConversationsByTime<T extends { id: string; createdAt: string }>(
+  conversations: T[],
+): Map<TimeGroup, T[]> {
+  const groups = new Map<TimeGroup, T[]>();
   const order: TimeGroup[] = ["today", "yesterday", "3days", "7days", "30days", "older"];
 
   for (const group of order) {

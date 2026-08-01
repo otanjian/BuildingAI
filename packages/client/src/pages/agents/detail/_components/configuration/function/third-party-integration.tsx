@@ -63,13 +63,13 @@ export const ThirdPartyIntegration = memo(
         ? "Coze 平台配置"
         : mode === "dify"
           ? "Dify 平台配置"
-          : "OpenCode 配置";
+          : "Code 配置";
     const description =
       mode === "coze"
         ? "配置 Coze Bot 相关参数，系统会从 Coze 获取智能体能力。"
         : mode === "dify"
           ? "配置 Dify 应用相关参数，系统会通过 Dify 提供智能体能力。"
-          : "配置本机 OpenCode serve 地址与固定业务仓库；产物按会话写入 artifacts/{conversationId}/。";
+          : "配置本机 Code serve 地址与固定业务仓库；产物按会话写入 artifacts/{conversationId}/。";
 
     return (
       <div className="bg-secondary rounded-lg px-3 py-2.5">

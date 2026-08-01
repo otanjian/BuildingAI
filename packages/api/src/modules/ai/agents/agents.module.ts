@@ -3,6 +3,7 @@ import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import {
     Agent,
     AgentAnnotation,
+    AgentAssignment,
     AgentChatMessage,
     AgentChatMessageFeedback,
     AgentChatRecord,
@@ -64,6 +65,7 @@ import { OpencodeArtifactService } from "./services/opencode-artifact.service";
         TypeOrmModule.forFeature([
             Agent,
             AgentAnnotation,
+            AgentAssignment,
             Tag,
             User,
             Datasets,

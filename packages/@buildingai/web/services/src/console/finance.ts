@@ -96,6 +96,7 @@ export type AccountLogListItem = {
     accountTypeDesc: string;
     associationUser: string;
     consumeSourceDesc: string;
+    agentName?: string;
 };
 
 export type AccountLogListResponse = PaginatedResponse<AccountLogListItem> & {

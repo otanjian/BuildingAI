@@ -1,9 +1,11 @@
 "use client";
 
 import {
-  type ConversationRecord,
   useConversationsQuery,
+  useDeleteAgentConversation,
   useDeleteConversation,
+  useUnifiedConversationsQuery,
+  useUpdateAgentConversation,
   useUpdateConversation,
 } from "@buildingai/services/web";
 import { useAuthStore } from "@buildingai/stores";
@@ -82,6 +84,9 @@ interface NavSubItem {
   id: string;
   title: string;
   path?: string;
+  type?: string;
+  agentId?: string;
+  agentName?: string;
 }
 
 export interface NavItem {
@@ -119,6 +124,7 @@ function HistoryCommandItem({
   id,
   title,
   time,
+  agentName,
   onDelete,
   onRename,
   onSelect,
@@ -126,6 +132,7 @@ function HistoryCommandItem({
   id: string;
   title: string;
   time: string;
+  agentName?: string;
   onDelete: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
   onSelect?: (id: string) => void;
@@ -207,7 +214,12 @@ function HistoryCommandItem({
           autoFocus
         />
       ) : (
-        <span className="line-clamp-1 flex-1">{title}</span>
+        <span className="line-clamp-1 flex-1">
+          {agentName ? (
+            <span className="text-muted-foreground mr-1 text-xs font-normal">{agentName}</span>
+          ) : null}
+          {title}
+        </span>
       )}
       <CommandShortcut>
         {showConfirm ? (
@@ -277,13 +289,23 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(subItem.title);
   const { confirm } = useAlertDialog();
-  const deleteMutation = useDeleteConversation();
-  const updateMutation = useUpdateConversation();
+  const deleteDirectMutation = useDeleteConversation();
+  const updateDirectMutation = useUpdateConversation();
+  const deleteAgentMutation = useDeleteAgentConversation();
+  const updateAgentMutation = useUpdateAgentConversation();
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
-  // Extract conversation ID from path (format: /c/${conversationId})
-  const conversationId = subItem.path?.replace("/c/", "") || "";
+  const isAgent = subItem.type === "agent";
+  const conversationId = (() => {
+    if (!subItem.path) return "";
+    // /c/:id or /agents/:agentId/c/:id
+    if (isAgent) {
+      const parts = subItem.path.split("/c/");
+      return parts.length > 1 ? parts.at(-1) ?? "" : "";
+    }
+    return subItem.path.replace("/c/", "");
+  })();
 
   useEffect(() => {
     setRenameValue(subItem.title);
@@ -300,15 +322,26 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
       return;
     }
 
-    updateMutation.mutate(
-      { id: conversationId, title: renameValue.trim() },
-      {
-        onSuccess: () => {
-          setRenameDialogOpen(false);
+    if (isAgent) {
+      updateAgentMutation.mutate(
+        { agentId: subItem.agentId ?? "", conversationId, title: renameValue.trim() },
+        {
+          onSuccess: () => {
+            setRenameDialogOpen(false);
+          },
         },
-      },
-    );
-  }, [conversationId, renameValue, subItem.title, updateMutation]);
+      );
+    } else {
+      updateDirectMutation.mutate(
+        { id: conversationId, title: renameValue.trim() },
+        {
+          onSuccess: () => {
+            setRenameDialogOpen(false);
+          },
+        },
+      );
+    }
+  }, [conversationId, renameValue, subItem.title, subItem.agentId, isAgent, updateDirectMutation, updateAgentMutation]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -344,9 +377,12 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
           description: "确定要删除这条对话记录吗？此操作不可恢复。",
           confirmVariant: "destructive",
         });
-        deleteMutation.mutate(conversationId, {
+        const deleteMutation = isAgent ? deleteAgentMutation : deleteDirectMutation;
+        const mutateArgs: any = isAgent
+          ? { agentId: subItem.agentId ?? "", conversationId }
+          : conversationId;
+        deleteMutation.mutate(mutateArgs, {
           onSuccess: () => {
-            // If the deleted conversation is currently active, navigate to home
             if (pathname === subItem.path) {
               navigate("/");
             }
@@ -356,7 +392,7 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
         // User cancelled
       }
     },
-    [conversationId, confirm, deleteMutation, pathname, subItem.path, navigate],
+    [conversationId, confirm, deleteDirectMutation, deleteAgentMutation, pathname, subItem.path, subItem.agentId, isAgent, navigate],
   );
 
   return (
@@ -371,6 +407,11 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
                 { "font-bold": isActive },
               )}
             >
+              {isAgent && subItem.agentName ? (
+                <span className="text-muted-foreground mr-1 text-xs font-normal">
+                  {subItem.agentName}
+                </span>
+              ) : null}
               {subItem.title}
             </span>
           </Link>
@@ -615,10 +656,12 @@ export function DefaultNavMain({
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const [allConversations, setAllConversations] = useState<ConversationRecord[]>([]);
+  const [allConversations, setAllConversations] = useState<
+    Array<{ id: string; title: string; type: "direct" | "agent"; agentId?: string; agentName?: string; createdAt: string; updatedAt: string }>
+  >([]);
   const pageSize = 20;
 
-  const { data, isLoading } = useConversationsQuery(
+  const { data, isLoading } = useUnifiedConversationsQuery(
     { page, pageSize, keyword: keyword || undefined },
     { enabled: open },
   );
@@ -662,42 +705,75 @@ export function DefaultNavMain({
     setAllConversations([]);
   }, []);
 
-  const deleteMutation = useDeleteConversation();
-  const updateMutation = useUpdateConversation();
+  const deleteDirectMutation = useDeleteConversation();
+  const updateDirectMutation = useUpdateConversation();
+  const deleteAgentMutation = useDeleteAgentConversation();
+  const updateAgentMutation = useUpdateAgentConversation();
 
   const handleSelect = useCallback(
     (id: string) => {
-      navigate(`/c/${id}`);
+      const item = allConversations.find((c) => c.id === id);
+      if (item?.type === "agent") {
+        navigate(`/agents/${item.agentId}/c/${id}`);
+      } else {
+        navigate(`/c/${id}`);
+      }
       setOpen(false);
     },
-    [navigate],
+    [navigate, allConversations],
   );
 
   const handleDelete = useCallback(
     (id: string) => {
-      deleteMutation.mutate(id, {
-        onSuccess: () => {
-          setAllConversations((prev) => prev.filter((c) => c.id !== id));
-        },
-      });
+      const item = allConversations.find((c) => c.id === id);
+      if (item?.type === "agent") {
+        deleteAgentMutation.mutate(
+          { agentId: item.agentId ?? "", conversationId: id },
+          {
+            onSuccess: () => {
+              setAllConversations((prev) => prev.filter((c) => c.id !== id));
+            },
+          },
+        );
+      } else {
+        deleteDirectMutation.mutate(id, {
+          onSuccess: () => {
+            setAllConversations((prev) => prev.filter((c) => c.id !== id));
+          },
+        });
+      }
     },
-    [deleteMutation],
+    [deleteDirectMutation, deleteAgentMutation],
   );
 
   const handleRename = useCallback(
     (id: string, newTitle: string) => {
-      updateMutation.mutate(
-        { id, title: newTitle },
-        {
-          onSuccess: () => {
-            setAllConversations((prev) =>
-              prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
-            );
+      const item = allConversations.find((c) => c.id === id);
+      if (item?.type === "agent") {
+        updateAgentMutation.mutate(
+          { agentId: item.agentId ?? "", conversationId: id, title: newTitle },
+          {
+            onSuccess: () => {
+              setAllConversations((prev) =>
+                prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
+              );
+            },
           },
-        },
-      );
+        );
+      } else {
+        updateDirectMutation.mutate(
+          { id, title: newTitle },
+          {
+            onSuccess: () => {
+              setAllConversations((prev) =>
+                prev.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
+              );
+            },
+          },
+        );
+      }
     },
-    [updateMutation],
+    [updateDirectMutation, updateAgentMutation],
   );
 
   const groupedConversations = useMemo(
@@ -752,6 +828,7 @@ export function DefaultNavMain({
               id={conversation.id}
               title={conversation.title || "new chat"}
               time={formatRelativeTime(conversation.createdAt)}
+              agentName={conversation.agentName}
               onDelete={handleDelete}
               onRename={handleRename}
               onSelect={handleSelect}

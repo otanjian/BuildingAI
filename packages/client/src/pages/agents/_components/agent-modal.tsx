@@ -73,8 +73,8 @@ const creationMethods: {
   },
   {
     value: "opencode",
-    label: "OpenCode智能体",
-    description: "委托本机 OpenCode 执行并产出报告",
+    label: "Code智能体",
+    description: "委托本机 Code 执行并产出报告",
     icon: <Terminal className="size-4" />,
   },
 ];

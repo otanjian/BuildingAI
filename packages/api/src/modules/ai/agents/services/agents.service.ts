@@ -6,6 +6,7 @@ import { type UserPlayground } from "@buildingai/db";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import {
     Agent,
+    AgentAssignment,
     AiMcpServer,
     Datasets,
     McpServerType,
@@ -45,6 +46,8 @@ export class AgentsService extends BaseService<Agent> {
         private readonly mcpServerRepository: Repository<AiMcpServer>,
         @InjectRepository(Datasets)
         private readonly datasetsRepository: Repository<Datasets>,
+        @InjectRepository(AgentAssignment)
+        private readonly agentAssignmentRepository: Repository<AgentAssignment>,
         private readonly cozeAgentSyncService: CozeAgentSyncService,
         private readonly difyAgentSyncService: DifyAgentSyncService,
         private readonly agentConfigService: AgentConfigService,
@@ -402,6 +405,20 @@ export class AgentsService extends BaseService<Agent> {
             publishedAt: agent.publishedAt ?? new Date(),
         });
 
+        // Auto-assign the approving admin so they can verify the agent in the square
+        const existingAssignment = await this.agentAssignmentRepository.findOne({
+            where: { agentId, userId: operatorId },
+        });
+        if (!existingAssignment) {
+            await this.agentAssignmentRepository.save(
+                this.agentAssignmentRepository.create({
+                    agentId,
+                    userId: operatorId,
+                    assignedBy: operatorId,
+                }),
+            );
+        }
+
         return this.findOneById(agentId, { relations: ["tags"] }) as Promise<Agent>;
     }
 
@@ -564,7 +581,7 @@ export class AgentsService extends BaseService<Agent> {
         };
     }
 
-    async listSquare(dto: ListSquareAgentsDto) {
+    async listSquare(dto: ListSquareAgentsDto, userId?: string, isRoot: boolean = false) {
         const { keyword, tagIds, ...paginationDto } = dto;
 
         const qb = this.agentRepository
@@ -573,6 +590,21 @@ export class AgentsService extends BaseService<Agent> {
             .where("a.squarePublishStatus = :status", { status: SquarePublishStatus.APPROVED })
             .andWhere("a.publishedToSquare = :published", { published: true })
             .orderBy("a.updatedAt", "DESC");
+
+        // Root users see all agents regardless of visibility
+        // "all": visible to everyone; "assigned": only assigned users
+        if (userId) {
+            if (!isRoot) {
+                qb.andWhere(
+                    `(a.squareVisibility = 'all' OR (a.squareVisibility = 'assigned' AND EXISTS (SELECT 1 FROM ai_agent_assignments aa WHERE aa.agent_id = a.id AND aa.user_id = :userId)))`,
+                    { userId },
+                );
+            }
+            // Root users: no visibility filter — see all agents
+        } else {
+            // Unauthenticated users only see "all" visibility agents
+            qb.andWhere("a.squareVisibility = :visibility", { visibility: "all" });
+        }
 
         if (keyword?.trim()) {
             qb.andWhere("(a.name ILIKE :keyword OR a.description ILIKE :keyword)", {
@@ -635,6 +667,83 @@ export class AgentsService extends BaseService<Agent> {
         }
 
         await this.agentRepository.delete(agentId);
+    }
+
+    // ───── 智能体分配管理 ─────
+
+    /**
+     * 获取智能体已分配的用户列表
+     */
+    async listAssignments(agentId: string): Promise<AgentAssignment[]> {
+        return this.agentAssignmentRepository.find({
+            where: { agentId },
+            relations: ["user"],
+            select: {
+                id: true,
+                agentId: true,
+                userId: true,
+                assignedBy: true,
+                createdAt: true,
+                user: {
+                    id: true,
+                    username: true,
+                    nickname: true,
+                },
+            },
+            order: { createdAt: "DESC" },
+        });
+    }
+
+    /**
+     * 批量分配用户到智能体
+     * 已存在的分配关系会被跳过（不报错）
+     */
+    async assignUsers(agentId: string, userIds: string[], assignedBy: string): Promise<AgentAssignment[]> {
+        const agent = await this.agentRepository.findOne({ where: { id: agentId } });
+        if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
+
+        const existing = await this.agentAssignmentRepository.find({
+            where: { agentId, userId: In(userIds) },
+        });
+        const existingUserIds = new Set(existing.map((a) => a.userId));
+
+        const newUserIds = userIds.filter((id) => !existingUserIds.has(id));
+        if (newUserIds.length === 0) {
+            return existing;
+        }
+
+        const assignments = this.agentAssignmentRepository.create(
+            newUserIds.map((userId) => ({
+                agentId,
+                userId,
+                assignedBy,
+            })),
+        );
+
+        await this.agentAssignmentRepository.save(assignments);
+        return this.listAssignments(agentId);
+    }
+
+    /**
+     * 批量移除用户分配
+     */
+    async unassignUsers(agentId: string, userIds: string[]): Promise<void> {
+        if (userIds.length === 0) return;
+        await this.agentAssignmentRepository.delete({
+            agentId,
+            userId: In(userIds),
+        });
+    }
+
+    /**
+     * 更新智能体广场可见性
+     */
+    async updateSquareVisibility(agentId: string, visibility: "all" | "assigned"): Promise<Agent> {
+        const agent = await this.agentRepository.findOne({ where: { id: agentId } });
+        if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
+
+        agent.squareVisibility = visibility;
+        return this.agentRepository.save(agent);
     }
 
     async copyFromSquare(agentId: string, userId: string): Promise<Agent> {

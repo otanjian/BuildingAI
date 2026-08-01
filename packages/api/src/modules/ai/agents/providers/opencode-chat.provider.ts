@@ -27,6 +27,7 @@ import {
 } from "../utils/opencode-artifact-path";
 import { OpencodeAssistantPartRouter } from "../utils/opencode-part-router";
 import {
+    convertFilePartsToDataUrls,
     mapUiPartsToOpencodePromptParts,
     OpencodeAttachmentForwardError,
     type UiMessagePartLike,
@@ -140,6 +141,16 @@ export class OpencodeChatProvider {
                         (lastUserMessage?.parts ?? []) as UiMessagePartLike[],
                         { appDomain: process.env.APP_DOMAIN },
                     );
+                } catch (error) {
+                    if (error instanceof OpencodeAttachmentForwardError) {
+                        throw HttpErrorFactory.badRequest(error.message);
+                    }
+                    throw error;
+                }
+
+                // Convert http(s):// image URLs to base64 data URLs for OpenCode
+                try {
+                    mappedPrompt.parts = await convertFilePartsToDataUrls(mappedPrompt.parts);
                 } catch (error) {
                     if (error instanceof OpencodeAttachmentForwardError) {
                         throw HttpErrorFactory.badRequest(error.message);
@@ -416,6 +427,7 @@ export class OpencodeChatProvider {
                     userConsumedPower = await this.agentBillingHandler.deduct({
                         userId: params.userId,
                         conversationId: localConversationId,
+                        agentId: params.agentId,
                         usage,
                         billingRule,
                     });

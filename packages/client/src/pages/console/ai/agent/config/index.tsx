@@ -38,7 +38,7 @@ const AGENT_TYPE_OPTIONS: AgentTypeOption[] = [
   { key: "direct", label: "系统智能体" },
   { key: "coze", label: "Coze智能体" },
   { key: "dify", label: "Dify智能体" },
-  { key: "opencode", label: "OpenCode智能体" },
+  { key: "opencode", label: "Code智能体" },
 ];
 
 /** 创建默认的智能体类型配置 */
@@ -277,7 +277,7 @@ const AgentConfigIndexPage = () => {
             </Table>
           </div>
           <p className="text-muted-foreground text-sm">
-            系统智能体按模型实际消耗动态计费，Coze 与 Dify 智能体可设置固定积分消耗。
+            系统智能体按模型实际消耗动态计费，Coze、Dify 与 Code 智能体可设置固定积分消耗。
           </p>
         </div>
 

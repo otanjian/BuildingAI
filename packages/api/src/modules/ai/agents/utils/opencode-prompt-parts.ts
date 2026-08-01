@@ -27,6 +27,62 @@ export class OpencodeAttachmentForwardError extends Error {
     }
 }
 
+/**
+ * Convert file parts with http(s):// URLs to base64 data URLs so OpenCode can consume them.
+ * data: URLs are passed through unchanged.
+ */
+export async function convertFilePartsToDataUrls(
+    parts: OpencodePromptPartInput[],
+): Promise<OpencodePromptPartInput[]> {
+    const converted: OpencodePromptPartInput[] = [];
+
+    for (const part of parts) {
+        if (part.type !== "file") {
+            converted.push(part);
+            continue;
+        }
+
+        const url = part.url.trim();
+
+        if (url.startsWith("data:")) {
+            converted.push(part);
+            continue;
+        }
+
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            converted.push(part);
+            continue;
+        }
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to download image for OpenCode: HTTP ${response.status} ${response.statusText}`,
+                );
+            }
+
+            const contentType =
+                response.headers.get("content-type")?.split(";")[0]?.trim() || part.mime;
+            const arrayBuffer = await response.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString("base64");
+            const dataUrl = `data:${contentType};base64,${base64}`;
+
+            converted.push({
+                ...part,
+                mime: contentType,
+                url: dataUrl,
+            });
+        } catch (error) {
+            throw new OpencodeAttachmentForwardError(
+                `Image attachment could not be downloaded for OpenCode: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
+
+    return converted;
+}
+
 export type MapUiPartsOptions = {
     /** Public app origin, e.g. https://ai.bosofts.com — used to rewrite localhost upload URLs */
     appDomain?: string;

@@ -276,13 +276,15 @@ export class FinanceService extends BaseService<AccountLog> {
         );
 
         // 收集所有需要查询的智能体ID
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const agentIds = new Set<string>();
         accountLogs.forEach((accountLog) => {
             if (
                 accountLog.sourceInfo?.type === ACCOUNT_LOG_SOURCE.AGENT_CHAT &&
-                accountLog.sourceInfo?.source
+                accountLog.sourceInfo?.agentId &&
+                uuidPattern.test(String(accountLog.sourceInfo.agentId))
             ) {
-                agentIds.add(String(accountLog.sourceInfo.source));
+                agentIds.add(String(accountLog.sourceInfo.agentId));
             }
         });
 
@@ -311,17 +313,23 @@ export class FinanceService extends BaseService<AccountLog> {
             const accountTypeDesc = ACCOUNT_LOG_TYPE_DESCRIPTION[accountLog.accountType];
             const associationUser = userNicknameMap.get(String(accountLog.associationUserId)) || "";
             let consumeSourceDesc = "";
+            let agentName = "";
 
             // 根据来源类型处理
             if (accountLog.sourceInfo) {
                 switch (accountLog.sourceInfo.type) {
                     case ACCOUNT_LOG_SOURCE.AGENT_CHAT: {
-                        // 如果是智能体对话，使用智能体名称
-                        const sourceId = String(accountLog.sourceInfo.source);
-                        if (agentMap.has(sourceId)) {
-                            consumeSourceDesc = agentMap.get(sourceId);
+                        if (accountLog.sourceInfo.agentId) {
+                            const sourceId = String(accountLog.sourceInfo.agentId);
+                            if (agentMap.has(sourceId)) {
+                                consumeSourceDesc = agentMap.get(sourceId);
+                                agentName = agentMap.get(sourceId);
+                            } else {
+                                consumeSourceDesc = `智能体(${sourceId})`;
+                                agentName = `智能体(${sourceId})`;
+                            }
                         } else {
-                            consumeSourceDesc = `智能体(${accountLog.sourceInfo.source})`;
+                            consumeSourceDesc = accountLog.sourceInfo.source || "智能体对话";
                         }
                         break;
                     }
@@ -336,6 +344,7 @@ export class FinanceService extends BaseService<AccountLog> {
                 accountTypeDesc,
                 associationUser,
                 consumeSourceDesc,
+                agentName,
             };
         });
     }

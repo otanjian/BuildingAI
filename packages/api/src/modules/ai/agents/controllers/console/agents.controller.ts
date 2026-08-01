@@ -10,6 +10,7 @@ import { UserService } from "@modules/user/services/user.service";
 import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
 
 import { ListConsoleAgentsDto } from "../../dto/list-console-agents.dto";
+import { BatchAgentAssignDto } from "../../dto/batch-agent-assign.dto";
 import { AgentDashboardQueryDto } from "../../dto/web/agent/agent-dashboard-query.dto";
 import { RejectSquarePublishDto } from "../../dto/web/publish/square-publish.dto";
 import {
@@ -92,6 +93,7 @@ export class AgentsConsoleController {
                     publishedToSquare: item.publishedToSquare ?? false,
                     squarePublishStatus: item.squarePublishStatus ?? SquarePublishStatus.NONE,
                     squareRejectReason: item.squareRejectReason ?? null,
+                    squareVisibility: (item as any).squareVisibility ?? "all",
                     updatedAt: item.updatedAt,
                     publishedAt: item.publishedAt ?? null,
                     createMode: item.createMode ?? "manual",
@@ -144,5 +146,41 @@ export class AgentsConsoleController {
     @Permissions({ code: "delete", name: "删除智能体", description: "删除智能体" })
     async delete(@Param("id") agentId: string, @Playground() user: UserPlayground) {
         return this.agentsService.deleteAgent(agentId, user.id);
+    }
+
+    // ───── 智能体分配管理 ─────
+
+    @Get(":id/assignments")
+    @Permissions({ code: "assign", name: "分配用户", description: "查看已分配用户列表" })
+    async listAssignments(@Param("id") agentId: string) {
+        return this.agentsService.listAssignments(agentId);
+    }
+
+    @Post(":id/assignments")
+    @Permissions({ code: "assign", name: "分配用户", description: "批量分配用户到智能体" })
+    async assignUsers(
+        @Param("id") agentId: string,
+        @Body() dto: BatchAgentAssignDto,
+        @Playground() user: UserPlayground,
+    ) {
+        return this.agentsService.assignUsers(agentId, dto.userIds, user.id);
+    }
+
+    @Delete(":id/assignments")
+    @Permissions({ code: "assign", name: "分配用户", description: "批量移除用户分配" })
+    async unassignUsers(
+        @Param("id") agentId: string,
+        @Body() dto: BatchAgentAssignDto,
+    ) {
+        await this.agentsService.unassignUsers(agentId, dto.userIds);
+    }
+
+    @Post(":id/square-visibility")
+    @Permissions({ code: "assign", name: "分配用户", description: "设置广场可见性" })
+    async setSquareVisibility(
+        @Param("id") agentId: string,
+        @Body() dto: { visibility: "all" | "assigned" },
+    ) {
+        return this.agentsService.updateSquareVisibility(agentId, dto.visibility);
     }
 }

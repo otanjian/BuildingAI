@@ -1,0 +1,1 @@
+import{n as e,t}from"./bundle-mjs-yQXAlbQd.js";function n(...n){return t(e(n))}function r(e,t){let n=null,r=(...r)=>{n!==null&&clearTimeout(n),n=setTimeout(()=>{n=null,e(...r)},t)};return r.cancel=()=>{n!==null&&(clearTimeout(n),n=null)},r}export{r as n,n as t};

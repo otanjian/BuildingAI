@@ -19,6 +19,8 @@ export interface PowerDeductionOptions {
         type: ACCOUNT_LOG_SOURCE_VALUE;
         /** Source description */
         source: string;
+        /** Agent ID (optional, for AGENT_CHAT type) */
+        agentId?: string;
     };
     /** Remark for the deduction */
     remark?: string;

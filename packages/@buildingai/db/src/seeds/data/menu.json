@@ -564,5 +564,175 @@
                 ]
             }
         ]
+    },
+    {
+        "name": "我的待办",
+        "code": "taskview",
+        "path": "",
+        "icon": "",
+        "component": "",
+        "permissionCode": null,
+        "sort": 200,
+        "isHidden": 0,
+        "type": 0,
+        "sourceType": 1,
+        "children": [
+            {
+                "name": "任务列表",
+                "code": "taskview-tasks",
+                "path": "taskview/tasks",
+                "icon": "list-checks",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:tasks",
+                "sort": 0,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "看板",
+                "code": "taskview-kanban",
+                "path": "taskview/kanban",
+                "icon": "kanban",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:kanban",
+                "sort": 1,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "图表",
+                "code": "taskview-graph",
+                "path": "taskview/graph",
+                "icon": "git-graph",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:graph",
+                "sort": 2,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "冲刺",
+                "code": "taskview-sprints",
+                "path": "taskview/sprints",
+                "icon": "timer",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:sprints",
+                "sort": 3,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "协作",
+                "code": "taskview-collaboration",
+                "path": "taskview/collaboration",
+                "icon": "users",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:collaboration",
+                "sort": 4,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "集成",
+                "code": "taskview-integrations",
+                "path": "taskview/integrations",
+                "icon": "plug-zap",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:integrations",
+                "sort": 5,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "Webhooks",
+                "code": "taskview-webhooks",
+                "path": "taskview/webhooks",
+                "icon": "webhook",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:webhooks",
+                "sort": 6,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "消息",
+                "code": "taskview-messaging",
+                "path": "taskview/messaging",
+                "icon": "message-circle",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:messaging",
+                "sort": 7,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "项目时间报告",
+                "code": "taskview-project-time-reports",
+                "path": "taskview/project-time-reports",
+                "icon": "clock",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:time-reports",
+                "sort": 8,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "分析",
+                "code": "taskview-analytics",
+                "path": "taskview/analytics",
+                "icon": "chart-bar",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:analytics",
+                "sort": 9,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "时间报告",
+                "code": "taskview-time-reports",
+                "path": "taskview/time-reports",
+                "icon": "calendar-clock",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:global-time-reports",
+                "sort": 10,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "设置",
+                "code": "taskview-settings",
+                "path": "taskview/settings",
+                "icon": "settings",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:settings",
+                "sort": 11,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "账户",
+                "code": "taskview-account",
+                "path": "taskview/account",
+                "icon": "user-round-cog",
+                "component": "/console/taskview/index",
+                "permissionCode": "taskview:account",
+                "sort": 12,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            }
+        ]
     }
 ]

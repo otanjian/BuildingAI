@@ -1,3 +1,4 @@
+export * from "./agent-assignment";
 export * from "./agent-config";
 export * from "./agent-decorate";
 export * from "./agents";

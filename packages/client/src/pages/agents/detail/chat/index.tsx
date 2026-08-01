@@ -18,11 +18,19 @@ import { Label } from "@buildingai/ui/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@buildingai/ui/components/ui/popover";
 import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { Separator } from "@buildingai/ui/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@buildingai/ui/components/ui/sheet";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { cn } from "@buildingai/ui/lib/utils";
-import { Bot, ChevronDown, ChevronLeft, ListIndentDecrease, Settings2 } from "lucide-react";
+import { Bot, ChevronDown, ChevronLeft, ListIndentDecrease, PanelLeft, Settings2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -412,8 +420,8 @@ function ChatContent({
         <div
           className={
             isFirstSession
-              ? "mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-6 px-4 pt-8 pb-4"
-              : "mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pt-8 pb-4"
+              ? "mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-6 px-3 pt-6 pb-3 sm:px-4 sm:pt-8 sm:pb-4"
+              : "mx-auto flex w-full max-w-3xl flex-col gap-4 px-3 pt-6 pb-3 sm:px-4 sm:pt-8 sm:pb-4"
           }
         >
           {isLoading && !hasCurrentMessages ? (
@@ -513,7 +521,7 @@ function ChatContent({
         </div>
         <div className="bg-background sticky bottom-0 z-10">
           <InfiniteScrollTopScrollButton className="-top-12 z-20" />
-          <div className="mx-auto w-full max-w-3xl px-4 py-3">
+          <div className="mx-auto w-full max-w-3xl px-3 py-2 sm:px-4 sm:py-3">
             {(status === "submitted" || status === "streaming") ? (
               <StreamingIndicator />
             ) : null}
@@ -618,6 +626,7 @@ const AgentChatPage = () => {
 
   const [formPopoverOpen, setFormPopoverOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const hasForm = formFields.length > 0;
 
   /**
@@ -630,23 +639,30 @@ const AgentChatPage = () => {
   }, [formFields.length]);
 
   return (
-    <div
-      className={
-        panelExpanded ? "bg-muted flex h-dvh w-full py-2 pl-2" : "bg-background flex h-dvh w-full"
-      }
-    >
+    <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
       <div
-        className={
-          panelExpanded
-            ? "bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-sm"
-            : "relative flex min-w-0 flex-1 flex-col overflow-hidden"
-        }
+        className={cn(
+          "flex h-dvh w-full",
+          "md:gap-0",
+          panelExpanded ? "md:bg-muted md:py-2 md:pl-2" : "bg-background",
+        )}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
-              <ChevronLeft />
-            </Button>
+        <div
+          className={cn(
+            "bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden",
+            panelExpanded && "md:rounded-sm",
+          )}
+        >
+          <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
+            <div className="flex items-center gap-1">
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon-sm" className="shrink-0 md:hidden" aria-label="打开菜单">
+                  <PanelLeft className="size-4" />
+                </Button>
+              </SheetTrigger>
+              <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
+                <ChevronLeft />
+              </Button>
             <div className="flex items-center gap-2">
               <Avatar className="size-8 rounded-lg after:rounded-lg">
                 <AvatarImage
@@ -658,7 +674,7 @@ const AgentChatPage = () => {
                   <Bot className="size-4" />
                 </AvatarFallback>
               </Avatar>
-              <span className={panelExpanded ? "opacity-0" : "opacity-100 transition"}>
+              <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
                 {agent?.name}
               </span>
             </div>
@@ -667,6 +683,7 @@ const AgentChatPage = () => {
             <Button
               size="icon"
               variant="ghost"
+              className="hidden md:inline-flex"
               title={panelExpanded ? "收起侧栏" : "展开侧栏"}
               onClick={() => setPanelExpanded((v) => !v)}
             >
@@ -750,15 +767,38 @@ const AgentChatPage = () => {
         </AssistantProvider>
       </div>
       {panelExpanded && (
-        <AgentInfoPanel
-          agent={agent}
-          isLoading={isAgentLoading}
-          conversations={conversations}
-          isLoadingConversations={isLoadingConversations}
-          currentConversationId={uuid}
-        />
+        <div className="hidden md:flex">
+          <AgentInfoPanel
+            agent={agent}
+            isLoading={isAgentLoading}
+            conversations={conversations}
+            isLoadingConversations={isLoadingConversations}
+            currentConversationId={uuid}
+          />
+        </div>
       )}
+      <SheetContent
+        side="left"
+        className="bg-sidebar flex h-full w-[min(20rem,calc(100vw-1rem))] max-w-[min(20rem,calc(100vw-1rem))] flex-col gap-0 border-r p-0 sm:max-w-sm"
+      >
+        <SheetHeader className="sr-only">
+          <SheetTitle>智能体信息</SheetTitle>
+          <SheetDescription>智能体详情与历史对话</SheetDescription>
+        </SheetHeader>
+        <div className="chat-scroll flex min-h-0 flex-1 flex-col overflow-hidden py-2">
+          <div className="w-full min-w-0 [&>div]:w-full [&>div]:max-w-full">
+            <AgentInfoPanel
+              agent={agent}
+              isLoading={isAgentLoading}
+              conversations={conversations}
+              isLoadingConversations={isLoadingConversations}
+              currentConversationId={uuid}
+            />
+          </div>
+        </div>
+      </SheetContent>
     </div>
+  </Sheet>
   );
 };
 

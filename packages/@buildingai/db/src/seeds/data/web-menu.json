@@ -4,6 +4,7 @@
             "id": "menu_home_fixed",
             "icon": "square-pen",
             "title": "新对话",
+            "permissions": ["agent.manage"],
             "link": {
                 "label": "新对话",
                 "path": "/",

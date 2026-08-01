@@ -44,6 +44,7 @@ import {
   FileCheck,
   Info,
   Trash2,
+  UsersRound,
 } from "lucide-react";
 import { type ChangeEvent, useState } from "react";
 import { useEffect } from "react";
@@ -56,6 +57,7 @@ import { PageContainer } from "@/layouts/console/_components/page-container";
 
 import { DashboardDialog } from "./_components/dashboard-dialog";
 import { ReviewDialog } from "./_components/review-dialog";
+import { AgentAssignDialog } from "./_components/agent-assign-dialog";
 
 export const AgentCreateMode = {
   DIRECT: "direct",
@@ -68,7 +70,7 @@ const CREATE_MODE_MAP: Record<string, string> = {
   [AgentCreateMode.DIRECT]: "系统智能体",
   [AgentCreateMode.COZE]: "Coze智能体",
   [AgentCreateMode.DIFY]: "Dify智能体",
-  [AgentCreateMode.OPENCODE]: "OpenCode智能体",
+  [AgentCreateMode.OPENCODE]: "Code智能体",
 };
 
 const PAGE_SIZE = 30;
@@ -165,6 +167,8 @@ const AgentIndexPage = () => {
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [reviewAgent, setReviewAgent] = useState<ConsoleAgentItem | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignAgent, setAssignAgent] = useState<ConsoleAgentItem | null>(null);
   const { confirm: alertConfirm } = useAlertDialog();
   const { data, isLoading, refetch } = useConsoleAgentsListQuery(queryParams);
   const deleteAgentMutation = useDeleteAgentMutation({
@@ -350,6 +354,7 @@ const AgentIndexPage = () => {
                     "agents:unpublish",
                     "agents:dashboard",
                     "agents:delete",
+                    "agents:assign",
                   ]}
                   any
                 >
@@ -448,6 +453,7 @@ const AgentIndexPage = () => {
                         "agents:unpublish",
                         "agents:dashboard",
                         "agents:delete",
+                        "agents:assign",
                       ]}
                       any
                     >
@@ -503,6 +509,17 @@ const AgentIndexPage = () => {
                                 删除
                               </DropdownMenuItem>
                             </PermissionGuard>
+                            <PermissionGuard permissions="agents:assign">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setAssignAgent(row);
+                                  setAssignOpen(true);
+                                }}
+                              >
+                                <UsersRound className="mr-2 size-4" />
+                                分配
+                              </DropdownMenuItem>
+                            </PermissionGuard>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -529,6 +546,16 @@ const AgentIndexPage = () => {
           onOpenChange={setReviewOpen}
           agent={reviewAgent}
           onSuccess={() => refetch()}
+        />
+      )}
+
+      {assignOpen && assignAgent && (
+        <AgentAssignDialog
+          open={assignOpen}
+          onOpenChange={setAssignOpen}
+          agentId={assignAgent.id}
+          currentVisibility={assignAgent.squareVisibility}
+          onVisibilityChange={() => refetch()}
         />
       )}
     </PageContainer>

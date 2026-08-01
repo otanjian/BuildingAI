@@ -1172,7 +1172,7 @@ export const PromptInputCommandSeparator = ({
 
 export type PromptInputSpeechButtonProps = {
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
-  onAudioRecorded?: (audioBlob: Blob) => Promise<string | void>;
+  onAudioRecorded?: (audioBlob: Blob) => Promise<string>;
 };
 
 export const PromptInputSpeechButton = ({

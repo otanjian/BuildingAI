@@ -43,6 +43,7 @@ export type ConsoleAgentItem = {
     publishedToSquare: boolean;
     squarePublishStatus: ConsoleAgentStatus;
     squareRejectReason?: string | null;
+    squareVisibility?: string;
     updatedAt: string;
     publishedAt?: string | null;
     userCount: number;

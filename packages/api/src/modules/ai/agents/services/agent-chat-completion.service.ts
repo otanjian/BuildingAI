@@ -488,6 +488,7 @@ export class AgentChatCompletionService {
                                                 await this.agentBillingHandler.deduct({
                                                     userId: params.userId,
                                                     conversationId,
+                                                    agentId: params.agentId,
                                                     usage: billingUsage,
                                                     billingRule: chatModel.dbModel.billingRule,
                                                 });
@@ -555,6 +556,7 @@ export class AgentChatCompletionService {
                                                         await this.agentBillingHandler.deductForFollowUpSuggestions(
                                                             params.userId,
                                                             conversationId,
+                                                            params.agentId,
                                                             titleModel.dbModel.billingRule,
                                                         );
                                                     if (followUpPower > 0)
@@ -811,6 +813,7 @@ export class AgentChatCompletionService {
                                 await this.agentBillingHandler.deductForPlanning(
                                     userId,
                                     conversationId,
+                                    agent.id,
                                     planModel.dbModel.billingRule,
                                 );
                         } catch (err) {
@@ -1222,6 +1225,7 @@ export class AgentChatCompletionService {
                         const power = await this.agentBillingHandler.deductForMemoryExtraction(
                             p.userId,
                             conversationId,
+                            p.agentId,
                             memModel.dbModel.billingRule,
                         );
                         if (power > 0) extraPower += power;

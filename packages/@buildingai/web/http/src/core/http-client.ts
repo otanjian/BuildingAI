@@ -2,7 +2,7 @@ import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } f
 
 import { createAbortError, createRequestId } from "../utils/helpers";
 import { mergeRequestConfig, type RequestConfig } from "../utils/request";
-import { type HeadersInput, type HttpClientOptions, HttpError, type RetryOptions } from "./types";
+import { type ApiFailure, type HeadersInput, type HttpClientOptions, HttpError, type RetryOptions } from "./types";
 
 function trimSlashStart(v: string): string {
     return v.replace(/^\/+/, "");
@@ -112,7 +112,7 @@ export class HttpClient {
         if (this.options.parseResponse) {
             const result = this.options.parseResponse<TResponse>(raw);
             if (result.ok) return result.data;
-            throw result.error;
+            throw (result as ApiFailure).error;
         }
 
         return raw as TResponse;
@@ -267,8 +267,9 @@ export class HttpClient {
             if (tokenGetter) {
                 const token = await tokenGetter();
                 if (token) {
-                    cfg.headers = cfg.headers ?? {};
-                    (cfg.headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    if (!cfg.headers) cfg.headers = {} as any;
+                    cfg.headers["Authorization"] = `Bearer ${token}`;
                 }
             }
             return cfg;

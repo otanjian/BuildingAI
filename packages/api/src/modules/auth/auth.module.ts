@@ -15,10 +15,12 @@ import { AuthService } from "@common/modules/auth/services/auth.service";
 import { ExtensionFeatureService } from "@common/modules/auth/services/extension-feature.service";
 import { ExtensionFeatureScanService } from "@common/modules/auth/services/extension-feature-scan.service";
 import { RolePermissionService } from "@common/modules/auth/services/role-permission.service";
+import { TaskviewAuthService } from "@common/modules/auth/services/taskview-auth.service";
 import { UserTokenService } from "@common/modules/auth/services/user-token.service";
 import { SmsModule } from "@common/modules/sms/sms.module";
 import { WechatOaService } from "@common/modules/wechat/services/wechatoa.service";
 import { ChannelModule } from "@modules/channel/channel.module";
+import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
@@ -55,6 +57,7 @@ function resolveJwtSecret(configService: ConfigService): string {
 @Module({
     imports: [
         SmsModule,
+        HttpModule,
         TypeOrmModule.forFeature([
             User,
             Role,
@@ -86,6 +89,7 @@ function resolveJwtSecret(configService: ConfigService): string {
         ExtensionFeatureScanService,
         ExtensionFeatureService,
         RolePermissionService,
+        TaskviewAuthService,
         UserTokenService,
         WechatOaService,
     ],
@@ -95,6 +99,7 @@ function resolveJwtSecret(configService: ConfigService): string {
         ExtensionFeatureService,
         JwtModule,
         RolePermissionService,
+        TaskviewAuthService,
         UserTokenService,
     ],
 })

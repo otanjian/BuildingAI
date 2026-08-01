@@ -1,14 +1,14 @@
 "use client";
 
 import {
-  type ConversationRecord,
-  useConversationsQuery,
+  type UnifiedConversationItem,
+  useUnifiedConversationsQuery,
 } from "@buildingai/services/web";
 import { InfiniteScroll } from "@buildingai/ui/components/infinite-scroll";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { cn } from "@buildingai/ui/lib/utils";
-import { MessageSquare } from "lucide-react";
+import { Bot, MessageSquare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -19,6 +19,16 @@ import {
   type TimeGroup,
 } from "../utils/conversation-group";
 
+type EmbedConversationItem = {
+  id: string;
+  title: string;
+  type: "direct" | "agent";
+  agentId?: string;
+  agentName?: string;
+  createdAt: string;
+};
+
+
 /**
  * Full-page conversation history for platform iframe embeds (`?_embed=1&_history=1`).
  * BuildingAI default sidebar is hidden in embed mode, so history needs its own surface.
@@ -27,10 +37,10 @@ export function EmbedHistoryPanel() {
   const navigate = useNavigate();
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const [allConversations, setAllConversations] = useState<ConversationRecord[]>([]);
+  const [allConversations, setAllConversations] = useState<EmbedConversationItem[]>([]);
   const pageSize = 20;
 
-  const { data, isLoading } = useConversationsQuery({
+  const { data, isLoading } = useUnifiedConversationsQuery({
     page,
     pageSize,
     keyword: keyword || undefined,
@@ -110,10 +120,24 @@ export function EmbedHistoryPanel() {
                             className={cn(
                               "hover:bg-muted flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
                             )}
-                            onClick={() => navigate(`/c/${conversation.id}?_embed=1`)}
+                            onClick={() => {
+                              const path = conversation.type === "agent"
+                                ? `/agents/${conversation.agentId}/c/${conversation.id}?_embed=1`
+                                : `/c/${conversation.id}?_embed=1`;
+                              navigate(path);
+                            }}
                           >
-                            <MessageSquare className="text-muted-foreground size-4 shrink-0" />
+                            {conversation.type === "agent" ? (
+                              <Bot className="text-muted-foreground size-4 shrink-0" />
+                            ) : (
+                              <MessageSquare className="text-muted-foreground size-4 shrink-0" />
+                            )}
                             <span className="min-w-0 flex-1 truncate text-sm">
+                              {conversation.agentName ? (
+                                <span className="text-muted-foreground mr-1 text-xs font-normal">
+                                  {conversation.agentName}
+                                </span>
+                              ) : null}
                               {conversation.title || "新对话"}
                             </span>
                             <span className="text-muted-foreground shrink-0 text-xs">

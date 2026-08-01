@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/u
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem } from "@buildingai/ui/components/ui/carousel";
+import { useAuthStore } from "@buildingai/web/stores";
 import {
   InputGroup,
   InputGroupAddon,
@@ -65,6 +66,9 @@ const AgentsIndexPage = () => {
   useDocumentHead({
     title: "智能体广场",
   });
+
+  const permissionsCodes = useAuthStore((state) => state.auth.userInfo?.permissionsCodes ?? []);
+  const hasAgentManagePermission = permissionsCodes.includes("agent.manage");
 
   const { data: decorateConfig } = useWebAgentDecorateQuery();
   const { data: tagsData } = useAgentTags();
@@ -185,18 +189,26 @@ const AgentsIndexPage = () => {
     navigate(path);
   };
 
+  const handleFetchNextPage = useCallback(() => {
+    if (!squareQuery.isFetchingNextPage && squareQuery.hasNextPage) {
+      squareQuery.fetchNextPage();
+    }
+  }, [squareQuery.isFetchingNextPage, squareQuery.hasNextPage, squareQuery.fetchNextPage]);
+
   return (
     <ScrollArea className="h-dvh" viewportClassName="[&_>div]:block!">
       <div className="flex w-full min-w-0 flex-col">
         <div className="bg-background sticky top-0 z-20 flex h-10 w-full items-center px-2 lg:px-4">
           <SidebarTrigger className="md:hidden" />
           <div className="ml-auto">
-            <Button variant="ghost" size="sm" className="ml-auto" asChild>
-              <Link to="/agents/workspace">
-                <User />
-                我的智能体
-              </Link>
-            </Button>
+            {hasAgentManagePermission && (
+              <Button variant="ghost" size="sm" className="ml-auto" asChild>
+                <Link to="/agents/workspace">
+                  <User />
+                  我的智能体
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
 
@@ -316,7 +328,7 @@ const AgentsIndexPage = () => {
               <InfiniteScroll
                 loading={isFetchingNextPage}
                 hasMore={hasNextPage}
-                onLoadMore={() => squareQuery.fetchNextPage()}
+                onLoadMore={handleFetchNextPage}
                 emptyText=""
                 showEmptyText={!hasNextPage}
               >

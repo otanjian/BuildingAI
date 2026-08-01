@@ -14,6 +14,7 @@ const ESTIMATED_TOKENS_FOLLOW_UP = 150;
 export interface AgentBillingDeductParams {
     userId: string;
     conversationId: string;
+    agentId: string;
     usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     billingRule: { power: number; tokens: number } | undefined;
     isGuest?: boolean;
@@ -67,6 +68,7 @@ export class AgentBillingHandler {
                 source: {
                     type: ACCOUNT_LOG_SOURCE.AGENT_CHAT,
                     source: "智能体对话",
+                    agentId: params.agentId,
                 },
                 remark: "智能体对话消耗",
                 associationNo: conversationId,
@@ -83,10 +85,11 @@ export class AgentBillingHandler {
     async deductForMemoryExtraction(
         userId: string | undefined,
         conversationId: string | undefined,
+        agentId: string | undefined,
         billingRule: { power: number; tokens: number } | undefined,
         isGuest?: boolean,
     ): Promise<number> {
-        if (!userId || !conversationId || !billingRule?.tokens) return 0;
+        if (!userId || !conversationId || !agentId || !billingRule?.tokens) return 0;
 
         const amount = this.calculateConsumedPower(ESTIMATED_TOKENS_MEMORY, billingRule);
         if (amount <= 0) return 0;
@@ -101,6 +104,7 @@ export class AgentBillingHandler {
                 source: {
                     type: ACCOUNT_LOG_SOURCE.AGENT_CHAT,
                     source: "智能体记忆提取",
+                    agentId,
                 },
                 remark: "智能体记忆提取消耗",
                 associationNo: conversationId,
@@ -117,10 +121,11 @@ export class AgentBillingHandler {
     async deductForPlanning(
         userId: string | undefined,
         conversationId: string | undefined,
+        agentId: string | undefined,
         billingRule: { power: number; tokens: number } | undefined,
         isGuest?: boolean,
     ): Promise<number> {
-        if (!userId || !conversationId || !billingRule?.tokens) return 0;
+        if (!userId || !conversationId || !agentId || !billingRule?.tokens) return 0;
 
         const amount = this.calculateConsumedPower(ESTIMATED_TOKENS_PLANNING, billingRule);
         if (amount <= 0) return 0;
@@ -135,6 +140,7 @@ export class AgentBillingHandler {
                 source: {
                     type: ACCOUNT_LOG_SOURCE.AGENT_CHAT,
                     source: "智能体规划",
+                    agentId,
                 },
                 remark: "智能体规划消耗",
                 associationNo: conversationId,
@@ -151,10 +157,11 @@ export class AgentBillingHandler {
     async deductForFollowUpSuggestions(
         userId: string | undefined,
         conversationId: string | undefined,
+        agentId: string | undefined,
         billingRule: { power: number; tokens: number } | undefined,
         isGuest?: boolean,
     ): Promise<number> {
-        if (!userId || !conversationId || !billingRule?.tokens) return 0;
+        if (!userId || !conversationId || !agentId || !billingRule?.tokens) return 0;
 
         const amount = this.calculateConsumedPower(ESTIMATED_TOKENS_FOLLOW_UP, billingRule);
         if (amount <= 0) return 0;
@@ -169,6 +176,7 @@ export class AgentBillingHandler {
                 source: {
                     type: ACCOUNT_LOG_SOURCE.AGENT_CHAT,
                     source: "智能体追问建议",
+                    agentId,
                 },
                 remark: "智能体追问建议消耗",
                 associationNo: conversationId,

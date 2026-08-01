@@ -72,6 +72,14 @@ export default defineConfig({
         find: "@buildingai/types",
         replacement: path.resolve(__dirname, "../@buildingai/types/dist/index.mjs"),
       },
+      {
+        find: "@buildingai/web/stores",
+        replacement: path.resolve(__dirname, "../@buildingai/web/stores/src"),
+      },
+      {
+        find: "@buildingai/stores",
+        replacement: path.resolve(__dirname, "../@buildingai/web/stores/src"),
+      },
     ],
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
