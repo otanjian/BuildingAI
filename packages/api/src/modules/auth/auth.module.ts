@@ -15,7 +15,6 @@ import { AuthService } from "@common/modules/auth/services/auth.service";
 import { ExtensionFeatureService } from "@common/modules/auth/services/extension-feature.service";
 import { ExtensionFeatureScanService } from "@common/modules/auth/services/extension-feature-scan.service";
 import { RolePermissionService } from "@common/modules/auth/services/role-permission.service";
-import { TaskviewAuthService } from "@common/modules/auth/services/taskview-auth.service";
 import { UserTokenService } from "@common/modules/auth/services/user-token.service";
 import { SmsModule } from "@common/modules/sms/sms.module";
 import { WechatOaService } from "@common/modules/wechat/services/wechatoa.service";
@@ -89,7 +88,6 @@ function resolveJwtSecret(configService: ConfigService): string {
         ExtensionFeatureScanService,
         ExtensionFeatureService,
         RolePermissionService,
-        TaskviewAuthService,
         UserTokenService,
         WechatOaService,
     ],
@@ -99,7 +97,6 @@ function resolveJwtSecret(configService: ConfigService): string {
         ExtensionFeatureService,
         JwtModule,
         RolePermissionService,
-        TaskviewAuthService,
         UserTokenService,
     ],
 })

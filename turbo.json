@@ -33,7 +33,6 @@
         "VITE_PRODUCTION_APP_BASE_URL",
         "VITE_APP_WEB_API_PREFIX",
         "VITE_APP_CONSOLE_API_PREFIX",
-        "VITE_TASKVIEW_BASE_URL",
         "PM2_HOME",
         "PM2_JSON_PROCESSING",
         "PM2_CLI",

@@ -39,7 +39,6 @@ import NoticeNotificationSettingsPage from "@/pages/console/notice/notification-
 import NoticeSmsPage from "@/pages/console/notice/sms";
 import OperationIndexPage from "@/pages/console/operation";
 import OperationLayout from "@/pages/console/operation/_layouts";
-import TaskviewIframePage from "@/pages/console/taskview";
 import CDKManagementPage from "@/pages/console/operation/cdk/management";
 import CDKRecordsPage from "@/pages/console/operation/cdk/records";
 import CDKSettingsPage from "@/pages/console/operation/cdk/settings";
@@ -138,10 +137,6 @@ function ConsoleRoutes() {
             element: <MembershipPlanIndexPage />,
           },
         ],
-      },
-      {
-        path: "taskview/*",
-        element: <TaskviewIframePage />,
       },
       {
         path: "decorate",

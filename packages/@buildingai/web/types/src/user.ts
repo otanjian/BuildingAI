@@ -37,12 +37,6 @@ export interface UserInfo {
     lastLoginAt: string;
     power: number;
     source: UserCreateSourceType;
-    /** Taskview SSO token for embedded iframe */
-    taskviewToken?: string;
-    /** Taskview SSO refresh token for embedded iframe (renews access without re-login) */
-    taskviewRefreshToken?: string;
-    /** Taskview organization slug */
-    taskviewOrgSlug?: string;
 }
 
 export interface MenuItem {

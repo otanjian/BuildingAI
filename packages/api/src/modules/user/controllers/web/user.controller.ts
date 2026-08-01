@@ -26,7 +26,6 @@ import { DictService, UserDictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { WebController } from "@common/decorators/controller.decorator";
 import { RolePermissionService } from "@common/modules/auth/services/role-permission.service";
-import { TaskviewAuthService } from "@common/modules/auth/services/taskview-auth.service";
 import { SmsService } from "@common/modules/sms/services/sms.service";
 import { MenuService } from "@modules/menu/services/menu.service";
 import { Body, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
@@ -75,7 +74,6 @@ export class UserWebController extends BaseController {
         private readonly membershipLevelsRepository: Repository<MembershipLevels>,
         private readonly userCapacityService: UserCapacityService,
         private readonly appBillingService: AppBillingService,
-        private readonly taskviewAuthService: TaskviewAuthService,
     ) {
         super();
         this.accountLogService = new BaseService(accountLogRepository);
@@ -121,9 +119,6 @@ export class UserWebController extends BaseController {
             ...userInfoResult
         } = userInfo;
 
-        // Get Taskview session for embedded iframe
-        const taskviewSession = await this.taskviewAuthService.getSession(user.username);
-
         return {
             ...userInfoResult,
             power: spendablePower,
@@ -134,9 +129,6 @@ export class UserWebController extends BaseController {
             permissionsCodes: permissionCodes,
             menus: menuTree,
             hasPassword: !!userInfo.password,
-            taskviewToken: taskviewSession?.taskviewToken ?? "",
-            taskviewRefreshToken: taskviewSession?.taskviewRefreshToken ?? "",
-            taskviewOrgSlug: taskviewSession?.taskviewOrgSlug ?? "",
         };
     }
 

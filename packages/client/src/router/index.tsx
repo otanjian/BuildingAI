@@ -17,7 +17,6 @@ import AppsIndexPage from "@/pages/apps";
 import DatasetsIndexPage from "@/pages/datasets";
 import DatasetsLayout from "@/pages/datasets/_layouts";
 import DatasetsDetailPage from "@/pages/datasets/detail";
-import TaskviewIframePage from "@/pages/console/taskview";
 import InstallPage from "@/pages/install";
 
 import { usePlatformEmbedNavBridge } from "../helpers/platformEmbedNav";
@@ -144,10 +143,6 @@ export const router = createBrowserRouter([
           </DefaultLayout>
         ),
         children: [
-          {
-            path: "/taskview/*",
-            element: <TaskviewIframePage />,
-          },
           {
             element: <DynamicHomePage />,
             children: [
