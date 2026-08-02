@@ -1,1 +1,0 @@
-import"./lucide-TBd5Mea-.js";import"./utils-BclDqrOZ.js";import"./bundle-mjs-C4g7ASB5.js";import"./react-dom-BiJo7AJZ.js";import"./tabs-BR1XdDOu.js";import"./skeleton-DaXJmV_z.js";import"./lucide-icon-DAh16DYB.js";import{n as e,t}from"./taskview-DUz-Z1cL.js";export{t as TASKVIEW_NAV_MESSAGE,e as default};

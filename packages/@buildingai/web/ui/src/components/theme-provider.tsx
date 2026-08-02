@@ -68,7 +68,7 @@ type ThemeProviderState = {
 };
 
 const initialState: ThemeProviderState = {
-  theme: "system",
+  theme: "dark",
   setTheme: () => null,
   themeColor: "indigo",
   setThemeColor: () => null,
@@ -78,7 +78,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
 
 export function ThemeProvider({
   children,
-  defaultTheme = "system",
+  defaultTheme = "dark",
   storageKey = "buildingai-client-theme",
   defaultThemeColor = "indigo",
   themeColorStorageKey = "buildingai-client-theme-color",
