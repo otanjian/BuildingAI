@@ -125,13 +125,18 @@ export const InlineCitationCarouselIndex = ({
   const [current, setCurrent] = useState(0);
   const [count, setCount] = useState(0);
 
+  // Sync carousel metadata (React Compiler-compatible: state derived from external store)
+  const [prevApi, setPrevApi] = useState<typeof api>(null);
+  if (api && prevApi !== api) {
+    setPrevApi(api);
+    setCount(api.scrollSnapList().length);
+    setCurrent(api.selectedScrollSnap() + 1);
+  }
+
   useEffect(() => {
     if (!api) {
       return;
     }
-
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap() + 1);
 
     const handleSelect = () => {
       setCurrent(api.selectedScrollSnap() + 1);

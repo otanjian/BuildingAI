@@ -68,10 +68,7 @@ export default function AppIframePage() {
   const iframeSrc = useMemo(() => {
     if (!identifier) return "";
     const subPath = wildcard ? `/${wildcard}` : "";
-    const url = new URL(
-      `/extension/${identifier}${subPath}`,
-      getExtensionBaseUrl(),
-    );
+    const url = new URL(`/extension/${identifier}${subPath}`, getExtensionBaseUrl());
     const search = new URLSearchParams(location.search);
     search.forEach((value, key) => {
       if (key === "appChat") {
@@ -169,7 +166,7 @@ export default function AppIframePage() {
 
   if (isExtensionLoading) {
     return (
-      <div className="flex h-dvh w-full items-center justify-center bg-background">
+      <div className="bg-background flex h-dvh w-full items-center justify-center">
         <Loader className="size-10" />
       </div>
     );

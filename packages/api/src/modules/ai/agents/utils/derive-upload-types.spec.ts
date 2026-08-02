@@ -1,5 +1,3 @@
-import { describe, expect, it } from "vitest";
-
 import { deriveUploadTypesFromModelFeatures } from "./derive-upload-types";
 
 describe("deriveUploadTypesFromModelFeatures", () => {

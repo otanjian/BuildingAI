@@ -1,3 +1,4 @@
+import { BooleanNumber } from "@buildingai/constants/shared";
 import type { DecorateMenuItem } from "@buildingai/services/web";
 import { useDecorateMenuQuery, useUnifiedConversationsQuery } from "@buildingai/services/web";
 import { useAuthStore } from "@buildingai/stores";
@@ -13,7 +14,6 @@ import {
   SidebarRail,
 } from "@buildingai/ui/components/ui/sidebar";
 import { isEnabled } from "@buildingai/utils/is";
-import { BooleanNumber } from "@buildingai/constants/shared";
 import { ArrowUpRight, LayoutDashboard } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import * as React from "react";
@@ -76,7 +76,14 @@ const DEFAULT_CHAT_COMPONENT = "/src/pages/index.tsx";
  */
 function useMenuItems(
   menus: DecorateMenuItem[],
-  conversationItems: { id: string; title: string; path: string; type?: string; agentId?: string; agentName?: string }[],
+  conversationItems: {
+    id: string;
+    title: string;
+    path: string;
+    type?: string;
+    agentId?: string;
+    agentName?: string;
+  }[],
   homeAction?: React.ReactNode,
   userPermissions?: string[],
   isRoot?: boolean,
@@ -131,9 +138,7 @@ export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Side
     () =>
       conversationsData?.items?.map((item) => {
         const isAgent = item.type === "agent";
-        const path = isAgent
-          ? `/agents/${item.agentId}/c/${item.id}`
-          : `/c/${item.id}`;
+        const path = isAgent ? `/agents/${item.agentId}/c/${item.id}` : `/c/${item.id}`;
         return {
           id: `${item.type}-${item.id}`,
           title: item.title || "新对话",
@@ -159,34 +164,38 @@ export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Side
 
   const permissionsCodes = userInfo?.permissionsCodes ?? [];
   const isRoot = userInfo?.isRoot === BooleanNumber.YES;
-  const navMain = useMenuItems(menuConfig?.menus ?? [], conversationItems, homeAction, permissionsCodes, isRoot);
+  const navMain = useMenuItems(
+    menuConfig?.menus ?? [],
+    conversationItems,
+    homeAction,
+    permissionsCodes,
+    isRoot,
+  );
 
   const consoleLink = useMemo(() => {
     const menus = userInfo?.menus || [];
 
-    let firstMenuPath: string | null = null;
-
-    const findMenuPath = (items: typeof menus, parentPath = ""): string | null => {
+    // Collect all type-2 menu paths in depth-first order (pure function, React Compiler-compatible)
+    const collectPaths = (items: typeof menus, parentPath = ""): string[] => {
+      const paths: string[] = [];
       for (const item of items) {
         const currentPath = item.path
           ? [parentPath, item.path].filter(Boolean).join("/")
           : parentPath;
 
         if (item.type === 2 && item.path && item.path !== "#") {
-          const fullPath = `/console/${currentPath}`;
-          if (fullPath === "/console/dashboard") return fullPath;
-          if (!firstMenuPath) firstMenuPath = fullPath;
+          paths.push(`/console/${currentPath}`);
         }
 
         if (item.children?.length) {
-          const result = findMenuPath(item.children, currentPath);
-          if (result) return result;
+          paths.push(...collectPaths(item.children, currentPath));
         }
       }
-      return null;
+      return paths;
     };
 
-    return findMenuPath(menus) || firstMenuPath || "/console/dashboard";
+    const paths = collectPaths(menus);
+    return paths.find((p) => p === "/console/dashboard") ?? paths[0] ?? "/console/dashboard";
   }, [userInfo?.menus]);
 
   return (

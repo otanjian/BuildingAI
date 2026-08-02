@@ -212,9 +212,10 @@ function ColorCustom({
     [customColor, customColors],
   );
 
-  const updateCustomColorDebounced = React.useCallback(debounce(updateCustomColor, 100), [
-    updateCustomColor,
-  ]);
+  const updateCustomColorDebounced = React.useMemo(
+    () => debounce(updateCustomColor, 100),
+    [updateCustomColor],
+  );
 
   return (
     <div className={cn("relative flex flex-col gap-4", className)} {...props}>
@@ -257,6 +258,8 @@ function ColorInput({
 
   return (
     <div className="flex flex-col items-center">
+      {/* Click handlers read refs at event time (safe); React Compiler can't see through cloneElement. */}
+      {/* eslint-disable-next-line react-hooks/refs */}
       {React.Children.map(children, (child) => {
         if (!child) return child;
 

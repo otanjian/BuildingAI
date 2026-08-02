@@ -19,7 +19,7 @@ export const AppDataSource = new DataSource({
     database: process.env.DB_DATABASE || "buildingai",
     logging: true,
     namingStrategy: new SnakeNamingStrategy(),
-    migrations: [path.join(distDir, "migrations", "**", "*.js")],
+    migrations: [path.join(distDir, "..", "migrations", "**", "*.js")],
     entities: entityFiles,
     synchronize: false,
     migrationsTableName: "migrations_history",

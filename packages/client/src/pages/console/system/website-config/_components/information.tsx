@@ -68,7 +68,7 @@ export default function Information() {
       void queryClient.invalidateQueries({ queryKey: WEBSITE_CONFIG_QUERY_KEY });
     },
     onError: (e) => {
-      console.log(`保存失败: ${e.message}`);
+      console.error(`保存失败: ${e.message}`);
     },
   });
 

@@ -1,15 +1,11 @@
-import {
-  type ChatConfig,
-  useAiProvidersQuery,
-  useChatConfigQuery,
-} from "@buildingai/services/web";
-import type { PendingChatRequest } from "@buildingai/web-core";
+import { type ChatConfig, useAiProvidersQuery, useChatConfigQuery } from "@buildingai/services/web";
 import { Button } from "@buildingai/ui/components/ui/button";
+import type { PendingChatRequest } from "@buildingai/web-core";
 import { XIcon } from "lucide-react";
 import { useMemo } from "react";
 
-import { AssistantProvider } from "./context";
 import { Chat } from "./chat";
+import { AssistantProvider } from "./context";
 import { useAssistant } from "./hooks/use-assistant";
 
 export type StandardChatSidebarProps = {
@@ -18,7 +14,11 @@ export type StandardChatSidebarProps = {
   onClose?: () => void;
 };
 
-export function StandardChatSidebar({ request, title = "AI 检查", onClose }: StandardChatSidebarProps) {
+export function StandardChatSidebar({
+  request,
+  title = "AI 检查",
+  onClose,
+}: StandardChatSidebarProps) {
   const { data: providers = [] } = useAiProvidersQuery({ supportedModelTypes: "llm" });
   const { data: rawChatConfig } = useChatConfigQuery();
   const chatConfig = rawChatConfig as ChatConfig | undefined;
@@ -34,7 +34,7 @@ export function StandardChatSidebar({ request, title = "AI 检查", onClose }: S
   const panelTitle = useMemo(() => title, [title]);
 
   return (
-    <aside className="bg-background flex h-full w-full min-h-0 flex-col">
+    <aside className="bg-background flex h-full min-h-0 w-full flex-col">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
         <h2 className="truncate text-sm font-semibold">{panelTitle}</h2>
         {onClose ? (
@@ -44,7 +44,10 @@ export function StandardChatSidebar({ request, title = "AI 检查", onClose }: S
         ) : null}
       </div>
       <div className="min-h-0 flex-1">
-        <AssistantProvider {...assistant} showMcpToolDetails={chatConfig?.showMcpToolDetails ?? true}>
+        <AssistantProvider
+          {...assistant}
+          showMcpToolDetails={chatConfig?.showMcpToolDetails ?? true}
+        >
           <Chat
             title={panelTitle}
             welcomeTitle={welcomeInfo?.title}

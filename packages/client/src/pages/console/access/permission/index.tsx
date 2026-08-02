@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { useDebounceCallback } from "usehooks-ts";
 
 import { PageContainer } from "@/layouts/console/_components/page-container";
-import { getErrorMessage } from "@/utils/error";
 
 type PermissionGroupItemProps = {
   group: GroupedPermissions;

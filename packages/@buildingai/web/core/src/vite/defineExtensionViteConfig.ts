@@ -7,10 +7,7 @@ import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig, type UserConfig } from "vite";
 
 const viteDir = path.dirname(fileURLToPath(import.meta.url));
-const extensionDashboardSrc = path.resolve(
-    viteDir,
-    "../../../../extension-dashboard/src",
-);
+const extensionDashboardSrc = path.resolve(viteDir, "../../../../extension-dashboard/src");
 const constantsDist = path.resolve(viteDir, "../../../../constants/dist");
 
 const extensionDashboardAlias = {
@@ -40,7 +37,9 @@ const buildResolveAliases = () => [
 export const defineExtensionViteConfig = (packageJson: { name: string }, config?: UserConfig) => {
     const userResolve = config?.resolve ?? {};
     const userAliasEntries =
-        userResolve.alias && typeof userResolve.alias === "object" && !Array.isArray(userResolve.alias)
+        userResolve.alias &&
+        typeof userResolve.alias === "object" &&
+        !Array.isArray(userResolve.alias)
             ? Object.entries(userResolve.alias).map(([find, replacement]) => ({
                   find,
                   replacement: replacement as string,

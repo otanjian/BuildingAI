@@ -12,21 +12,9 @@ import { DatasetsDocument } from "./datasets-document.entity";
 import { DatasetMember } from "./datasets-member.entity";
 import { DatasetMemberApplication } from "./datasets-member-application.entity";
 import { DatasetsSegments } from "./datasets-segments.entity";
-import { Tag } from "./tag.entity";
-
-/**
- * 发布到广场的审核状态
- */
-export enum SquarePublishStatus {
-    /** 未申请或已撤销 */
-    NONE = "none",
-    /** 待审核 */
-    PENDING = "pending",
-    /** 审核通过（已上架） */
-    APPROVED = "approved",
-    /** 已拒绝 */
-    REJECTED = "rejected",
-}
+import type { Tag } from "./tag.entity";
+import { SquarePublishStatus } from "./square-publish-status.enum";
+export { SquarePublishStatus };
 
 /**
  * 知识库实体
@@ -167,7 +155,7 @@ export class Datasets extends BaseEntity {
     @OneToMany(() => DatasetsChatRecord, (record) => record.dataset)
     chatRecords?: Relation<DatasetsChatRecord[]>;
 
-    @ManyToMany(() => Tag, (tag) => tag.datasets)
+    @ManyToMany("Tag", "datasets")
     @JoinTable({
         name: "datasets_tags",
         joinColumn: { name: "dataset_id", referencedColumnName: "id" },

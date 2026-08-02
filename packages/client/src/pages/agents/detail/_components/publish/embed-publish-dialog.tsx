@@ -31,12 +31,10 @@ type EmbedMode = (typeof EMBED_MODES)[number]["value"];
 interface EmbedPublishDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  isPending: boolean;
   publicLink: string;
   iframeCode: string;
   floatingScriptCode: string;
   mobileScriptCode: string;
-  onPublish: () => void;
   onCopy: (value: string, successMessage: string) => void | Promise<void>;
 }
 
@@ -112,12 +110,10 @@ function PreviewCard({ selected, mode }: { selected: boolean; mode: EmbedMode })
 export function EmbedPublishDialog({
   open,
   onOpenChange,
-  isPending,
   publicLink,
   iframeCode,
   floatingScriptCode,
   mobileScriptCode,
-  onPublish,
   onCopy,
 }: EmbedPublishDialogProps) {
   const [selectedMode, setSelectedMode] = useState<EmbedMode>("inline");

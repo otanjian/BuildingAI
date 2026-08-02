@@ -197,19 +197,19 @@ export const PlanFormDialog = ({ open, onOpenChange, planId, onSuccess }: PlanFo
 
   const createMutation = useCreateMembershipPlanMutation({
     onError: (error) => {
-      console.log(`创建失败: ${error.message}`);
+      console.error(`创建失败: ${error.message}`);
     },
   });
 
   const updateMutation = useUpdateMembershipPlanMutation({
     onError: (error) => {
-      console.log(`更新失败: ${error.message}`);
+      console.error(`更新失败: ${error.message}`);
     },
   });
 
   const updateSortMutation = useUpdateMembershipPlanSortMutation({
     onError: (error) => {
-      console.log(`更新排序失败: ${error.message}`);
+      console.error(`更新排序失败: ${error.message}`);
     },
   });
 

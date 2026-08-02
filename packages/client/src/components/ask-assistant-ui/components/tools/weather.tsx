@@ -77,7 +77,7 @@ type WeatherAtLocation = {
 const SAMPLE = {
   latitude: 37.763_283,
   longitude: -122.412_86,
-  generationtime_ms: 0.027_894_973_754_882_812,
+  generationtime_ms: 0.028,
   utc_offset_seconds: 0,
   timezone: "GMT",
   timezone_abbreviation: "GMT",

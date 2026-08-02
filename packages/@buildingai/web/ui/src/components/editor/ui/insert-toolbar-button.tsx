@@ -1,6 +1,5 @@
 "use client";
 
-import { insertBlock, insertInlineElement } from "@buildingai/ui/components/editor/transforms";
 import { BaseCodeDrawingPlugin } from "@platejs/code-drawing";
 import type { DropdownMenuProps } from "@radix-ui/react-dropdown-menu";
 import {
@@ -36,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
+import { insertBlock, insertInlineElement } from "../transforms";
 import { ToolbarButton, ToolbarMenuGroup } from "./toolbar";
 
 type Group = {

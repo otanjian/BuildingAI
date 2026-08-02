@@ -223,6 +223,8 @@ export const Persona: FC<PersonaProps> = memo(
     const asleepInput = useStateMachineInput(rive, stateMachine, "asleep");
 
     useEffect(() => {
+      // Imperative rive API: mutating state machine inputs is command-style, not React state.
+      /* eslint-disable react-hooks/immutability */
       if (listeningInput) {
         listeningInput.value = state === "listening";
       }
@@ -235,6 +237,7 @@ export const Persona: FC<PersonaProps> = memo(
       if (asleepInput) {
         asleepInput.value = state === "asleep";
       }
+      /* eslint-enable react-hooks/immutability */
     }, [state, listeningInput, thinkingInput, speakingInput, asleepInput]);
 
     const Component = source.hasModel ? PersonaWithModel : PersonaWithoutModel;

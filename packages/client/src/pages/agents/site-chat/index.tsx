@@ -27,7 +27,13 @@ import {
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
-import { Bot, ClipboardPenLine, ListIndentDecrease, MessageSquarePlus, PanelLeft } from "lucide-react";
+import {
+  Bot,
+  ClipboardPenLine,
+  ListIndentDecrease,
+  MessageSquarePlus,
+  PanelLeft,
+} from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
@@ -41,7 +47,11 @@ import {
   StreamingIndicator,
 } from "@/components/ask-assistant-ui";
 
-import { useEmbedFormContext, useEmbedHostDocumentClass, useHasEmbedFormContext } from "./_hooks/use-embed-form-context";
+import {
+  useEmbedFormContext,
+  useEmbedHostDocumentClass,
+  useHasEmbedFormContext,
+} from "./_hooks/use-embed-form-context";
 import { usePublicAgentAssistant } from "./_hooks/use-public-agent-assistant";
 import { isOperatorMessage } from "./lib/embed-conversation-storage";
 
@@ -375,7 +385,12 @@ export default function PublishChatPage() {
 
   if (conversationsEmbedAccessDisabled) {
     return (
-      <div className={cn("bg-background flex min-h-0 w-full flex-col items-center justify-center p-6", embedHeightClass)}>
+      <div
+        className={cn(
+          "bg-background flex min-h-0 w-full flex-col items-center justify-center p-6",
+          embedHeightClass,
+        )}
+      >
         <Empty className="max-w-md flex-none border-0 shadow-none">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -396,9 +411,7 @@ export default function PublishChatPage() {
       className={cn(
         "flex min-h-0 w-full gap-0 md:gap-2",
         embedHeightClass,
-        isEmbeddedHost
-          ? "bg-background overflow-hidden p-0"
-          : "p-1 sm:p-2",
+        isEmbeddedHost ? "bg-background overflow-hidden p-0" : "p-1 sm:p-2",
         !isEmbeddedHost && (desktopSidebarExpanded ? "bg-sidebar" : "bg-background"),
       )}
     >
@@ -659,7 +672,7 @@ export default function PublishChatPage() {
 
                 <div className="bg-background relative z-10 shrink-0">
                   <div className="mx-auto w-full max-w-3xl px-0 py-2 sm:px-4 sm:py-3">
-                    {(status === "submitted" || status === "streaming") ? (
+                    {status === "submitted" || status === "streaming" ? (
                       <StreamingIndicator />
                     ) : null}
                     <PromptInput

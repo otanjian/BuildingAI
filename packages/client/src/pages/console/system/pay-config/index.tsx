@@ -97,7 +97,7 @@ const SystemPayConfigIndexPage = () => {
       refetch();
     },
     onError: (error) => {
-      console.log(`更新失败: ${error.message}`);
+      console.error(`更新失败: ${error.message}`);
     },
   });
 

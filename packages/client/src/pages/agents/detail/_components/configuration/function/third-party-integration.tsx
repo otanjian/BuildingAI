@@ -59,11 +59,7 @@ export const ThirdPartyIntegration = memo(
     );
 
     const title =
-      mode === "coze"
-        ? "Coze 平台配置"
-        : mode === "dify"
-          ? "Dify 平台配置"
-          : "Code 配置";
+      mode === "coze" ? "Coze 平台配置" : mode === "dify" ? "Dify 平台配置" : "Code 配置";
     const description =
       mode === "coze"
         ? "配置 Coze Bot 相关参数，系统会从 Coze 获取智能体能力。"

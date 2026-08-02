@@ -22,7 +22,7 @@ import {
 } from "@buildingai/ui/components/ui/form";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Download, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -84,7 +84,7 @@ export const ActivationInstallDialog = ({
         toast.success("兑换码验证成功");
       }
     } catch (error: any) {
-      console.log(`验证失败: ${error.message || "兑换码无效"}`);
+      console.error(`验证失败: ${error.message || "兑换码无效"}`);
     }
   };
 

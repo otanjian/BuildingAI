@@ -1,23 +1,21 @@
 import { SecretService, SecretTemplateService } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import {
-    Agent,
-    AgentAnnotation,
-    AgentAssignment,
-    AgentChatMessage,
-    AgentChatMessageFeedback,
-    AgentChatRecord,
-    AiMcpServer,
-    AiMcpTool,
-    AiModel,
-    AiProvider,
-    AiUserMcpServer,
-    Datasets,
-    Secret,
-    SecretTemplate,
-    Tag,
-    User,
-} from "@buildingai/db/entities";
+import { Agent } from "@buildingai/db/entities/ai-agent.entity";
+import { AgentAnnotation } from "@buildingai/db/entities/ai-agent-annotation.entity";
+import { AgentAssignment } from "@buildingai/db/entities/agent-assignment.entity";
+import { AgentChatMessage } from "@buildingai/db/entities/ai-agent-chat-message.entity";
+import { AgentChatMessageFeedback } from "@buildingai/db/entities/ai-agent-chat-message-feedback.entity";
+import { AgentChatRecord } from "@buildingai/db/entities/ai-agent-chat-record.entity";
+import { AiMcpServer } from "@buildingai/db/entities/ai-mcp-server.entity";
+import { AiMcpTool } from "@buildingai/db/entities/ai-mcp-tool.entity";
+import { AiModel } from "@buildingai/db/entities/ai-model.entity";
+import { AiProvider } from "@buildingai/db/entities/ai-provider.entity";
+import { AiUserMcpServer } from "@buildingai/db/entities/ai-user-mcp-server.entity";
+import { Datasets } from "@buildingai/db/entities/datasets.entity";
+import { Secret } from "@buildingai/db/entities/secret.entity";
+import { SecretTemplate } from "@buildingai/db/entities/secret-template.entity";
+import { Tag } from "@buildingai/db/entities/tag.entity";
+import { User } from "@buildingai/db/entities/user.entity";
 import { agentPublicAccessRegistry } from "@common/decorators/agent-public-access.registry";
 import { AiDatasetsModule } from "@modules/ai/datasets/datasets.module";
 import { AiMcpServerService } from "@modules/ai/mcp/services/ai-mcp-server.service";

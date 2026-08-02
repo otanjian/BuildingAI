@@ -238,12 +238,17 @@ export function parseEmbedChatSearchParams(
         prompt: prompt.trim(),
         modelId: params.get("modelId") ?? undefined,
         mcpServerIds: mcpRaw
-            ? mcpRaw.split(",").map((id) => id.trim()).filter(Boolean)
+            ? mcpRaw
+                  .split(",")
+                  .map((id) => id.trim())
+                  .filter(Boolean)
             : undefined,
     };
 }
 
-function postMessageToHost(message: ExtensionOpenChatMessage | ExtensionShowChatPanelMessage): boolean {
+function postMessageToHost(
+    message: ExtensionOpenChatMessage | ExtensionShowChatPanelMessage,
+): boolean {
     const host = window.top ?? window.parent;
     if (!host || host === window) {
         return false;

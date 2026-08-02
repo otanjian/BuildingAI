@@ -1,7 +1,8 @@
+import fs from "node:fs";
+
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import fs from "node:fs";
 import path from "path";
 // import { visualizer } from "rollup-plugin-visualizer";
 import { defineConfig, type ProxyOptions } from "vite";
@@ -66,7 +67,10 @@ export default defineConfig({
       { find: "@", replacement: path.resolve(__dirname, "src") },
       {
         find: "@buildingai/types/ai/agent-config.interface",
-        replacement: path.resolve(__dirname, "../@buildingai/types/dist/ai/agent-config.interface.mjs"),
+        replacement: path.resolve(
+          __dirname,
+          "../@buildingai/types/dist/ai/agent-config.interface.mjs",
+        ),
       },
       {
         find: "@buildingai/types",

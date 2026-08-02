@@ -8,8 +8,8 @@ import {
 import {
   clearPendingChatRequest,
   consumePendingChatRequest,
-  resolveInspectionPromptQueue,
   type PendingChatRequest,
+  resolveInspectionPromptQueue,
 } from "@buildingai/web-core";
 import type { ChatStatus, UIMessage } from "ai";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";

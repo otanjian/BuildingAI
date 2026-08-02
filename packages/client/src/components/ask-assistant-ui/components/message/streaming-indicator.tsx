@@ -11,10 +11,7 @@ export const StreamingIndicator = memo(function StreamingIndicator({
 }: StreamingIndicatorProps) {
   return (
     <div
-      className={cn(
-        "text-muted-foreground flex items-center gap-2 px-1 py-2 text-sm",
-        className,
-      )}
+      className={cn("text-muted-foreground flex items-center gap-2 px-1 py-2 text-sm", className)}
       role="status"
       aria-live="polite"
       aria-label="正在处理"

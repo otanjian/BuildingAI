@@ -14,7 +14,7 @@ import { cva } from "class-variance-authority";
 import { ExternalLink, Link, Text, Unlink } from "lucide-react";
 import type { TLinkElement } from "platejs";
 import { KEYS } from "platejs";
-import { useEditorRef, useEditorSelection, useFormInputProps } from "platejs/react";
+import { useEditorRef, useFormInputProps } from "platejs/react";
 import * as React from "react";
 
 import { buttonVariants } from "../../ui/button";
@@ -150,7 +150,6 @@ export function LinkFloatingToolbar({ state }: { state?: LinkFloatingToolbarStat
 
 function LinkOpenButton() {
   const editor = useEditorRef();
-  const selection = useEditorSelection();
 
   const attributes = React.useMemo(() => {
     const entry = editor.api.node<TLinkElement>({
@@ -161,7 +160,7 @@ function LinkOpenButton() {
     }
     const [element] = entry;
     return getLinkAttributes(editor, element);
-  }, [editor, selection]);
+  }, [editor]);
 
   return (
     <a

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useConversationsQuery,
   useDeleteAgentConversation,
   useDeleteConversation,
   useUnifiedConversationsQuery,
@@ -70,7 +69,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -302,14 +301,17 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
     // /c/:id or /agents/:agentId/c/:id
     if (isAgent) {
       const parts = subItem.path.split("/c/");
-      return parts.length > 1 ? parts.at(-1) ?? "" : "";
+      return parts.length > 1 ? (parts.at(-1) ?? "") : "";
     }
     return subItem.path.replace("/c/", "");
   })();
 
-  useEffect(() => {
+  // Sync dialog value when the sub-item title changes (render-time adjustment, React Compiler-compatible)
+  const [prevSubItemTitle, setPrevSubItemTitle] = useState(subItem.title);
+  if (prevSubItemTitle !== subItem.title) {
+    setPrevSubItemTitle(subItem.title);
     setRenameValue(subItem.title);
-  }, [subItem.title]);
+  }
 
   const handleRename = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -341,7 +343,15 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
         },
       );
     }
-  }, [conversationId, renameValue, subItem.title, subItem.agentId, isAgent, updateDirectMutation, updateAgentMutation]);
+  }, [
+    conversationId,
+    renameValue,
+    subItem.title,
+    subItem.agentId,
+    isAgent,
+    updateDirectMutation,
+    updateAgentMutation,
+  ]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -392,7 +402,17 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
         // User cancelled
       }
     },
-    [conversationId, confirm, deleteDirectMutation, deleteAgentMutation, pathname, subItem.path, subItem.agentId, isAgent, navigate],
+    [
+      conversationId,
+      confirm,
+      deleteDirectMutation,
+      deleteAgentMutation,
+      pathname,
+      subItem.path,
+      subItem.agentId,
+      isAgent,
+      navigate,
+    ],
   );
 
   return (
@@ -657,7 +677,15 @@ export function DefaultNavMain({
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [allConversations, setAllConversations] = useState<
-    Array<{ id: string; title: string; type: "direct" | "agent"; agentId?: string; agentName?: string; createdAt: string; updatedAt: string }>
+    Array<{
+      id: string;
+      title: string;
+      type: "direct" | "agent";
+      agentId?: string;
+      agentName?: string;
+      createdAt: string;
+      updatedAt: string;
+    }>
   >([]);
   const pageSize = 20;
 
@@ -672,32 +700,37 @@ export function DefaultNavMain({
     return allConversations.length < data.total;
   }, [data, allConversations.length]);
 
-  useEffect(() => {
+  // Reset list state when the panel opens (React Compiler-compatible render-time adjustment)
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (prevOpen !== open) {
+    setPrevOpen(open);
     if (open) {
       setPage(1);
       setKeyword("");
-      setAllConversations(data?.items || []);
+      setAllConversations([]);
     }
-  }, [open]);
+  }
 
-  useEffect(() => {
-    if (data?.items) {
-      if (page === 1) {
-        setAllConversations(data.items);
-      } else {
-        setAllConversations((prev) => {
-          const existingIds = new Set(prev.map((c) => c.id));
-          const newItems = data.items.filter((item) => !existingIds.has(item.id));
-          return [...prev, ...newItems];
-        });
-      }
+  // Sync query results into local list state (React Compiler-compatible render-time adjustment)
+  const [prevItemsSignature, setPrevItemsSignature] = useState<string>("");
+  const itemsSignature = data?.items?.map((c) => `${page}:${c.id}`).join("|") ?? "";
+  if (prevItemsSignature !== itemsSignature && data?.items) {
+    setPrevItemsSignature(itemsSignature);
+    if (page === 1) {
+      setAllConversations(data.items);
+    } else {
+      setAllConversations((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newItems = data.items.filter((item) => !existingIds.has(item.id));
+        return [...prev, ...newItems];
+      });
     }
-  }, [data?.items, page]);
+  }
 
   const handleLoadMore = useCallback(() => {
     if (isLoading || !hasMore) return;
     setPage((prev) => prev + 1);
-  }, [hasMore]);
+  }, [isLoading, hasMore]);
 
   const handleSearch = useCallback((value: string) => {
     setKeyword(value);
@@ -743,7 +776,7 @@ export function DefaultNavMain({
         });
       }
     },
-    [deleteDirectMutation, deleteAgentMutation],
+    [deleteDirectMutation, deleteAgentMutation, allConversations],
   );
 
   const handleRename = useCallback(
@@ -773,7 +806,7 @@ export function DefaultNavMain({
         );
       }
     },
-    [updateDirectMutation, updateAgentMutation],
+    [updateDirectMutation, updateAgentMutation, allConversations],
   );
 
   const groupedConversations = useMemo(

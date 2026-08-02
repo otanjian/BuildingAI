@@ -1,7 +1,6 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import { useDeleteAgentMutation, useMyAgentsInfiniteQuery } from "@buildingai/services/web";
 import { InfiniteScroll } from "@buildingai/ui/components/infinite-scroll";
-import { useAuthStore } from "@buildingai/web/stores";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
@@ -21,6 +20,7 @@ import {
 import { SidebarTrigger } from "@buildingai/ui/components/ui/sidebar";
 import { useAlertDialog } from "@buildingai/ui/hooks/use-alert-dialog";
 import { cn } from "@buildingai/ui/lib/utils";
+import { useAuthStore } from "@buildingai/web/stores";
 import { Bot, ChevronRight, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";

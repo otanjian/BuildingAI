@@ -337,12 +337,10 @@ export default function Publish() {
       <EmbedPublishDialog
         open={dialogType === "embed"}
         onOpenChange={(open) => setDialogType(open ? "embed" : null)}
-        isPending={false}
         publicLink={publicLink}
         iframeCode={embedCode}
         floatingScriptCode={floatingEmbedCode}
         mobileScriptCode={mobileFloatingEmbedCode}
-        onPublish={() => {}}
         onCopy={(value, successMessage) => void handleCopyPublishedValue(value, successMessage)}
       />
     </>

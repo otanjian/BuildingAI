@@ -169,7 +169,7 @@ const AppsIndexPage = () => {
               <h1 className="text-2xl">{pageTitle}</h1>
               <p className="text-muted-foreground text-sm">{pageDescription}</p>
             </div>
-            <div className="w-full shrink-0 sm:w-auto sm:min-w-[240px] sm:max-w-sm">
+            <div className="w-full shrink-0 sm:w-auto sm:max-w-sm sm:min-w-[240px]">
               <InputGroup className="rounded-full">
                 <InputGroupInput
                   placeholder="搜索应用"

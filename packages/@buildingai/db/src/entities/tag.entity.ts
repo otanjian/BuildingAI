@@ -2,9 +2,9 @@ import { TagType, type TagTypeType } from "@buildingai/constants/shared/tag.cons
 
 import { AppEntity } from "../decorators/app-entity.decorator";
 import { Column, ManyToMany } from "../typeorm";
-import { Agent } from "./ai-agent.entity";
+import type { Agent } from "./ai-agent.entity";
 import { BaseEntity } from "./base";
-import { Datasets } from "./datasets.entity";
+import type { Datasets } from "./datasets.entity";
 
 /**
  * Tag entity
@@ -90,9 +90,9 @@ export class Tag extends BaseEntity {
      *
      * 多对多关系的反向，一个标签可以关联多个智能体，一个智能体可以有多个标签
      */
-    @ManyToMany(() => Agent, (agent) => agent.tags)
+    @ManyToMany("Agent", "tags")
     agents?: Agent[];
 
-    @ManyToMany(() => Datasets, (dataset) => dataset.tags)
+    @ManyToMany("Datasets", "tags")
     datasets?: Datasets[];
 }

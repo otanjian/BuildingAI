@@ -1,6 +1,6 @@
 import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { SidebarInset, SidebarProvider } from "@buildingai/ui/components/ui/sidebar";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Outlet } from "react-router-dom";
 
 import AppNavbar from "./_components/app-navbar";

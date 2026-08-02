@@ -14,22 +14,22 @@ import type {
 import { useMessageRepository } from "@/components/ask-assistant-ui";
 
 import { hasRenderableOpeningStatement } from "../../detail/_utils/opening-statement.ts";
-import { usePublicAgentDetail } from "../services/public-agent-detail";
-import { speakPublicAgentText, transcribePublicAgentAudio } from "../services/public-agent-voice";
-import { usePublicConversations } from "../services/public-conversations";
-import { getPublicApiRequestErrorCode } from "../services/public-http";
-import { usePublicAgentChatStream } from "./use-public-agent-chat-stream";
-import { usePublicAgentFeedback } from "./use-public-agent-feedback";
-import { usePublicAgentMessagesPaging } from "./use-public-agent-messages-paging";
-import {
-  useEmbedConversationResume,
-  usePublicOperatorMessageSync,
-} from "./use-embed-conversation-resume";
 import {
   clearLastConversation,
   isEmbeddedHost,
   writeLastConversation,
 } from "../lib/embed-conversation-storage";
+import { usePublicAgentDetail } from "../services/public-agent-detail";
+import { speakPublicAgentText, transcribePublicAgentAudio } from "../services/public-agent-voice";
+import { usePublicConversations } from "../services/public-conversations";
+import { getPublicApiRequestErrorCode } from "../services/public-http";
+import {
+  useEmbedConversationResume,
+  usePublicOperatorMessageSync,
+} from "./use-embed-conversation-resume";
+import { usePublicAgentChatStream } from "./use-public-agent-chat-stream";
+import { usePublicAgentFeedback } from "./use-public-agent-feedback";
+import { usePublicAgentMessagesPaging } from "./use-public-agent-messages-paging";
 
 const AGENT_MODEL_ID = "agent";
 

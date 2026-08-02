@@ -40,9 +40,7 @@ const KnowledgeLayout = () => {
           <Outlet />
         </div>
       </div>
-      {createOpen && (
-        <DatasetEditDialog mode="create" open onOpenChange={handleCreateOpenChange} />
-      )}
+      {createOpen && <DatasetEditDialog mode="create" open onOpenChange={handleCreateOpenChange} />}
     </div>
   );
 };

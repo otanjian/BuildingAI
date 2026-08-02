@@ -23,7 +23,9 @@ export function isReasoningPartStreaming(
 
   const reasoningEntries = parts
     .map((part, index) => ({ part, index }))
-    .filter((entry): entry is { part: MessagePart; index: number } => entry.part.type === "reasoning");
+    .filter(
+      (entry): entry is { part: MessagePart; index: number } => entry.part.type === "reasoning",
+    );
 
   const target = reasoningEntries[reasoningIndexAmongReasoningParts];
   if (!target) {

@@ -166,7 +166,10 @@ export function useEmbedFormContext(
   }, [fieldNames, setFormValues]);
 }
 
-export function useHasEmbedFormContext(formValues: Record<string, string>, formFields: FormFieldConfig[]) {
+export function useHasEmbedFormContext(
+  formValues: Record<string, string>,
+  formFields: FormFieldConfig[],
+) {
   return useMemo(() => {
     if (typeof window === "undefined" || window.parent === window) return false;
     return formFields.some((field) => (formValues[field.name] ?? "").trim() !== "");

@@ -72,7 +72,7 @@ export function MediaToolbarButton({
   nodeType,
   ...props
 }: DropdownMenuProps & { nodeType: string }) {
-  const currentConfig = MEDIA_CONFIG[nodeType];
+  const currentConfig = MEDIA_CONFIG[nodeType]!;
 
   const editor = useEditorRef();
   const [open, setOpen] = React.useState(false);

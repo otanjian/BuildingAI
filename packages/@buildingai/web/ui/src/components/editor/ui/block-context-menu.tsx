@@ -1,6 +1,5 @@
 "use client";
 
-import { useIsTouchDevice } from "@buildingai/ui/hooks/use-is-touch-device";
 import { BaseCodeDrawingPlugin } from "@platejs/code-drawing";
 import {
   BLOCK_CONTEXT_MENU_ID,
@@ -11,6 +10,7 @@ import { KEYS } from "platejs";
 import { useEditorPlugin, usePlateState, usePluginOption } from "platejs/react";
 import * as React from "react";
 
+import { useIsTouchDevice } from "../../../hooks/use-is-touch-device";
 import {
   ContextMenu,
   ContextMenuContent,

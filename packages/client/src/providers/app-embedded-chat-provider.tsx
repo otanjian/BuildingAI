@@ -2,13 +2,13 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import {
   clearPendingChatRequest,
   EXTENSION_SHOW_CHAT_PANEL_MESSAGE_TYPE,
+  type ExtensionOpenChatMessage,
   isExtensionOpenChatMessage,
   isExtensionShowChatPanelMessage,
   peekPendingChatRequest,
+  type PendingChatRequest,
   resolveInspectionPromptQueue,
   savePendingChatRequest,
-  type ExtensionOpenChatMessage,
-  type PendingChatRequest,
 } from "@buildingai/web-core";
 import { Bot } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -126,7 +126,7 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
       <div className="min-h-0 min-w-0 flex-1">{children}</div>
       {showPanel ? (
         <aside
-          className="bg-background flex h-dvh w-1/3 min-w-[280px] max-w-[480px] shrink-0 grow-0 basis-1/3 flex-col border-l shadow-lg"
+          className="bg-background flex h-dvh w-1/3 max-w-[480px] min-w-[280px] shrink-0 grow-0 basis-1/3 flex-col border-l shadow-lg"
           data-testid="app-embedded-chat-panel"
           aria-label="AI 对话"
         >
@@ -143,7 +143,7 @@ export function AppEmbeddedChatProvider({ children }: { children: React.ReactNod
           type="button"
           variant="outline"
           size="sm"
-          className="fixed top-1/2 right-0 z-30 h-auto -translate-y-1/2 rounded-r-none rounded-l-lg border-r-0 px-2 py-3 shadow-md"
+          className="fixed top-1/2 right-0 z-30 h-auto -translate-y-1/2 rounded-l-lg rounded-r-none border-r-0 px-2 py-3 shadow-md"
           onClick={openEmptyPanel}
           aria-label="打开 AI 对话"
           data-testid="app-embedded-chat-open"

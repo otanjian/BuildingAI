@@ -60,7 +60,7 @@ const Local = ({ configId }: LocalProps) => {
       refetch();
     },
     onError: (e) => {
-      console.log(`切换失败: ${e.message}`);
+      console.error(`切换失败: ${e.message}`);
     },
   });
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@buildingai/services";
-import { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { ExtensionMainLayout } from "./main";
 

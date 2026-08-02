@@ -129,7 +129,7 @@ function printEntityTable(dataSource: DataSource): void {
     const table = createEntityTable(sortedEntities);
 
     TerminalLogger.log("", `DataSource(${entities.length}):`);
-    console.log(table.toString());
+    TerminalLogger.log("", table.toString());
 }
 
 /**

@@ -44,8 +44,9 @@ export function AgentAssignDialog({
 
   const isSearchMode = searchKeyword.trim().length > 0;
 
-  const { data: assignments, isLoading: isLoadingAssignments } =
-    useAgentAssignmentsQuery(open ? agentId : undefined);
+  const { data: assignments, isLoading: isLoadingAssignments } = useAgentAssignmentsQuery(
+    open ? agentId : undefined,
+  );
 
   // Default: show first 50 users
   const { data: userListData, isLoading: isLoadingUsers } = useUsersListQuery(
@@ -54,10 +55,9 @@ export function AgentAssignDialog({
   );
 
   // Search mode
-  const { data: searchedUsers = [], isFetching: isSearching } = useSearchUserQuery(
-    searchKeyword,
-    { enabled: open && isSearchMode },
-  );
+  const { data: searchedUsers = [], isFetching: isSearching } = useSearchUserQuery(searchKeyword, {
+    enabled: open && isSearchMode,
+  });
 
   const allUsers = useMemo(() => {
     if (isSearchMode) return searchedUsers;
@@ -118,7 +118,8 @@ export function AgentAssignDialog({
     setSelectedUserIds(allSelected ? new Set() : new Set(availableUsers.map((u) => u.id)));
   };
 
-  const allSelected = availableUsers.length > 0 && availableUsers.every((u) => selectedUserIds.has(u.id));
+  const allSelected =
+    availableUsers.length > 0 && availableUsers.every((u) => selectedUserIds.has(u.id));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -255,9 +256,7 @@ export function AgentAssignDialog({
                       variant="ghost"
                       className="size-7"
                       disabled={unassignMutation.isPending}
-                      onClick={() =>
-                        unassignMutation.mutate({ userIds: [assignment.userId] })
-                      }
+                      onClick={() => unassignMutation.mutate({ userIds: [assignment.userId] })}
                     >
                       <X className="size-3.5" />
                     </Button>

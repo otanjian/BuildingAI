@@ -4,16 +4,13 @@ import { BaseService } from "@buildingai/base";
 import { TagType } from "@buildingai/constants/shared/tag.constant";
 import { type UserPlayground } from "@buildingai/db";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import {
-    Agent,
-    AgentAssignment,
-    AiMcpServer,
-    Datasets,
-    McpServerType,
-    SquarePublishStatus,
-    Tag,
-    User,
-} from "@buildingai/db/entities";
+import { Agent } from "@buildingai/db/entities/ai-agent.entity";
+import { AgentAssignment } from "@buildingai/db/entities/agent-assignment.entity";
+import { AiMcpServer, McpServerType } from "@buildingai/db/entities/ai-mcp-server.entity";
+import { Datasets } from "@buildingai/db/entities/datasets.entity";
+import { SquarePublishStatus } from "@buildingai/db/entities/square-publish-status.enum";
+import { Tag } from "@buildingai/db/entities/tag.entity";
+import { User } from "@buildingai/db/entities/user.entity";
 import { In, Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { AgentConfigService } from "@modules/config/services/agent-config.service";

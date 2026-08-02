@@ -246,7 +246,8 @@ export default function Configuration() {
   const [saveError, setSaveError] = useState(false);
 
   const createMode = agent?.createMode ?? "direct";
-  const isThirdPartyMode = createMode === "coze" || createMode === "dify" || createMode === "opencode";
+  const isThirdPartyMode =
+    createMode === "coze" || createMode === "dify" || createMode === "opencode";
 
   const createConfigFromAgent = useCallback(
     (currentAgent: NonNullable<typeof agent>): ConfigState => ({
@@ -332,7 +333,11 @@ export default function Configuration() {
           voiceConfig: next.voiceConfig ?? undefined,
         };
 
-        if (agent?.createMode === "coze" || agent?.createMode === "dify" || agent?.createMode === "opencode") {
+        if (
+          agent?.createMode === "coze" ||
+          agent?.createMode === "dify" ||
+          agent?.createMode === "opencode"
+        ) {
           payload.thirdPartyIntegration = next.thirdPartyIntegration ?? undefined;
         }
 
@@ -354,7 +359,11 @@ export default function Configuration() {
           toast.error(`${extConfig.difySyncError}`);
         }
 
-        if (savedAgent?.createMode === "coze" || savedAgent?.createMode === "dify" || savedAgent?.createMode === "opencode") {
+        if (
+          savedAgent?.createMode === "coze" ||
+          savedAgent?.createMode === "dify" ||
+          savedAgent?.createMode === "opencode"
+        ) {
           const refreshedAgentResult = await refetchAgentDetail();
           const latestAgent =
             !refreshedAgentResult.error && refreshedAgentResult.data
@@ -456,7 +465,7 @@ export default function Configuration() {
         }
         setPublishDialogOpen(false);
       } catch (error) {
-        console.log(`操作失败: ${(error as Error).message}`);
+        console.error(`操作失败: ${(error as Error).message}`);
       }
     },
     [

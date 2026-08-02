@@ -9,5 +9,5 @@ export const MarkdownKit: SlatePlugin[] = [
       plainMarks: [],
       remarkPlugins: [remarkMath, remarkGfm, remarkMdx, remarkMention],
     },
-  }),
+  }) as unknown as SlatePlugin,
 ];

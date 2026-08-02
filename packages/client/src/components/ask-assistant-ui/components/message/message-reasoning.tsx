@@ -3,11 +3,7 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "@buildingai/ui/components/ai-elements/reasoning";
-import {
-  Task,
-  TaskContent,
-  TaskTrigger,
-} from "@buildingai/ui/components/ai-elements/task";
+import { Task, TaskContent, TaskTrigger } from "@buildingai/ui/components/ai-elements/task";
 import type { UIMessage } from "ai";
 import { BrainIcon, CheckCircleIcon, ChevronDownIcon } from "lucide-react";
 import { memo } from "react";
@@ -46,11 +42,7 @@ export const MessageReasoning = memo(function MessageReasoning({
   ));
 
   const activeNodes = active.map(({ part, reasoningIndex }) => (
-    <Reasoning
-      key={`${messageId}-reasoning-${reasoningIndex}`}
-      defaultOpen
-      isStreaming
-    >
+    <Reasoning key={`${messageId}-reasoning-${reasoningIndex}`} defaultOpen isStreaming>
       <ReasoningTrigger />
       <ReasoningContent>{part.text || ""}</ReasoningContent>
     </Reasoning>

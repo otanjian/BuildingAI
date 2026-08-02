@@ -30,7 +30,14 @@ import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { cn } from "@buildingai/ui/lib/utils";
-import { Bot, ChevronDown, ChevronLeft, ListIndentDecrease, PanelLeft, Settings2 } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronLeft,
+  ListIndentDecrease,
+  PanelLeft,
+  Settings2,
+} from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -522,9 +529,7 @@ function ChatContent({
         <div className="bg-background sticky bottom-0 z-10">
           <InfiniteScrollTopScrollButton className="-top-12 z-20" />
           <div className="mx-auto w-full max-w-3xl px-3 py-2 sm:px-4 sm:py-3">
-            {(status === "submitted" || status === "streaming") ? (
-              <StreamingIndicator />
-            ) : null}
+            {status === "submitted" || status === "streaming" ? <StreamingIndicator /> : null}
             <PromptInput
               textareaRef={textareaRef}
               status={status}
@@ -656,137 +661,123 @@ const AgentChatPage = () => {
           <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
             <div className="flex items-center gap-1">
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="shrink-0 md:hidden" aria-label="打开菜单">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 md:hidden"
+                  aria-label="打开菜单"
+                >
                   <PanelLeft className="size-4" />
                 </Button>
               </SheetTrigger>
               <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
                 <ChevronLeft />
               </Button>
-            <div className="flex items-center gap-2">
-              <Avatar className="size-8 rounded-lg after:rounded-lg">
-                <AvatarImage
-                  className="rounded-lg"
-                  src={agent?.avatar ?? undefined}
-                  alt={agent?.name ?? ""}
-                />
-                <AvatarFallback className="rounded-lg">
-                  <Bot className="size-4" />
-                </AvatarFallback>
-              </Avatar>
-              <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
-                {agent?.name}
-              </span>
+              <div className="flex items-center gap-2">
+                <Avatar className="size-8 rounded-lg after:rounded-lg">
+                  <AvatarImage
+                    className="rounded-lg"
+                    src={agent?.avatar ?? undefined}
+                    alt={agent?.name ?? ""}
+                  />
+                  <AvatarFallback className="rounded-lg">
+                    <Bot className="size-4" />
+                  </AvatarFallback>
+                </Avatar>
+                <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
+                  {agent?.name}
+                </span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-0.5">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="hidden md:inline-flex"
-              title={panelExpanded ? "收起侧栏" : "展开侧栏"}
-              onClick={() => setPanelExpanded((v) => !v)}
-            >
-              {panelExpanded ? (
-                <ListIndentDecrease className="size-4 rotate-180" />
-              ) : (
-                <ListIndentDecrease className="size-4" />
+            <div className="flex items-center gap-0.5">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="hidden md:inline-flex"
+                title={panelExpanded ? "收起侧栏" : "展开侧栏"}
+                onClick={() => setPanelExpanded((v) => !v)}
+              >
+                {panelExpanded ? (
+                  <ListIndentDecrease className="size-4 rotate-180" />
+                ) : (
+                  <ListIndentDecrease className="size-4" />
+                )}
+              </Button>
+              {hasForm && (
+                <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button size="icon" variant="ghost" title="表单变量">
+                      <Settings2 className="size-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">表单变量</h4>
+                      <p className="text-muted-foreground text-xs">
+                        填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
+                      </p>
+                      <Separator />
+                      {formFields.map((field) => (
+                        <div key={field.name} className="space-y-1.5">
+                          <Label className="text-xs">
+                            {field.label}
+                            {field.required ? (
+                              <span className="text-destructive ml-0.5">*</span>
+                            ) : null}
+                          </Label>
+                          {field.type === "textarea" ? (
+                            <Textarea
+                              placeholder={`输入 ${field.label}`}
+                              value={formValues[field.name] ?? ""}
+                              onChange={(e) => handleFormValueChange(field.name, e.target.value)}
+                              rows={2}
+                              className="resize-none text-xs"
+                            />
+                          ) : field.type === "select" ? (
+                            <select
+                              className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
+                              value={formValues[field.name] ?? ""}
+                              onChange={(e) => handleFormValueChange(field.name, e.target.value)}
+                            >
+                              <option value="">请选择</option>
+                              {getSelectOptions(field).map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <Input
+                              placeholder={`输入 ${field.label}`}
+                              value={formValues[field.name] ?? ""}
+                              onChange={(e) => handleFormValueChange(field.name, e.target.value)}
+                              className="h-8 text-xs"
+                              maxLength={field.maxLength}
+                            />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               )}
-            </Button>
-            {hasForm && (
-              <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button size="icon" variant="ghost" title="表单变量">
-                    <Settings2 className="size-4" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80" align="end">
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-medium">表单变量</h4>
-                    <p className="text-muted-foreground text-xs">
-                      填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
-                    </p>
-                    <Separator />
-                    {formFields.map((field) => (
-                      <div key={field.name} className="space-y-1.5">
-                        <Label className="text-xs">
-                          {field.label}
-                          {field.required ? (
-                            <span className="text-destructive ml-0.5">*</span>
-                          ) : null}
-                        </Label>
-                        {field.type === "textarea" ? (
-                          <Textarea
-                            placeholder={`输入 ${field.label}`}
-                            value={formValues[field.name] ?? ""}
-                            onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                            rows={2}
-                            className="resize-none text-xs"
-                          />
-                        ) : field.type === "select" ? (
-                          <select
-                            className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
-                            value={formValues[field.name] ?? ""}
-                            onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                          >
-                            <option value="">请选择</option>
-                            {getSelectOptions(field).map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <Input
-                            placeholder={`输入 ${field.label}`}
-                            value={formValues[field.name] ?? ""}
-                            onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                            className="h-8 text-xs"
-                            maxLength={field.maxLength}
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
-        </header>
-        <AssistantProvider {...contextValue}>
-          <ChatContent
-            agentAvatar={agentAvatar}
-            agentName={agent?.name}
-            // agentDescription={agent?.description}
-            formFields={formFields}
-            formValues={formValues}
-            onOpenForm={() => setFormPopoverOpen(true)}
-            openingStatement={agent?.openingStatement}
-            openingQuestions={agent?.openingQuestions ?? []}
-          />
-        </AssistantProvider>
-      </div>
-      {panelExpanded && (
-        <div className="hidden md:flex">
-          <AgentInfoPanel
-            agent={agent}
-            isLoading={isAgentLoading}
-            conversations={conversations}
-            isLoadingConversations={isLoadingConversations}
-            currentConversationId={uuid}
-          />
+            </div>
+          </header>
+          <AssistantProvider {...contextValue}>
+            <ChatContent
+              agentAvatar={agentAvatar}
+              agentName={agent?.name}
+              // agentDescription={agent?.description}
+              formFields={formFields}
+              formValues={formValues}
+              onOpenForm={() => setFormPopoverOpen(true)}
+              openingStatement={agent?.openingStatement}
+              openingQuestions={agent?.openingQuestions ?? []}
+            />
+          </AssistantProvider>
         </div>
-      )}
-      <SheetContent
-        side="left"
-        className="bg-sidebar flex h-full w-[min(20rem,calc(100vw-1rem))] max-w-[min(20rem,calc(100vw-1rem))] flex-col gap-0 border-r p-0 sm:max-w-sm"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>智能体信息</SheetTitle>
-          <SheetDescription>智能体详情与历史对话</SheetDescription>
-        </SheetHeader>
-        <div className="chat-scroll flex min-h-0 flex-1 flex-col overflow-hidden py-2">
-          <div className="w-full min-w-0 [&>div]:w-full [&>div]:max-w-full">
+        {panelExpanded && (
+          <div className="hidden md:flex">
             <AgentInfoPanel
               agent={agent}
               isLoading={isAgentLoading}
@@ -795,10 +786,29 @@ const AgentChatPage = () => {
               currentConversationId={uuid}
             />
           </div>
-        </div>
-      </SheetContent>
-    </div>
-  </Sheet>
+        )}
+        <SheetContent
+          side="left"
+          className="bg-sidebar flex h-full w-[min(20rem,calc(100vw-1rem))] max-w-[min(20rem,calc(100vw-1rem))] flex-col gap-0 border-r p-0 sm:max-w-sm"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>智能体信息</SheetTitle>
+            <SheetDescription>智能体详情与历史对话</SheetDescription>
+          </SheetHeader>
+          <div className="chat-scroll flex min-h-0 flex-1 flex-col overflow-hidden py-2">
+            <div className="w-full min-w-0 [&>div]:w-full [&>div]:max-w-full">
+              <AgentInfoPanel
+                agent={agent}
+                isLoading={isAgentLoading}
+                conversations={conversations}
+                isLoadingConversations={isLoadingConversations}
+                currentConversationId={uuid}
+              />
+            </div>
+          </div>
+        </SheetContent>
+      </div>
+    </Sheet>
   );
 };
 

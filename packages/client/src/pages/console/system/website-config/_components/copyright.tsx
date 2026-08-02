@@ -44,7 +44,7 @@ export default function Copyright() {
   const setMutation = useSetWebsiteConfigMutation({
     onSuccess: () => toast.success("保存成功"),
     onError: (e) => {
-      console.log(`保存失败: ${e.message}`);
+      console.error(`保存失败: ${e.message}`);
     },
   });
 

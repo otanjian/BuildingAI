@@ -1,6 +1,5 @@
 "use client";
 
-import { useMounted } from "@buildingai/ui/hooks/use-mounted";
 import { cn } from "@buildingai/ui/lib/utils";
 import { getMentionOnSelectItem } from "@platejs/mention";
 import type { TComboboxInputElement, TMentionElement } from "platejs";
@@ -9,6 +8,7 @@ import type { PlateElementProps } from "platejs/react";
 import { PlateElement, useFocused, useReadOnly, useSelected } from "platejs/react";
 import * as React from "react";
 
+import { useMounted } from "../../../hooks/use-mounted";
 import {
   InlineCombobox,
   InlineComboboxContent,
@@ -37,9 +37,9 @@ export function MentionElement(
         "bg-muted inline-block rounded-md px-1.5 py-0.5 align-baseline text-sm font-medium",
         !readOnly && "cursor-pointer",
         selected && focused && "ring-ring ring-2",
-        element.children[0][KEYS.bold] === true && "font-bold",
-        element.children[0][KEYS.italic] === true && "italic",
-        element.children[0][KEYS.underline] === true && "underline",
+        element.children[0]?.[KEYS.bold] === true && "font-bold",
+        element.children[0]?.[KEYS.italic] === true && "italic",
+        element.children[0]?.[KEYS.underline] === true && "underline",
       )}
       attributes={{
         ...props.attributes,

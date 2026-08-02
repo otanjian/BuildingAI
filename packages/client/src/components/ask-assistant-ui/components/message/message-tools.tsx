@@ -1,8 +1,4 @@
-import {
-  Task,
-  TaskContent,
-  TaskTrigger,
-} from "@buildingai/ui/components/ai-elements/task";
+import { Task, TaskContent, TaskTrigger } from "@buildingai/ui/components/ai-elements/task";
 import type { UIMessage } from "ai";
 import { CheckCircleIcon, ChevronDownIcon, WrenchIcon } from "lucide-react";
 import { memo, type ReactNode } from "react";

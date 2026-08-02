@@ -6,7 +6,8 @@ import { Toaster } from "@buildingai/ui/components/ui/sonner";
 import { TooltipProvider } from "@buildingai/ui/components/ui/tooltip";
 import { AlertDialogProvider } from "@buildingai/ui/hooks/use-alert-dialog";
 import { parseExtensionIdentifierFromLocation } from "@buildingai/utils/extension";
-import { ReactNode, useMemo } from "react";
+import type { ReactNode } from "react";
+import { useMemo } from "react";
 
 // Keep extension embeds working when AuthGuard is not on the route tree
 consumeTokenFromUrl();

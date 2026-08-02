@@ -523,9 +523,7 @@ function DebugPanelContent({
               ))}
             </div>
           )}
-          {(status === "submitted" || status === "streaming") ? (
-            <StreamingIndicator />
-          ) : null}
+          {status === "submitted" || status === "streaming" ? <StreamingIndicator /> : null}
           <PromptInput
             textareaRef={textareaRef}
             status={status}

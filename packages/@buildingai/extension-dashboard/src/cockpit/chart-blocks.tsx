@@ -63,8 +63,6 @@ export function ChartBlock({
     const prefix = config.tablePrefix;
     const hue = config.hue;
     const tagResults = tableTag(prefix, "check_results");
-    const tagRules = tableTag(prefix, "check_rules");
-    const tagRuns = tableTag(prefix, "check_runs");
 
     const resolvedTitle = title ?? chartTitle(chartId, config);
 

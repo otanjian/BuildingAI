@@ -1,6 +1,5 @@
 "use client";
 
-import { insertBlock, insertInlineElement } from "@buildingai/ui/components/editor/transforms";
 import { BaseCodeDrawingPlugin } from "@platejs/code-drawing";
 import {
   CalendarIcon,
@@ -25,6 +24,7 @@ import type { PlateEditor, PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
 import * as React from "react";
 
+import { insertBlock, insertInlineElement } from "../transforms";
 import {
   InlineCombobox,
   InlineComboboxContent,

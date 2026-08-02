@@ -84,7 +84,7 @@ const Oss = ({ configId }: OssProps) => {
       refetch();
     },
     onError: (e) => {
-      console.log(`保存失败: ${e.message}`);
+      console.error(`保存失败: ${e.message}`);
     },
   });
 

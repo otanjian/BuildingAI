@@ -17,8 +17,8 @@ import { AppEntity } from "../decorators/app-entity.decorator";
 import { NormalizeFileUrl } from "../decorators/file-url.decorator";
 import { Column, JoinTable, ManyToMany } from "../typeorm";
 import { BaseEntity } from "./base";
-import { SquarePublishStatus } from "./datasets.entity";
-import { Tag } from "./tag.entity";
+import { SquarePublishStatus } from "./square-publish-status.enum";
+import type { Tag } from "./tag.entity";
 
 /**
  * 智能体实体
@@ -342,7 +342,7 @@ export class Agent extends BaseEntity {
     @Column({ type: "int", nullable: true, comment: "智能体装修排序字段" })
     decorateSort?: number;
 
-    @ManyToMany(() => Tag, (tag) => tag.agents)
+    @ManyToMany("Tag", "agents")
     @JoinTable({
         name: "ai_agent_tags",
         joinColumn: { name: "agent_id", referencedColumnName: "id" },

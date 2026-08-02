@@ -9,12 +9,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { validate as isUUID } from "uuid";
 
-import {
-  isAppsEmbeddedChatPath,
-  isEmbedChatPath,
-  resolveChatThreadId,
-} from "../libs/embed-chat";
 import { getApiBaseUrl } from "@/utils/api";
+
+import { isAppsEmbeddedChatPath, isEmbedChatPath, resolveChatThreadId } from "../libs/embed-chat";
 
 /** Delay before running post-stop side effects, giving backend time to persist usage. */
 const STOP_FINALIZE_DELAY_MS = 350;

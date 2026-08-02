@@ -1,12 +1,12 @@
 "use client";
 
-import { useDebounce } from "@buildingai/ui/hooks/use-debounce";
 import { EmojiInlineIndexSearch, insertEmoji } from "@platejs/emoji";
 import { EmojiPlugin } from "@platejs/emoji/react";
 import type { PlateElementProps } from "platejs/react";
 import { PlateElement, usePluginOption } from "platejs/react";
 import * as React from "react";
 
+import { useDebounce } from "../../../hooks/use-debounce";
 import {
   InlineCombobox,
   InlineComboboxContent,
@@ -55,7 +55,7 @@ export function EmojiInputElement(props: PlateElementProps) {
                 value={emoji.name}
                 onClick={() => insertEmoji(editor, emoji)}
               >
-                {emoji.skins[0].native} {emoji.name}
+                {emoji.skins[0]!.native} {emoji.name}
               </InlineComboboxItem>
             ))}
           </InlineComboboxGroup>

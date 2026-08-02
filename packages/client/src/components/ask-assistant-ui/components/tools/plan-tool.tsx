@@ -1,14 +1,11 @@
 import {
   Plan,
-  PlanAction,
   PlanContent,
   PlanDescription,
-  PlanFooter,
   PlanHeader,
   PlanTitle,
   PlanTrigger,
 } from "@buildingai/ui/components/ai-elements/plan";
-import { Button } from "@buildingai/ui/components/ui/button";
 import { FileText } from "lucide-react";
 import { memo } from "react";
 

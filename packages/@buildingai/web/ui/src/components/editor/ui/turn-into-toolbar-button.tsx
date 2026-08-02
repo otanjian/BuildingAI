@@ -1,6 +1,5 @@
 "use client";
 
-import { getBlockType, setBlockType } from "@buildingai/ui/components/editor/transforms";
 import { BaseCodeDrawingPlugin } from "@platejs/code-drawing";
 import type { DropdownMenuProps } from "@radix-ui/react-dropdown-menu";
 import { DropdownMenuItemIndicator } from "@radix-ui/react-dropdown-menu";
@@ -33,6 +32,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "../../ui/dropdown-menu";
+import { getBlockType, setBlockType } from "../transforms";
 import { ToolbarButton, ToolbarMenuGroup } from "./toolbar";
 
 export const turnIntoItems = [
@@ -144,7 +144,7 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
     <DropdownMenu open={open} onOpenChange={setOpen} modal={false} {...props}>
       <DropdownMenuTrigger asChild>
         <ToolbarButton className="min-w-[125px]" pressed={open} tooltip="Turn into" isDropdown>
-          {selectedItem.label}
+          {selectedItem!.label}
         </ToolbarButton>
       </DropdownMenuTrigger>
 

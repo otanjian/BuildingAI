@@ -11,13 +11,6 @@ import {
 import { useAuthStore, useConfigStore } from "@buildingai/stores";
 import SvgIcons from "@buildingai/ui/components/svg-icons";
 import { Button } from "@buildingai/ui/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@buildingai/ui/components/ui/card";
 import { Checkbox } from "@buildingai/ui/components/ui/checkbox";
 import {
   Dialog,
@@ -46,7 +39,7 @@ import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { useAlertDialog } from "@buildingai/ui/hooks/use-alert-dialog";
 import { cn } from "@buildingai/ui/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -229,11 +222,13 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   }, []);
 
   const renderAgreementTrigger = (checkboxId: string) => (
-    <span className="flex flex-wrap items-center gap-1">
-      <Label htmlFor={checkboxId}>我已阅读并同意</Label>
+    <span className="flex flex-wrap items-center gap-1 text-slate-300">
+      <Label htmlFor={checkboxId} className="text-slate-300">
+        我已阅读并同意
+      </Label>
       <button
         type="button"
-        className="text-primary underline-offset-4 hover:underline"
+        className="text-indigo-400 underline-offset-4 hover:underline"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -242,10 +237,10 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
       >
         《用户协议》
       </button>
-      <span>和</span>
+      <span className="text-slate-400">和</span>
       <button
         type="button"
-        className="text-primary underline-offset-4 hover:underline"
+        className="text-indigo-400 underline-offset-4 hover:underline"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -482,6 +477,31 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             : "输入你的账号和密码登录",
         };
 
+  const cardClass = cn(
+    "w-full rounded-2xl border px-7 py-8",
+    "bg-slate-900/70 backdrop-blur-xl border-indigo-500/12",
+  );
+
+  const inputClass = cn(
+    "border-indigo-500/15 bg-slate-800/50 text-slate-200 placeholder:text-slate-500",
+    "focus-visible:border-indigo-500/50 focus-visible:ring-indigo-500/10",
+    "rounded-[10px] h-10",
+  );
+
+  const primaryBtnClass = cn(
+    "w-full rounded-[10px] h-10 font-semibold text-white",
+    "bg-gradient-to-br from-indigo-500 to-indigo-600",
+    "shadow-[0_4px_14px_rgba(99,102,241,0.25)]",
+    "hover:from-indigo-400 hover:to-indigo-500 hover:shadow-[0_4px_18px_rgba(99,102,241,0.35)]",
+    "transition-all duration-200",
+  );
+
+  const linkClass = "text-indigo-400 underline-offset-4 hover:underline";
+  const secondaryTextClass = "text-slate-400";
+  const labelClass = "text-slate-300 text-xs font-medium";
+  const titleTextClass = "text-slate-100 text-xl font-semibold";
+  const descTextClass = "text-slate-400 text-sm";
+
   const renderLoginStep = () => (
     <Form {...loginForm}>
       <form onSubmit={loginForm.handleSubmit(onLoginSubmit)}>
@@ -489,7 +509,16 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
           {allowWechatLogin && (
             <Field className="flex flex-wrap gap-2">
               <Dialog open={wechatDialogOpen} onOpenChange={setWechatDialogOpen}>
-                <Button variant="secondary" type="button" onClick={handleWechatLogin}>
+                <Button
+                  variant="ghost"
+                  type="button"
+                  onClick={handleWechatLogin}
+                  className={cn(
+                    "h-10 rounded-xl border border-indigo-500/8 bg-slate-900/50 backdrop-blur-md",
+                    "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200",
+                    "transition-all duration-200",
+                  )}
+                >
                   <SvgIcons.wechat />
                   微信登录
                 </Button>
@@ -556,7 +585,13 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             </Field>
           )}
           {allowWechatLogin && canUseAccountInput && (
-            <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+            <FieldSeparator
+              className={cn(
+                "*:data-[slot=field-separator-content]:bg-slate-900/70",
+                "*:data-[slot=field-separator-content]:text-slate-500",
+                "*:data-[slot=field-separator-content]:text-xs",
+              )}
+            >
               或使用账号登录
             </FieldSeparator>
           )}
@@ -567,12 +602,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 name="account"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{allowAccountLogin ? accountLoginLabel : "手机号"}</FormLabel>
+                    <FormLabel className={labelClass}>
+                      {allowAccountLogin ? accountLoginLabel : "手机号"}
+                    </FormLabel>
                     <FormControl>
                       <Input
                         type="text"
                         placeholder={accountLoginPlaceholder}
                         autoComplete="username"
+                        className={inputClass}
                         {...field}
                         onChange={(event) => {
                           const nextAccount = event.target.value;
@@ -593,13 +631,13 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                   name="code"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>验证码</FormLabel>
+                      <FormLabel className={labelClass}>验证码</FormLabel>
                       <FormControl>
                         <div className="flex gap-2">
                           <Input
                             type="text"
                             placeholder="请输入验证码"
-                            className="flex-1"
+                            className={cn(inputClass, "flex-1")}
                             autoComplete="one-time-code"
                             {...field}
                           />
@@ -609,6 +647,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                             onClick={onSendSmsCode}
                             loading={isSendSmsCodePending}
                             disabled={smsCountdown > 0 || isSendSmsCodePending}
+                            className="h-10 shrink-0 rounded-[10px] border-indigo-500/15 bg-slate-800/50 text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
                           >
                             {smsCountdown > 0 ? `${smsCountdown}s` : "获取验证码"}
                           </Button>
@@ -626,11 +665,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>密码</FormLabel>
+                      <FormLabel className={labelClass}>密码</FormLabel>
                       <FormControl>
                         <PasswordInput
                           autoComplete="current-password"
                           placeholder="请输入密码"
+                          className={inputClass}
                           {...field}
                         />
                       </FormControl>
@@ -643,19 +683,11 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               {showModeToggle && (
                 <FieldDescription className="text-center">
                   {mode === "sms" ? (
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={switchToPasswordMode}
-                    >
+                    <button type="button" className={linkClass} onClick={switchToPasswordMode}>
                       使用密码登录
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={switchToSmsMode}
-                    >
+                    <button type="button" className={linkClass} onClick={switchToSmsMode}>
                       使用验证码登录
                     </button>
                   )}
@@ -665,11 +697,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               {showPolicyAgreement && (
                 <Field>
                   <FieldDescription>
-                    <span className="flex items-center gap-3">
+                    <span className="flex items-center gap-3 text-slate-300">
                       <Checkbox
                         checked={agree}
                         onCheckedChange={(e) => setAgree(e as boolean)}
                         id="terms-login"
+                        className="border-slate-500 data-[state=checked]:border-indigo-500 data-[state=checked]:bg-indigo-500"
                       />
                       {renderAgreementTrigger("terms-login")}
                     </span>
@@ -680,18 +713,18 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               <Field>
                 <Button
                   type="submit"
-                  className="w-full"
+                  className={primaryBtnClass}
                   loading={isLoginPending || isSmsLoginPending}
                 >
-                  登录 <ArrowRight />
+                  {isLoginPending || isSmsLoginPending ? "登录中..." : "登 录"}
                 </Button>
-                <FieldDescription className="text-center">
+                <FieldDescription className={cn("text-center", secondaryTextClass)}>
                   {allowAccountRegister ? (
                     <>
                       还没有账号？{" "}
                       <button
                         type="button"
-                        className="text-primary underline-offset-4 hover:underline"
+                        className={linkClass}
                         onClick={() => setPage(PageEnum.REGISTER)}
                       >
                         注册
@@ -716,11 +749,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>用户名</FormLabel>
+                <FormLabel className={labelClass}>用户名</FormLabel>
                 <FormControl>
                   <Input
                     type="text"
                     placeholder="3-20位字母、数字、下划线"
+                    className={inputClass}
                     {...field}
                     autoComplete="username"
                   />
@@ -734,9 +768,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Password</FormLabel>
+                <FormLabel className={labelClass}>密码</FormLabel>
                 <FormControl>
-                  <PasswordInput autoComplete="new-password" {...field} />
+                  <PasswordInput autoComplete="new-password" {...field} className={inputClass} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -747,9 +781,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             name="confirmPassword"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>确认密码</FormLabel>
+                <FormLabel className={labelClass}>确认密码</FormLabel>
                 <FormControl>
-                  <PasswordInput autoComplete="new-password" {...field} />
+                  <PasswordInput autoComplete="new-password" {...field} className={inputClass} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -760,9 +794,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             name="nickname"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>昵称（选填）</FormLabel>
+                <FormLabel className={labelClass}>昵称（选填）</FormLabel>
                 <FormControl>
-                  <Input type="text" placeholder="昵称" {...field} />
+                  <Input type="text" placeholder="昵称" {...field} className={inputClass} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -773,9 +807,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>邮箱（选填）</FormLabel>
+                <FormLabel className={labelClass}>邮箱（选填）</FormLabel>
                 <FormControl>
-                  <Input type="email" placeholder="m@example.com" {...field} autoComplete="email" />
+                  <Input
+                    type="email"
+                    placeholder="m@example.com"
+                    {...field}
+                    autoComplete="email"
+                    className={inputClass}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -789,6 +829,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                     checked={agree}
                     onCheckedChange={(e) => setAgree(e as boolean)}
                     id="terms-register"
+                    className="border-slate-500 data-[state=checked]:border-indigo-500 data-[state=checked]:bg-indigo-500"
                   />
                   {renderAgreementTrigger("terms-register")}
                 </span>
@@ -796,16 +837,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
             </Field>
           )}
           <Field>
-            <Button type="submit" className="w-full" loading={isRegisterPending}>
-              注册 <ArrowRight />
+            <Button type="submit" className={primaryBtnClass} loading={isRegisterPending}>
+              {isRegisterPending ? "注册中..." : "注 册"}
             </Button>
-            <FieldDescription className="text-center">
+            <FieldDescription className={cn("text-center", secondaryTextClass)}>
               已有账号？{" "}
-              <button
-                type="button"
-                className="text-primary underline-offset-4 hover:underline"
-                onClick={() => setPage(PageEnum.LOGIN)}
-              >
+              <button type="button" className={linkClass} onClick={() => setPage(PageEnum.LOGIN)}>
                 登录
               </button>
             </FieldDescription>
@@ -818,12 +855,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
   return (
     <>
       <div className={cn("flex flex-col gap-4", className)} {...props}>
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-xl">{titleConfig.title}</CardTitle>
-            <CardDescription>{titleConfig.description}</CardDescription>
+        <div className={cardClass}>
+          <div className="mb-7 text-center">
+            <div className={titleTextClass}>{titleConfig.title}</div>
+            <div className={cn(descTextClass, "mt-1")}>{titleConfig.description}</div>
             {loginError && (
-              <p className="text-destructive text-sm">
+              <p className="mt-2 text-sm text-red-400">
                 {loginError === "missing_code"
                   ? "授权未完成"
                   : loginError === "config"
@@ -835,12 +872,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                         : "登录失败，请重试"}
               </p>
             )}
-          </CardHeader>
-          <CardContent>
+          </div>
+          <div>
             {page === PageEnum.LOGIN && renderLoginStep()}
             {page === PageEnum.REGISTER && renderRegisterStep()}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
       <AgreementDialog
         open={agreementOpen}

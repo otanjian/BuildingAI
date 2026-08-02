@@ -1,4 +1,4 @@
-import { useAiProvidersQuery, useChatConfigQuery, type ChatConfig } from "@buildingai/services/web";
+import { type ChatConfig, useAiProvidersQuery, useChatConfigQuery } from "@buildingai/services/web";
 import { parseEmbedChatSearchParams } from "@buildingai/web-core";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";

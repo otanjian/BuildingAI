@@ -38,17 +38,17 @@ export class Migration1778700000000 implements MigrationInterface {
         const rolePermissionPairs = await queryRunner.query(
             `SELECT r.id AS role_id, p.id AS permission_id
              FROM roles r, permissions p
-             WHERE p.code = $1
+                 WHERE p.code = $1
                AND NOT EXISTS (
                  SELECT 1 FROM role_permissions rp
-                 WHERE rp.roles_id = r.id AND rp.permissions_id = p.id
+                 WHERE rp.role_id = r.id AND rp.permission_id = p.id
                )`,
             ["agent.manage"],
         );
 
         for (const pair of rolePermissionPairs) {
             await queryRunner.query(
-                `INSERT INTO "role_permissions" ("roles_id", "permissions_id") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                `INSERT INTO "role_permissions" ("role_id", "permission_id") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
                 [pair.role_id, pair.permission_id],
             );
         }

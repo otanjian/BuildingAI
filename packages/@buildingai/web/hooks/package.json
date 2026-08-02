@@ -24,6 +24,7 @@
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
         "@buildingai/typescript-config": "workspace:*",
-        "@buildingai/web-types": "workspace:*"
+        "@buildingai/web-types": "workspace:*",
+        "eslint-plugin-react-hooks": "^7.0.1"
     }
 }

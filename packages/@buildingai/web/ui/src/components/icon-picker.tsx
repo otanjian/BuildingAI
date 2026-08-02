@@ -36,6 +36,8 @@ function IconGrid({ value, onSelect }: { value?: string; onSelect: (name: string
 
   const rowCount = Math.ceil(filteredIcons.length / GRID_COLS);
 
+  // @tanstack/react-virtual is not yet React Compiler-compatible; skip compilation for this hook.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollRef.current,

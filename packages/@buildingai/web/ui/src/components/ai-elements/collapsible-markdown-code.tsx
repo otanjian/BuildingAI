@@ -14,7 +14,6 @@ import {
   memo,
   type ReactElement,
   type ReactNode,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -159,11 +158,14 @@ const CollapsibleJsonCodeBlock = memo(function CollapsibleJsonCodeBlock({
   const [userExpanded, setUserExpanded] = useState(false);
   const open = isStreaming || userExpanded;
 
-  useEffect(() => {
+  // Reset expansion when streaming finishes (derive during render, React Compiler-compatible)
+  const [prevStreaming, setPrevStreaming] = useState(isStreaming);
+  if (prevStreaming !== isStreaming) {
+    setPrevStreaming(isStreaming);
     if (!isStreaming) {
       setUserExpanded(false);
     }
-  }, [isStreaming]);
+  }
 
   return (
     <Collapsible
@@ -210,6 +212,7 @@ export const CollapsibleMarkdownCode = memo(function CollapsibleMarkdownCode({
   ...props
 }: MarkdownCodeProps) {
   const isInline = !("data-block" in props);
+  const isStreaming = useIsCodeFenceIncomplete();
 
   if (isInline) {
     return (
@@ -225,7 +228,6 @@ export const CollapsibleMarkdownCode = memo(function CollapsibleMarkdownCode({
 
   const language = className?.match(LANGUAGE_CLASS_RE)?.[1] ?? "";
   const code = extractCodeText(children);
-  const isStreaming = useIsCodeFenceIncomplete();
 
   if (isEchartsFenceLanguage(language)) {
     if (isStreaming) {

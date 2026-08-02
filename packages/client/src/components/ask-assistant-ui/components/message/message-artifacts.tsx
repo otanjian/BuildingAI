@@ -9,10 +9,10 @@ import { getApiBaseUrl } from "@/utils/api";
 import {
   buildArtifactAuthHeaders,
   extractHtmlArtifacts,
+  type HtmlArtifactData,
   openHtmlArtifactBlobInNewTab,
   readAnonymousIdentifierFromStorage,
   resolveArtifactFetchUrl,
-  type HtmlArtifactData,
 } from "./artifact-preview";
 
 export type { HtmlArtifactData };

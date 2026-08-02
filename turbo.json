@@ -33,6 +33,8 @@
         "VITE_PRODUCTION_APP_BASE_URL",
         "VITE_APP_WEB_API_PREFIX",
         "VITE_APP_CONSOLE_API_PREFIX",
+        "CLIENT_DEV_PORT",
+        "VITE_DEV_SERVER_PORT",
         "PM2_HOME",
         "PM2_JSON_PROCESSING",
         "PM2_CLI",

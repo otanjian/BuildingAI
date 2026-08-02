@@ -47,10 +47,7 @@ function ScopedDatasetsList({ scope }: { scope: "mine" | "team" }) {
   const teamQuery = useTeamDatasetsInfiniteQuery(SCOPE_PAGE_SIZE);
   const query = scope === "mine" ? mineQuery : teamQuery;
 
-  const items = useMemo(
-    () => query.data?.pages.flatMap((p) => p.items) ?? [],
-    [query.data?.pages],
-  );
+  const items = useMemo(() => query.data?.pages.flatMap((p) => p.items) ?? [], [query.data?.pages]);
 
   return (
     <ScrollArea className="h-dvh" viewportClassName="[&_>div]:block!">

@@ -1,15 +1,12 @@
 "use client";
 
-import {
-  type UnifiedConversationItem,
-  useUnifiedConversationsQuery,
-} from "@buildingai/services/web";
+import { useUnifiedConversationsQuery } from "@buildingai/services/web";
 import { InfiniteScroll } from "@buildingai/ui/components/infinite-scroll";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { cn } from "@buildingai/ui/lib/utils";
 import { Bot, MessageSquare } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -27,7 +24,6 @@ type EmbedConversationItem = {
   agentName?: string;
   createdAt: string;
 };
-
 
 /**
  * Full-page conversation history for platform iframe embeds (`?_embed=1&_history=1`).
@@ -52,19 +48,21 @@ export function EmbedHistoryPanel() {
     return allConversations.length < data.total;
   }, [data, allConversations.length]);
 
-  useEffect(() => {
-    if (data?.items) {
-      if (page === 1) {
-        setAllConversations(data.items);
-      } else {
-        setAllConversations((prev) => {
-          const existingIds = new Set(prev.map((c) => c.id));
-          const newItems = data.items.filter((item) => !existingIds.has(item.id));
-          return [...prev, ...newItems];
-        });
-      }
+  // Sync query results into local list state (render-time adjustment, React Compiler-compatible)
+  const [prevItemsSignature, setPrevItemsSignature] = useState<string>("");
+  const itemsSignature = data?.items?.map((c) => `${page}:${c.id}`).join("|") ?? "";
+  if (prevItemsSignature !== itemsSignature && data?.items) {
+    setPrevItemsSignature(itemsSignature);
+    if (page === 1) {
+      setAllConversations(data.items);
+    } else {
+      setAllConversations((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newItems = data.items.filter((item) => !existingIds.has(item.id));
+        return [...prev, ...newItems];
+      });
     }
-  }, [data?.items, page]);
+  }
 
   const handleLoadMore = useCallback(() => {
     if (isLoading || !hasMore) return;
@@ -93,7 +91,12 @@ export function EmbedHistoryPanel() {
         className="max-w-md"
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <InfiniteScroll loading={isLoading} hasMore={hasMore} onLoadMore={handleLoadMore} threshold={50}>
+        <InfiniteScroll
+          loading={isLoading}
+          hasMore={hasMore}
+          onLoadMore={handleLoadMore}
+          threshold={50}
+        >
           {isLoading && allConversations.length === 0 ? (
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -121,9 +124,10 @@ export function EmbedHistoryPanel() {
                               "hover:bg-muted flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
                             )}
                             onClick={() => {
-                              const path = conversation.type === "agent"
-                                ? `/agents/${conversation.agentId}/c/${conversation.id}?_embed=1`
-                                : `/c/${conversation.id}?_embed=1`;
+                              const path =
+                                conversation.type === "agent"
+                                  ? `/agents/${conversation.agentId}/c/${conversation.id}?_embed=1`
+                                  : `/c/${conversation.id}?_embed=1`;
                               navigate(path);
                             }}
                           >

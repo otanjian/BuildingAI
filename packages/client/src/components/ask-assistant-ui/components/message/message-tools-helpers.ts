@@ -5,11 +5,7 @@ export type ToolPartLike = {
   toolName?: string;
 };
 
-const COMPLETED_STATES = new Set([
-  "output-available",
-  "output-error",
-  "output-denied",
-]);
+const COMPLETED_STATES = new Set(["output-available", "output-error", "output-denied"]);
 
 export function isCompletedToolState(state?: string): boolean {
   return Boolean(state && COMPLETED_STATES.has(state));

@@ -149,8 +149,6 @@ export const useHeadRenderer = (options?: HeadRendererOptions): void => {
     const prevOptionsRef = useRef<DocumentHeadOptions>({});
     const defaultsRef = useRef(defaults);
     const templateRef = useRef(titleTemplate);
-    defaultsRef.current = defaults;
-    templateRef.current = titleTemplate;
 
     const applyRef = useRef(() => {
         const result = headManager.getMergedHead(defaultsRef.current);
@@ -158,6 +156,12 @@ export const useHeadRenderer = (options?: HeadRendererOptions): void => {
         applyHead(result, prevOptionsRef.current, templateRef.current);
         prevOptionsRef.current = result.options;
     });
+
+    // Keep latest options in refs (React Compiler disallows writing refs during render)
+    useEffect(() => {
+        defaultsRef.current = defaults;
+        templateRef.current = titleTemplate;
+    }, [defaults, titleTemplate]);
 
     // Subscribe to HeadManager changes
     useEffect(() => {

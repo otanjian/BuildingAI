@@ -186,16 +186,8 @@ const InputArea = memo(function InputArea({
   footerText?: string;
 }) {
   const { websiteConfig } = useConfigStore((state) => state.config);
-  const {
-    suggestions,
-    status,
-    streamingMessageId,
-    textareaRef,
-    isLoading,
-    onSend,
-    onStop,
-    selectedModelId,
-  } = useAssistantContext();
+  const { suggestions, status, textareaRef, isLoading, onSend, onStop, selectedModelId } =
+    useAssistantContext();
   const { id } = useParams<{ id: string }>();
   const { isLogin } = useAuthStore((state) => state.authActions);
   const location = useLocation();
@@ -243,13 +235,14 @@ const InputArea = memo(function InputArea({
   return (
     <div className={cn("sticky z-10", id ? "bottom-13" : "bottom-0")}>
       <InfiniteScrollTopScrollButton className="-top-12 z-20" />
-      <div className={cn("bg-background rounded-t-lg", CHAT_COLUMN_CLASS)} style={CHAT_COLUMN_STYLE}>
+      <div
+        className={cn("bg-background rounded-t-lg", CHAT_COLUMN_CLASS)}
+        style={CHAT_COLUMN_STYLE}
+      >
         {!hasMessages && suggestions.length > 0 && !isLoading && (
           <Suggestions suggestions={suggestions} onSuggestionClick={handleSuggestionClick} />
         )}
-        {(status === "submitted" || status === "streaming") ? (
-          <StreamingIndicator />
-        ) : null}
+        {status === "submitted" || status === "streaming" ? <StreamingIndicator /> : null}
         <PromptInput
           textareaRef={textareaRef}
           status={status}

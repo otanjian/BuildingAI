@@ -36,7 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@buildingai/ui/compone
 import { cn } from "@buildingai/ui/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Check, CreditCard, Zap } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const WECHAT_QR_EXPIRE_MS = 60 * 1000;
@@ -181,11 +181,11 @@ function PaymentDialog({
   payWayList?: PayWayItem[];
 }) {
   /** 从已开启的支付方式中取默认值：有默认则用默认，否则用第一个 */
-  const getDefaultPaymentMethod = (): PayConfigType => {
+  const getDefaultPaymentMethod = useCallback((): PayConfigType => {
     if (payWayList.length === 0) return undefined as unknown as PayConfigType;
     const defaultItem = payWayList.find((item) => item.isDefault === BooleanNumber.YES);
     return (defaultItem?.payType ?? payWayList[0]?.payType ?? 1) as PayConfigType;
-  };
+  }, [payWayList]);
   const [open, setOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PayConfigType>(getDefaultPaymentMethod());
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -198,7 +198,7 @@ function PaymentDialog({
   const queryClient = useQueryClient();
   useEffect(() => {
     setPaymentMethod(getDefaultPaymentMethod());
-  }, [open, payWayList]);
+  }, [open, getDefaultPaymentMethod]);
   const [orderNo, setOrderNo] = useState<string | null>(null);
   const submitOrderMutation = useMembershipSubmitOrderMutation();
   const prepayMutation = usePayPrepayMutation();

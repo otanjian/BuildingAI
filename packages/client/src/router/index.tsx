@@ -23,12 +23,12 @@ import { usePlatformEmbedNavBridge } from "../helpers/platformEmbedNav";
 import ConsoleLayout from "../layouts/console";
 import DynamicHomePage from "../pages";
 import AppIframePage from "../pages/apps/[identifier]";
-import { AppEmbeddedChatProvider } from "../providers/app-embedded-chat-provider";
 import ChatPage from "../pages/chat";
 import EmbedChatPage from "../pages/chat/embed";
 import { LoginPage } from "../pages/login";
 import { OAuthCallbackPage } from "../pages/login/oauth-callback";
 import AlipayReturnPage from "../pages/payment/alipay-return";
+import { AppEmbeddedChatProvider } from "../providers/app-embedded-chat-provider";
 
 function RedirectLegacyEmbedChat() {
   const [searchParams] = useSearchParams();

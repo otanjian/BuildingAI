@@ -19,10 +19,10 @@ import AccessPermissionIndexPage from "@/pages/console/access/permission";
 import AccessRoleIndexPage from "@/pages/console/access/role";
 import AgentConfigIndexPage from "@/pages/console/ai/agent/config";
 import AgentIndexPage from "@/pages/console/ai/agent/list";
+import AiConsoleMcpKeysPage from "@/pages/console/ai/console-mcp-keys";
 import DatasetsConfigPage from "@/pages/console/ai/datasets/config";
 import DatasetsIndexPage from "@/pages/console/ai/datasets/list";
 import AiMcpIndexPage from "@/pages/console/ai/mcp";
-import AiConsoleMcpKeysPage from "@/pages/console/ai/console-mcp-keys";
 import AiProviderIndexPage from "@/pages/console/ai/provider";
 import AiSecretIndexPage from "@/pages/console/ai/secret";
 import ChannelWechatOaIndexPage from "@/pages/console/channel/wechat-oa";
@@ -312,7 +312,7 @@ export default function ConsoleLayout({ children }: { children?: React.ReactNode
   // Platform iframe embed: content only (no BuildingAI console sidebar / navbar).
   if (embedMode) {
     return (
-      <div className="bd-console-layout h-dvh overflow-hidden bg-background">
+      <div className="bd-console-layout bg-background h-dvh overflow-hidden">
         <ScrollArea className="h-full" viewportClassName="[&>div]:block!">
           {children ? children : <ConsoleRoutes />}
         </ScrollArea>

@@ -11,7 +11,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/u
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Carousel, CarouselContent, CarouselItem } from "@buildingai/ui/components/ui/carousel";
-import { useAuthStore } from "@buildingai/web/stores";
 import {
   InputGroup,
   InputGroupAddon,
@@ -29,6 +28,7 @@ import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { SidebarTrigger } from "@buildingai/ui/components/ui/sidebar";
 // import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { cn } from "@buildingai/ui/lib/utils";
+import { useAuthStore } from "@buildingai/web/stores";
 import Autoplay from "embla-carousel-autoplay";
 import {
   Bot,
@@ -220,7 +220,7 @@ const AgentsIndexPage = () => {
                 {decorateConfig?.description || "选择你想要的智能体"}
               </p>
             </div>
-            <div className="w-full shrink-0 sm:w-auto sm:min-w-[240px] sm:max-w-sm">
+            <div className="w-full shrink-0 sm:w-auto sm:max-w-sm sm:min-w-[240px]">
               <InputGroup className="rounded-full">
                 <InputGroupInput
                   placeholder="搜索智能体"
@@ -269,52 +269,52 @@ const AgentsIndexPage = () => {
 
           {tags.length > 0 ? (
             <div className="group relative mt-6">
-            <div
-              className={cn(
-                "from-background via-background/80 pointer-events-none absolute inset-y-0 left-0 z-10 flex w-24 items-center bg-linear-to-r to-transparent transition-opacity duration-300",
-                canScrollTagsLeft ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <Button
-                type="button"
-                size="icon-xs"
-                className="border-border bg-background text-muted-foreground hover:bg-background hover:text-primary pointer-events-auto ml-2 flex size-8 items-center justify-center rounded-full border shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] transition-all duration-200 hover:scale-110 active:scale-95"
-                onClick={() => scrollTagsBy("left")}
+              <div
+                className={cn(
+                  "from-background via-background/80 pointer-events-none absolute inset-y-0 left-0 z-10 flex w-24 items-center bg-linear-to-r to-transparent transition-opacity duration-300",
+                  canScrollTagsLeft ? "opacity-100" : "opacity-0",
+                )}
               >
-                <ChevronLeft className="size-3.5 stroke-3" />
-              </Button>
-            </div>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  className="border-border bg-background text-muted-foreground hover:bg-background hover:text-primary pointer-events-auto ml-2 flex size-8 items-center justify-center rounded-full border shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] transition-all duration-200 hover:scale-110 active:scale-95"
+                  onClick={() => scrollTagsBy("left")}
+                >
+                  <ChevronLeft className="size-3.5 stroke-3" />
+                </Button>
+              </div>
 
-            <div
-              className={cn(
-                "from-background via-background/80 pointer-events-none absolute inset-y-0 right-0 z-10 flex w-24 items-center justify-end bg-linear-to-l to-transparent transition-opacity duration-300",
-                canScrollTagsRight ? "opacity-100" : "opacity-0",
-              )}
-            >
-              <Button
-                type="button"
-                size="icon-xs"
-                className="border-border bg-background text-muted-foreground hover:bg-background hover:text-primary pointer-events-auto mr-2 flex size-8 items-center justify-center rounded-full border shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] transition-all duration-200 hover:scale-110 active:scale-95"
-                onClick={() => scrollTagsBy("right")}
+              <div
+                className={cn(
+                  "from-background via-background/80 pointer-events-none absolute inset-y-0 right-0 z-10 flex w-24 items-center justify-end bg-linear-to-l to-transparent transition-opacity duration-300",
+                  canScrollTagsRight ? "opacity-100" : "opacity-0",
+                )}
               >
-                <ChevronRight className="size-3.5 stroke-3" />
-              </Button>
-            </div>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  className="border-border bg-background text-muted-foreground hover:bg-background hover:text-primary pointer-events-auto mr-2 flex size-8 items-center justify-center rounded-full border shadow-[0_10px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] transition-all duration-200 hover:scale-110 active:scale-95"
+                  onClick={() => scrollTagsBy("right")}
+                >
+                  <ChevronRight className="size-3.5 stroke-3" />
+                </Button>
+              </div>
 
-            <div ref={tagScrollRef} className="no-scrollbar overflow-x-auto scroll-smooth py-2">
-              <div className="flex min-w-max flex-nowrap gap-2">
-                {tags.map((tag) => (
-                  <Badge
-                    key={tag.id}
-                    className={badgeClass(isTagSelected(tag.id))}
-                    onClick={() => selectTag(tag.id)}
-                  >
-                    {tag.name}
-                  </Badge>
-                ))}
+              <div ref={tagScrollRef} className="no-scrollbar overflow-x-auto scroll-smooth py-2">
+                <div className="flex min-w-max flex-nowrap gap-2">
+                  {tags.map((tag) => (
+                    <Badge
+                      key={tag.id}
+                      className={badgeClass(isTagSelected(tag.id))}
+                      onClick={() => selectTag(tag.id)}
+                    >
+                      {tag.name}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
           ) : null}
 
           <div className="mt-5">

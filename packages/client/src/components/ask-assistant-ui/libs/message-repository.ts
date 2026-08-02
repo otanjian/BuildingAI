@@ -121,6 +121,7 @@ export class MessageRepository {
     parentOrRoot.children = parentOrRoot.children.map((id) => (id === oldId ? newId : id));
 
     if (parentOrRoot.next === msg) {
+      // msg object identity is unchanged, so the next pointer still refers to it.
     }
 
     if (this.head === msg) {

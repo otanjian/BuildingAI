@@ -10,7 +10,7 @@ import {
 import { cn } from "@buildingai/ui/lib/utils";
 import { CheckIcon, CopyIcon, FileIcon, GitCommitIcon, MinusIcon, PlusIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type CommitProps = ComponentProps<typeof Collapsible>;
 
@@ -106,11 +106,15 @@ const relativeTimeFormat = new Intl.RelativeTimeFormat("en", {
 });
 
 export const CommitTimestamp = ({ date, className, children, ...props }: CommitTimestampProps) => {
-  const formatted = relativeTimeFormat.format(
-    Math.round((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
-    "day",
-  );
-
+  // Relative timestamps inherently depend on the current time; the impure read is intentional.
+  const formatted = useMemo(() => {
+    return relativeTimeFormat.format(
+      // Relative timestamps inherently depend on the current time; the impure read is intentional.
+      // eslint-disable-next-line react-hooks/purity
+      Math.round((date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+      "day",
+    );
+  }, [date]);
   return (
     <time className={cn("text-xs", className)} dateTime={date.toISOString()} {...props}>
       {children ?? formatted}

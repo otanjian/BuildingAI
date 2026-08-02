@@ -66,4 +66,3 @@ export function getFileFormatKey(mimeType?: string): string {
 
   return "";
 }
-

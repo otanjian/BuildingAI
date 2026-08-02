@@ -127,7 +127,7 @@ function SidebarProvider({
         }
       }
     },
-    [setOpenProp, open],
+    [setOpenProp, open, storageKey],
   );
 
   // Helper to toggle the sidebar.

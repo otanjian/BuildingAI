@@ -375,11 +375,15 @@ export const CodeBlockContent = ({
     () => highlightCode(code, language) ?? rawTokens,
   );
 
+  // Adjust state during render when code changes (React Compiler-compatible reset)
+  const [prevCode, setPrevCode] = useState(code);
+  if (prevCode !== code) {
+    setPrevCode(code);
+    setTokenized(highlightCode(code, language) ?? rawTokens);
+  }
+
   useEffect(() => {
     let cancelled = false;
-
-    // Reset to raw tokens when code changes (shows current code, not stale tokens)
-    setTokenized(highlightCode(code, language) ?? rawTokens);
 
     // Subscribe to async highlighting result
     highlightCode(code, language, (result) => {
@@ -391,7 +395,7 @@ export const CodeBlockContent = ({
     return () => {
       cancelled = true;
     };
-  }, [code, language, rawTokens]);
+  }, [code, language]);
 
   return (
     <div className="relative overflow-auto">

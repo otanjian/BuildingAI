@@ -55,9 +55,9 @@ import { ProviderIcon } from "@/components/provider-icons";
 import { TagSelect } from "@/components/tags";
 import { PageContainer } from "@/layouts/console/_components/page-container";
 
+import { AgentAssignDialog } from "./_components/agent-assign-dialog";
 import { DashboardDialog } from "./_components/dashboard-dialog";
 import { ReviewDialog } from "./_components/review-dialog";
-import { AgentAssignDialog } from "./_components/agent-assign-dialog";
 
 export const AgentCreateMode = {
   DIRECT: "direct",

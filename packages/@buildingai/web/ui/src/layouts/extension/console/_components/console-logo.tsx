@@ -43,7 +43,7 @@ export function ConsoleLogo({ identifier }: ConsoleLogoProps) {
           <Link to="/console">
             <>
               <Avatar className="size-8 rounded-md after:hidden">
-                <AvatarImage src={extension.icon} alt={extension.name} className="rounded-md" />
+                <AvatarImage src={extension?.icon} alt={extension?.name} className="rounded-md" />
                 <AvatarFallback className="rounded-md">
                   <Puzzle className="size-4" />
                 </AvatarFallback>

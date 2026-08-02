@@ -49,13 +49,65 @@ const LoginPage = () => {
     return <Navigate to={target} replace />;
   }
   return (
-    <div className="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
-      <div className="flex w-full max-w-sm flex-col gap-6">
+    <div
+      className="dark relative flex min-h-svh flex-col items-center justify-center gap-6 overflow-hidden p-6 md:p-10"
+      style={{
+        background: "linear-gradient(135deg, #09091a 0%, #0f1b3b 35%, #091528 70%, #0a0f1f 100%)",
+      }}
+    >
+      {/* Ambient glow orbs */}
+      <div
+        className="pointer-events-none absolute -top-20 -right-20 h-[280px] w-[280px] rounded-full blur-[60px]"
+        style={{ background: "radial-gradient(circle, rgba(99,102,241,0.18), transparent 70%)" }}
+      />
+      <div
+        className="pointer-events-none absolute -bottom-24 -left-16 h-[320px] w-[320px] rounded-full blur-[60px]"
+        style={{ background: "radial-gradient(circle, rgba(56,189,248,0.1), transparent 70%)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-[45%] left-[40%] h-[200px] w-[200px] rounded-full blur-[40px]"
+        style={{ background: "radial-gradient(circle, rgba(139,92,246,0.08), transparent 70%)" }}
+      />
+
+      {/* Subtle dot grid texture */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-50"
+        style={{
+          backgroundImage: "radial-gradient(rgba(99,102,241,0.04) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
+
+      {/* Static particle dots */}
+      <div
+        className="pointer-events-none absolute top-[12%] left-[18%] size-[3px] rounded-full"
+        style={{ background: "rgba(99,102,241,0.55)", boxShadow: "0 0 6px rgba(99,102,241,0.35)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-[22%] right-[22%] size-[2px] rounded-full"
+        style={{ background: "rgba(99,102,241,0.4)", boxShadow: "0 0 4px rgba(99,102,241,0.25)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-[68%] right-[14%] size-[3px] rounded-full"
+        style={{ background: "rgba(56,189,248,0.5)", boxShadow: "0 0 5px rgba(56,189,248,0.3)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-[78%] left-[28%] size-[2px] rounded-full"
+        style={{ background: "rgba(139,92,246,0.45)", boxShadow: "0 0 4px rgba(139,92,246,0.25)" }}
+      />
+      <div
+        className="pointer-events-none absolute top-[8%] right-[38%] size-[2px] rounded-full"
+        style={{ background: "rgba(59,130,246,0.35)", boxShadow: "0 0 3px rgba(59,130,246,0.2)" }}
+      />
+
+      <div className="relative z-10 flex w-full max-w-sm flex-col gap-6">
         <a href="#" className="flex items-center gap-2 self-center font-medium">
           {websiteConfig?.webinfo.logo ? (
             <div className="flex items-center gap-2">
               <img className="h-8" src={websiteConfig?.webinfo.logo} alt="logo" />
-              <span className="text-xl font-bold">{websiteConfig?.webinfo.name}</span>
+              <span className="text-xl font-bold text-slate-100">
+                {websiteConfig?.webinfo.name}
+              </span>
             </div>
           ) : (
             <SvgIcons.buildingaiFull className="h-8" />

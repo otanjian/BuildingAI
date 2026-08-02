@@ -19,9 +19,9 @@ export function MentionElementStatic(
       as="span"
       className={cn(
         "bg-muted inline-block rounded-md px-1.5 py-0.5 align-baseline text-sm font-medium",
-        element.children[0][KEYS.bold] === true && "font-bold",
-        element.children[0][KEYS.italic] === true && "italic",
-        element.children[0][KEYS.underline] === true && "underline",
+        element.children[0]?.[KEYS.bold] === true && "font-bold",
+        element.children[0]?.[KEYS.italic] === true && "italic",
+        element.children[0]?.[KEYS.underline] === true && "underline",
       )}
       attributes={{
         ...props.attributes,

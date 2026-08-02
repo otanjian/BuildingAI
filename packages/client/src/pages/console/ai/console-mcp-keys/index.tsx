@@ -88,17 +88,12 @@ const AiConsoleMcpKeysPage = () => {
               <code className="bg-background flex-1 overflow-x-auto rounded px-2 py-1 text-xs">
                 {createdSecret.secret}
               </code>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => handleCopy(createdSecret.secret)}
-              >
+              <Button size="sm" variant="outline" onClick={() => handleCopy(createdSecret.secret)}>
                 <Copy className="size-4" />
               </Button>
             </div>
             <p className="text-muted-foreground text-xs">
-              Cursor MCP URL:{" "}
-              <code>{`${window.location.origin}/mcp/buildingai-console-mcp`}</code>
+              Cursor MCP URL: <code>{`${window.location.origin}/mcp/buildingai-console-mcp`}</code>
               <br />
               Header: <code>Authorization: Bearer &lt;secret&gt;</code>
             </p>

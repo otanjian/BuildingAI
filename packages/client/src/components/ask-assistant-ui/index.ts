@@ -1,7 +1,5 @@
 export type { ChatProps } from "./chat";
 export { Chat } from "./chat";
-export type { StandardChatSidebarProps } from "./standard-chat-sidebar";
-export { StandardChatSidebar } from "./standard-chat-sidebar";
 export type { PromptInputHiddenTool, PromptInputProps } from "./components/input/prompt-input";
 export { PromptInput } from "./components/input/prompt-input";
 export type { SuggestionData, SuggestionsProps } from "./components/input/suggestions";
@@ -45,6 +43,8 @@ export { convertUIMessageToMessage } from "./libs/message-converter";
 export type { RawMessageRecord } from "./libs/message-repository";
 export { MessageRepository } from "./libs/message-repository";
 export { convertProvidersToModels } from "./libs/provider-converter";
+export type { StandardChatSidebarProps } from "./standard-chat-sidebar";
+export { StandardChatSidebar } from "./standard-chat-sidebar";
 export type {
   AssistantContextValue,
   ChatStatus,

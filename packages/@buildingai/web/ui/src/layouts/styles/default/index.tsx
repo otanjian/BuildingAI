@@ -12,7 +12,7 @@ export default function DefaultLayout({ children }: { children?: React.ReactNode
   if (embedMode && historyMode) {
     return (
       <SidebarProvider storageKey="layout-style-default-sidebar" className="h-dvh">
-        <div className="h-dvh overflow-hidden bg-background">
+        <div className="bg-background h-dvh overflow-hidden">
           <EmbedHistoryPanel />
         </div>
       </SidebarProvider>
@@ -29,10 +29,7 @@ export default function DefaultLayout({ children }: { children?: React.ReactNode
             width: 100% !important;
           }
         `}</style>
-        <div
-          data-buildingai-embed="1"
-          className="h-dvh w-full overflow-hidden bg-background"
-        >
+        <div data-buildingai-embed="1" className="bg-background h-dvh w-full overflow-hidden">
           {children || <Outlet />}
         </div>
       </SidebarProvider>

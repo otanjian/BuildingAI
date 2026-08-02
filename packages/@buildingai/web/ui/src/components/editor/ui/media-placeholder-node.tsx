@@ -1,6 +1,5 @@
 "use client";
 
-import { useUploadFile } from "@buildingai/ui/hooks/use-upload-file";
 import { cn } from "@buildingai/ui/lib/utils";
 import { PlaceholderPlugin, PlaceholderProvider, updateUploadHistory } from "@platejs/media/react";
 import { AudioLines, FileUp, Film, ImageIcon, Loader2Icon } from "lucide-react";
@@ -10,6 +9,8 @@ import type { PlateElementProps } from "platejs/react";
 import { PlateElement, useEditorPlugin, withHOC } from "platejs/react";
 import * as React from "react";
 import { useFilePicker } from "use-file-picker";
+
+import { useUploadFile } from "../../../hooks/use-upload-file";
 
 const CONTENT: Record<
   string,
@@ -52,7 +53,7 @@ export const PlaceholderElement = withHOC(
 
     const loading = isUploading && uploadingFile;
 
-    const currentContent = CONTENT[element.mediaType];
+    const currentContent = CONTENT[element.mediaType]!;
 
     const isImage = element.mediaType === KEYS.img;
 

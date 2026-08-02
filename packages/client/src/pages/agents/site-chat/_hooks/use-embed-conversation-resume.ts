@@ -2,13 +2,13 @@ import type { UIMessage } from "ai";
 import { useEffect, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 
-import { getPublicConversationMessages } from "../services/public-conversation-messages";
 import {
   clearLastConversation,
   isEmbeddedHost,
   readLastConversation,
   writeLastConversation,
 } from "../lib/embed-conversation-storage";
+import { getPublicConversationMessages } from "../services/public-conversation-messages";
 
 const OPERATOR_SYNC_INTERVAL_MS = 4000;
 const RESUME_PAGE_SIZE = 1;
@@ -18,10 +18,7 @@ function getSequence(message: UIMessage): number {
   return typeof sequence === "number" ? sequence : 0;
 }
 
-export function mergeAppendOnlyMessages(
-  previous: UIMessage[],
-  incoming: UIMessage[],
-): UIMessage[] {
+export function mergeAppendOnlyMessages(previous: UIMessage[], incoming: UIMessage[]): UIMessage[] {
   const map = new Map(previous.map((message) => [message.id, message]));
   for (const message of incoming) {
     if (!map.has(message.id)) {
@@ -138,9 +135,12 @@ export function useEmbedConversationResume(options: {
     })
       .then(() => {
         if (cancelled) return;
-        navigate(`/agents/${agentId}/${encodeURIComponent(accessToken)}/c/${cached.conversationId}`, {
-          replace: true,
-        });
+        navigate(
+          `/agents/${agentId}/${encodeURIComponent(accessToken)}/c/${cached.conversationId}`,
+          {
+            replace: true,
+          },
+        );
       })
       .catch(() => {
         if (cancelled) return;
@@ -155,14 +155,7 @@ export function useEmbedConversationResume(options: {
     return () => {
       cancelled = true;
     };
-  }, [
-    agentId,
-    accessToken,
-    anonymousIdentifier,
-    conversationIdFromUrl,
-    enabled,
-    navigate,
-  ]);
+  }, [agentId, accessToken, anonymousIdentifier, conversationIdFromUrl, enabled, navigate]);
 
   return { isResuming };
 }

@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  isCompletedToolState,
-  partitionToolPartsForDisplay,
-} from "./message-tools-helpers.ts";
+import { isCompletedToolState, partitionToolPartsForDisplay } from "./message-tools-helpers.ts";
 
 describe("message-tools-helpers", () => {
   it("treats terminal states as completed", () => {

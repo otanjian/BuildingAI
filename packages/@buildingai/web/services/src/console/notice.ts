@@ -47,7 +47,7 @@ export type UpdateSmsSceneSettingDto = {
     content: string;
 };
 
-type QueryOptionsUtil<T> = any;
+type QueryOptionsUtil<_T> = any;
 
 /**
  * 获取阿里云短信配置

@@ -1,5 +1,6 @@
 import { config as baseConfig } from "@buildingai/eslint-config/base";
 import { defineConfig } from "eslint/config";
+import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 
@@ -18,6 +19,15 @@ export default defineConfig([
     },
     rules: {
       "react-refresh/only-export-components": "off",
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
     },
   },
 ]);
