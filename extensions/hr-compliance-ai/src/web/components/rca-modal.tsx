@@ -41,7 +41,7 @@ export function RcaModal({ anomaly, agentId, onClose }: Props) {
             <div className="hr-compliance-modal rca" onClick={(e) => e.stopPropagation()}>
                 <h3 style={{ marginBottom: 12 }}>🧠 AI 根因分析 {anomaly.anomalyId}</h3>
                 <div className="hr-compliance-chat-msgs" style={{ minHeight: 280, maxHeight: 400 }}>
-                    {chat.messages.map((m: { id: string; role: string }) => (
+                    {chat.messages.map((m) => (
                         <div
                             key={m.id}
                             className={`hr-compliance-chat-msg ${m.role === "user" ? "user" : "ai"}`}

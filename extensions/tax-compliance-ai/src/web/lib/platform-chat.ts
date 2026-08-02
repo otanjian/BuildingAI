@@ -1,7 +1,8 @@
-import { useChat } from "@ai-sdk/react";
+import { useChat, type UseChatHelpers } from "@ai-sdk/react";
 import { useAuthStore } from "@buildingai/stores";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useMemo, useRef } from "react";
+import type { RefObject } from "react";
 
 function getApiBase(): string {
     return `${window.location.origin}${import.meta.env.VITE_APP_WEB_API_PREFIX || "/api"}`;
@@ -19,7 +20,11 @@ export function usePlatformChat(options: {
     agentId: string;
     chatId?: string;
     saveConversation?: boolean;
-}) {
+}): UseChatHelpers<UIMessage> & {
+    conversationIdRef: RefObject<string | undefined>;
+    resetConversation: () => void;
+    getLastAssistantText: () => string;
+} {
     const token = useAuthStore((s) => s.auth.token);
     const conversationIdRef = useRef<string | undefined>(undefined);
     const saveConversationRef = useRef(options.saveConversation ?? true);
@@ -73,7 +78,7 @@ export function usePlatformChat(options: {
         const msgs = chat.messages;
         for (let i = msgs.length - 1; i >= 0; i--) {
             const m = msgs[i];
-            if (m.role === "assistant") {
+            if (m && m.role === "assistant") {
                 return getTextFromMessage(m);
             }
         }
