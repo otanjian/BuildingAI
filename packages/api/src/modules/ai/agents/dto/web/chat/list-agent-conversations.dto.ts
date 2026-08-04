@@ -25,4 +25,13 @@ export class ListAgentConversationsDto extends PaginationDto {
     @Transform(({ value }) => value === "true" || value === true)
     @IsBoolean()
     includeAnonymous?: boolean;
+
+    /**
+     * Whether to include archived conversations in the result.
+     * When omitted, archived conversations are excluded by default.
+     */
+    @IsOptional()
+    @Transform(({ value }) => value === "true" || value === true)
+    @IsBoolean()
+    includeArchived?: boolean;
 }

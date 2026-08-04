@@ -23,10 +23,11 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { validate as isUUID } from "uuid";
 
-import { CreateOperatorMessageDto } from "../../dto/web/chat/create-operator-message.dto";
 import { AgentChatRequestDto } from "../../dto/web/chat/agent-chat-request.dto";
 import { CreateAgentMessageFeedbackDto } from "../../dto/web/chat/agent-message-feedback.dto";
 import { AgentSpeechRequestDto } from "../../dto/web/chat/agent-speech-request.dto";
+import { ArchiveConversationDto } from "../../dto/web/chat/archive-conversation.dto";
+import { CreateOperatorMessageDto } from "../../dto/web/chat/create-operator-message.dto";
 import { ListAgentConversationsDto } from "../../dto/web/chat/list-agent-conversations.dto";
 import { ListConversationMessagesDto } from "../../dto/web/chat/list-conversation-messages.dto";
 import { AgentChatCompletionService } from "../../services/agent-chat-completion.service";
@@ -412,6 +413,58 @@ export class AgentChatWebController {
         return { message: "对话已删除" };
     }
 
+    @Patch(":id/chat/conversations/:conversationId/archive")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/archive",
+        targetPath: ":id/chat/conversations/:conversationId/archive",
+        method: "PATCH",
+    })
+    async archiveConversation(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Body() dto: ArchiveConversationDto,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权归档该对话");
+        }
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权归档该对话");
+        await this.agentChatRecordService.archive(conversationId, playground.id, dto.archived);
+        return { message: dto.archived ? "对话已归档" : "对话已取消归档" };
+    }
+
+    @Get(":id/chat/conversations/:conversationId")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId",
+        targetPath: ":id/chat/conversations/:conversationId",
+        method: "GET",
+    })
+    async getConversationDetail(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权查看该对话");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权查看该对话");
+        }
+        return {
+            id: record.id,
+            title: record.title,
+            archivedAt: record.archivedAt ?? null,
+        };
+    }
+
     @Post(":id/chat/conversations/:conversationId/messages/operator")
     async createOperatorMessage(
         @Param("id") agentId: string,
@@ -454,9 +507,7 @@ export class AgentChatWebController {
         const urlPath = (req.originalUrl || req.url || "").split("?")[0] ?? "";
         const markerIndex = urlPath.lastIndexOf(marker);
         const relativePath =
-            markerIndex >= 0
-                ? decodeURIComponent(urlPath.slice(markerIndex + marker.length))
-                : "";
+            markerIndex >= 0 ? decodeURIComponent(urlPath.slice(markerIndex + marker.length)) : "";
         if (!relativePath) {
             throw HttpErrorFactory.badRequest("产物路径不能为空");
         }

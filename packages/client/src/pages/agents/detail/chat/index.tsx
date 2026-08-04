@@ -1,6 +1,7 @@
 import {
   type PublishedAgentDetail,
   useAgentConversationsQuery,
+  useArchiveAgentConversation,
   useCopyAgentFromSquareMutation,
   usePublishedAgentDetailQuery,
 } from "@buildingai/services/web";
@@ -31,10 +32,12 @@ import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { cn } from "@buildingai/ui/lib/utils";
 import {
+  Archive,
   Bot,
   ChevronDown,
   ChevronLeft,
   ListIndentDecrease,
+  LoaderCircle,
   PanelLeft,
   Settings2,
 } from "lucide-react";
@@ -51,6 +54,7 @@ import {
   useAssistantContext,
 } from "@/components/ask-assistant-ui";
 
+import { useBackgroundStreamingConversations } from "../../_shared/use-background-streams";
 import { useAssistantForAgent } from "../_hooks/use-assistant-for-agent";
 import { hasRenderableOpeningStatement } from "../_utils/opening-statement";
 
@@ -127,16 +131,43 @@ function AgentInfoPanel({
   conversations,
   isLoadingConversations,
   currentConversationId,
+  backgroundStreamingConversationIds,
 }: {
   agent: PublishedAgentDetail | undefined;
   isLoading: boolean;
   conversations: Array<{ id: string; title: string }>;
   isLoadingConversations: boolean;
   currentConversationId?: string;
+  backgroundStreamingConversationIds: ReadonlySet<string>;
 }) {
   const copyAgentMutation = useCopyAgentFromSquareMutation(agent?.id ?? "");
+  const archiveMutation = useArchiveAgentConversation();
   const navigate = useNavigate();
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  const handleArchive = useCallback(
+    async (conversationId: string) => {
+      if (!agent?.id) return;
+      setArchivingId(conversationId);
+      try {
+        await archiveMutation.mutateAsync({
+          agentId: agent.id,
+          conversationId,
+          archived: true,
+        });
+      } catch (error) {
+        const message =
+          (error as { message?: string })?.message ||
+          (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          "归档失败，请稍后重试";
+        toast.error(message);
+      } finally {
+        setArchivingId(null);
+      }
+    },
+    [agent?.id, archiveMutation],
+  );
 
   const handleCopyAgent = useCallback(async () => {
     if (!agent?.id) return;
@@ -318,24 +349,53 @@ function AgentInfoPanel({
                       className="h-full min-h-0 w-full min-w-0"
                       viewportClassName="[&>div]:block!"
                     >
-                      {conversations.map((item) => (
-                        <Button
-                          key={item.id}
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className={cn(
-                            "w-full min-w-0 justify-start rounded-sm px-2",
-                            "hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/10",
-                            currentConversationId === item.id &&
-                              "bg-muted-foreground/10 dark:bg-muted-foreground/10",
-                          )}
-                          title={item.title}
-                          onClick={() => navigate(`/agents/${agent?.id}/c/${item.id}`)}
-                        >
-                          <span className="min-w-0 flex-1 truncate text-left">{item.title}</span>
-                        </Button>
-                      ))}
+                      {conversations.map((item) => {
+                        const isArchiving = archivingId === item.id;
+                        return (
+                          <div key={item.id} className="group relative">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className={cn(
+                                "w-full min-w-0 justify-start rounded-sm px-2",
+                                "hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/10",
+                                currentConversationId === item.id &&
+                                  "bg-muted-foreground/10 dark:bg-muted-foreground/10",
+                              )}
+                              title={item.title}
+                              onClick={() => navigate(`/agents/${agent?.id}/c/${item.id}`)}
+                            >
+                              <span className="min-w-0 flex-1 truncate text-left">
+                                {item.title}
+                              </span>
+                              {backgroundStreamingConversationIds.has(item.id) ? (
+                                <LoaderCircle className="text-muted-foreground size-3.5 shrink-0 animate-spin" />
+                              ) : null}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              title="归档"
+                              aria-label={`归档 ${item.title}`}
+                              disabled={isArchiving}
+                              className={cn(
+                                "text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2",
+                                "size-6 rounded-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
+                                isArchiving && "opacity-100",
+                              )}
+                              onClick={() => void handleArchive(item.id)}
+                            >
+                              {isArchiving ? (
+                                <LoaderCircle className="size-3.5 animate-spin" />
+                              ) : (
+                                <Archive className="size-3.5" />
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </ScrollArea>
                   </div>
                 ) : (
@@ -625,6 +685,8 @@ const AgentChatPage = () => {
     [conversationsData?.items],
   );
 
+  const backgroundStreamingConversationIds = useBackgroundStreamingConversations();
+
   const handleFormValueChange = useCallback((name: string, value: string) => {
     setFormValues((prev) => ({ ...prev, [name]: value }));
   }, []);
@@ -784,6 +846,7 @@ const AgentChatPage = () => {
               conversations={conversations}
               isLoadingConversations={isLoadingConversations}
               currentConversationId={uuid}
+              backgroundStreamingConversationIds={backgroundStreamingConversationIds}
             />
           </div>
         )}
@@ -803,6 +866,7 @@ const AgentChatPage = () => {
                 conversations={conversations}
                 isLoadingConversations={isLoadingConversations}
                 currentConversationId={uuid}
+                backgroundStreamingConversationIds={backgroundStreamingConversationIds}
               />
             </div>
           </div>

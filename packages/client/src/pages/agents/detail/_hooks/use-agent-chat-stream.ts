@@ -10,6 +10,11 @@ import { validate as isUUID } from "uuid";
 
 import { getApiBaseUrl } from "@/utils/api";
 
+import {
+  registerBackgroundStream,
+  unregisterBackgroundStream,
+} from "../../_shared/background-streams";
+
 const STOP_FINALIZE_DELAY_MS = 350;
 const USAGE_HYDRATE_RETRY_INTERVAL_MS = 1000;
 const USAGE_HYDRATE_MAX_ATTEMPTS = 10;
@@ -202,6 +207,43 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     [agentId, token, saveConversation, isDebug],
   );
 
+  const normalizedRouteConversationId =
+    routeConversationId && isUUID(routeConversationId) ? routeConversationId : undefined;
+
+  /**
+   * The conversation currently visible in the UI. Distinguished from the
+   * shared `conversationIdRef` because background (switched-away) streams keep
+   * emitting events through the same hook and must not affect the visible
+   * conversation.
+   */
+  const activeConversationIdRef = useRef<string | undefined>(normalizedRouteConversationId);
+
+  /**
+   * The conversation this hook intends the next request to target: set right
+   * before each `sendMessage` call. Used to accept the server's
+   * `data-conversation-id` echo for newly created conversations.
+   */
+  const sendTargetConversationIdRef = useRef<string | null | undefined>(
+    normalizedRouteConversationId,
+  );
+
+  /**
+   * Conversation id of the most recent stream that emitted events (from the
+   * last `data-conversation-id` echo). Message-id events belong to this stream.
+   */
+  const streamTargetConversationIdRef = useRef<string | undefined>(undefined);
+
+  /**
+   * Key passed to `useChat({ id })`. Changes only when the user explicitly
+   * switches conversations, so the AI SDK recreates the Chat instance and the
+   * previous instance's in-flight request keeps running in the background.
+   */
+  const [chatSessionKey, setChatSessionKey] = useState<string>(
+    normalizedRouteConversationId ?? "new",
+  );
+  const newConversationCounterRef = useRef(0);
+  const prevRouteConversationIdRef = useRef<string | undefined>(normalizedRouteConversationId);
+
   const {
     messages,
     setMessages: setChatMessages,
@@ -211,7 +253,7 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     regenerate,
     addToolApprovalResponse,
   } = useChat({
-    id: `agent-chat-${agentId}`,
+    id: `agent-chat-${agentId}-${chatSessionKey}`,
     sendAutomaticallyWhen: ({ messages: currentMessages }) => {
       const lastMessage = currentMessages.at(-1);
       const shouldContinue =
@@ -228,43 +270,77 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     onData: (data) => {
       if (data.type === "data-conversation-id" && data.data) {
         const id = data.data as string;
-        if (isUUID(id)) {
-          const isNewConversation = !conversationIdRef.current;
-          conversationIdRef.current = id;
-          setConversationIdState(id);
-          if (isNewConversation && !disableAutoNavigate) {
-            navigate(`/agents/${agentId}/c/${id}`, { replace: true });
-            queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
-          }
+        if (!isUUID(id)) return;
+        const activeId = activeConversationIdRef.current;
+
+        // Determine whether this echo belongs to the visible conversation:
+        // - visible conversation exists and matches the echo id
+        // - no visible conversation yet but we just sent a request expecting
+        //   a brand-new conversation id
+        const isActiveStream =
+          (activeId !== undefined && activeId === id) ||
+          (activeId === undefined && sendTargetConversationIdRef.current === null);
+
+        streamTargetConversationIdRef.current = id;
+        if (!isActiveStream) return;
+
+        if (activeId === undefined) {
+          activeConversationIdRef.current = id;
+        }
+        const wasEmpty = !conversationIdRef.current;
+        conversationIdRef.current = id;
+        setConversationIdState(id);
+        registerBackgroundStream(id);
+        if (wasEmpty && !disableAutoNavigate) {
+          navigate(`/agents/${agentId}/c/${id}`, { replace: true });
+          queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
         }
       }
       if (data.type === "data-user-message-id" && data.data) {
-        lastMessageDbIdRef.current = data.data as string;
-        pendingUserDbIdRef.current = data.data as string;
-        if (mapLatestMessageId("user", data.data as string)) {
+        const id = data.data as string;
+        if (!isUUID(id)) return;
+        if (streamTargetConversationIdRef.current !== activeConversationIdRef.current) return;
+        lastMessageDbIdRef.current = id;
+        pendingUserDbIdRef.current = id;
+        if (mapLatestMessageId("user", id)) {
           pendingUserDbIdRef.current = null;
         }
       }
       if (data.type === "data-assistant-message-id" && data.data) {
-        lastMessageDbIdRef.current = data.data as string;
-        pendingAssistantDbIdRef.current = data.data as string;
-        if (mapLatestMessageId("assistant", data.data as string)) {
+        const id = data.data as string;
+        if (!isUUID(id)) return;
+        if (streamTargetConversationIdRef.current !== activeConversationIdRef.current) return;
+        lastMessageDbIdRef.current = id;
+        pendingAssistantDbIdRef.current = id;
+        if (mapLatestMessageId("assistant", id)) {
           pendingAssistantDbIdRef.current = null;
         }
       }
     },
     onFinish: () => {
-      const conversationId = conversationIdRef.current;
-      const lastAssistantId = [...messagesRef.current]
-        .reverse()
-        .find((m) => m.role === "assistant")?.id;
-      const token =
-        conversationId && lastAssistantId ? `${conversationId}:${lastAssistantId}` : undefined;
-      finalizeConversationSideEffects(token);
+      const finishedConversationId = streamTargetConversationIdRef.current;
+      const isActiveFinish =
+        finishedConversationId !== undefined &&
+        finishedConversationId === activeConversationIdRef.current;
+
+      unregisterBackgroundStream(finishedConversationId);
+      finalizeConversationSideEffects();
+
+      if (!isActiveFinish) return;
+      void hydrateLastAssistantUsageFromServer();
     },
     onError: (error) => {
+      const isActiveError =
+        streamTargetConversationIdRef.current === activeConversationIdRef.current;
+      unregisterBackgroundStream(streamTargetConversationIdRef.current);
+
+      if (!isActiveError) {
+        console.warn("Background agent chat stream error:", error);
+        return;
+      }
+
       console.error("Agent chat stream error:", error);
-      const message = error?.message || "Unknown error";
+      const message = (error as Error | undefined)?.message || "Unknown error";
       setStatusOverride("error");
       setChatMessages((prev) => {
         if (prev.length === 0) return prev;
@@ -297,6 +373,43 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
   });
 
   messagesRef.current = messages;
+
+  useEffect(() => {
+    const nextConversationId = normalizedRouteConversationId;
+    const prevConversationId = prevRouteConversationIdRef.current;
+
+    if (prevConversationId === nextConversationId) return;
+    prevRouteConversationIdRef.current = nextConversationId;
+
+    // The URL now matches the conversation our current Chat instance is already
+    // bound to (e.g. the `data-conversation-id` echo navigated here right after
+    // creating it). Do NOT recreate the instance — its stream is in flight.
+    if (nextConversationId && nextConversationId === conversationIdRef.current) {
+      activeConversationIdRef.current = nextConversationId;
+      return;
+    }
+
+    // Explicit switch to another conversation or to a brand-new one: recreate
+    // the Chat instance. The previous instance's in-flight request keeps
+    // streaming in the background and completes on its own.
+    activeConversationIdRef.current = nextConversationId;
+    conversationIdRef.current = nextConversationId;
+    setConversationIdState(nextConversationId);
+    // undefined = no request sent yet, so no `data-conversation-id` echo is
+    // expected (a `null` value is reserved for "request sent, awaiting new id"
+    // and is only set inside the send paths).
+    sendTargetConversationIdRef.current = nextConversationId ?? undefined;
+
+    if (nextConversationId) {
+      setChatSessionKey(nextConversationId);
+    } else {
+      newConversationCounterRef.current += 1;
+      setChatSessionKey(`new-${newConversationCounterRef.current}`);
+    }
+
+    lastMessageDbIdRef.current = null;
+    pendingParentIdRef.current = null;
+  }, [normalizedRouteConversationId, setChatSessionKey]);
 
   useEffect(() => {
     if (!addToolApprovalResponse) return;
@@ -438,6 +551,10 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
         pendingParentIdRef.current = resolveMessageDbId(messages[msgIndex - 1].id) ?? null;
       }
 
+      const targetConversationId = conversationIdRef.current;
+      sendTargetConversationIdRef.current = targetConversationId ?? null;
+      if (targetConversationId) registerBackgroundStream(targetConversationId);
+
       regenerate({
         messageId: msg.id,
         body: { trigger: "regenerate-message" },
@@ -459,6 +576,10 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
         parentId !== undefined
           ? (resolveMessageDbId(parentId) ?? null)
           : lastMessageDbIdRef.current;
+
+      const targetConversationId = conversationIdRef.current;
+      sendTargetConversationIdRef.current = targetConversationId ?? null;
+      if (targetConversationId) registerBackgroundStream(targetConversationId);
 
       const fileParts: FileUIPart[] | undefined =
         files && files.length > 0
@@ -536,6 +657,7 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
       conversationId && targetAssistantId ? `${conversationId}:${targetAssistantId}` : undefined;
 
     stop();
+    unregisterBackgroundStream(conversationId);
 
     scheduleTimeout(() => {
       finalizeConversationSideEffects(token);

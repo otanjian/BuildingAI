@@ -304,3 +304,31 @@ export function useUpdateAgentConversation(): UseMutationResult<
         },
     });
 }
+
+export function useArchiveAgentConversation(): UseMutationResult<
+    unknown,
+    unknown,
+    { agentId: string; conversationId: string; archived: boolean },
+    unknown
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            agentId,
+            conversationId,
+            archived,
+        }: {
+            agentId: string;
+            conversationId: string;
+            archived: boolean;
+        }) =>
+            apiHttpClient.patch(
+                `/ai-agents/${agentId}/chat/conversations/${conversationId}/archive`,
+                { archived },
+            ),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["unified-conversations"] });
+            queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
+        },
+    });
+}

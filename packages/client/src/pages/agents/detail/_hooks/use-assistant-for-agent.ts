@@ -197,8 +197,9 @@ export function useAssistantForAgent(
     const isNavigatingAway = prevId !== undefined && next === undefined;
 
     if (isSwitching || isNavigatingAway) {
-      stop();
-      setMessages([]);
+      // Note: no `stop()` / `setMessages([])` here — the Chat instance is
+      // recreated via the `useChat` id key in `useAgentChatStream`, letting
+      // the previous conversation's in-flight stream finish in the background.
       lastMessageDbIdRef.current = null;
       pendingParentIdRef.current = null;
       clearRepository();
@@ -207,7 +208,7 @@ export function useAssistantForAgent(
       isFirstLoadRef.current = true;
       editInProgressRef.current = false;
     }
-  }, [normalizedConversationId, stop, setMessages, clearRepository]);
+  }, [normalizedConversationId, clearRepository]);
 
   const shouldLoadInitial = Boolean(
     normalizedConversationId &&

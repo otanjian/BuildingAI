@@ -67,8 +67,8 @@ const AgentsIndexPage = () => {
     title: "智能体广场",
   });
 
-  const permissionsCodes = useAuthStore((state) => state.auth.userInfo?.permissionsCodes ?? []);
-  const hasAgentManagePermission = permissionsCodes.includes("agent.manage");
+  const permissionsCodes = useAuthStore((state) => state.auth.userInfo?.permissionsCodes);
+  const hasAgentManagePermission = permissionsCodes?.includes("agent.manage") ?? false;
 
   const { data: decorateConfig } = useWebAgentDecorateQuery();
   const { data: tagsData } = useAgentTags();

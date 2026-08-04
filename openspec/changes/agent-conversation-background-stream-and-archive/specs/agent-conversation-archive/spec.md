@@ -67,15 +67,9 @@ The agent chat page (both the published site-chat page and the logged-in detail 
 #### Scenario: Archive from site-chat sidebar
 
 - **WHEN** a user on the published site-chat page triggers archive on a conversation entry
-- **THEN** the conversation is archived and disappears from the list after confirmation
+- **THEN** the conversation is archived and disappears from the list
 
 #### Scenario: Archive from detail sidebar
 
 - **WHEN** a user on the logged-in agent detail page triggers archive on a conversation entry
-- **THEN** the conversation is archived and disappears from the list after confirmation
-
-#### Scenario: Archive requires confirmation
-
-- **WHEN** a user triggers the archive action
-- **THEN** the system prompts for confirmation before archiving
-- **AND** cancelling the confirmation does not archive the conversation
+- **THEN** the conversation is archived and disappears from the list

@@ -44,6 +44,9 @@ export class AgentChatRecord extends BaseEntity {
     @Index()
     isDeleted: boolean;
 
+    @Column({ type: "timestamptz", nullable: true, comment: "归档时间，非空表示已归档" })
+    archivedAt?: Date | null;
+
     @Column({ type: "jsonb", nullable: true, comment: "扩展数据字段" })
     metadata?: Record<string, any>;
 

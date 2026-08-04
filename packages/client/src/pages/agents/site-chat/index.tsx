@@ -27,10 +27,13 @@ import {
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import {
+  Archive,
   Bot,
   ClipboardPenLine,
   ListIndentDecrease,
+  LoaderCircle,
   MessageSquarePlus,
   PanelLeft,
 } from "lucide-react";
@@ -38,6 +41,7 @@ import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import {
   AssistantProvider,
@@ -47,6 +51,7 @@ import {
   StreamingIndicator,
 } from "@/components/ask-assistant-ui";
 
+import { useBackgroundStreamingConversations } from "../_shared/use-background-streams";
 import {
   useEmbedFormContext,
   useEmbedHostDocumentClass,
@@ -54,6 +59,7 @@ import {
 } from "./_hooks/use-embed-form-context";
 import { usePublicAgentAssistant } from "./_hooks/use-public-agent-assistant";
 import { isOperatorMessage } from "./lib/embed-conversation-storage";
+import { archivePublicConversation } from "./services/public-conversations";
 
 const AGENT_MODEL_ID = "agent";
 
@@ -100,11 +106,14 @@ interface SiteChatSidebarPanelProps {
   agent: PublishedAgentDetail | undefined;
   agentId: string;
   accessToken: string;
+  anonymousIdentifier?: string;
   navigate: NavigateFunction;
   isLoadingConversations: boolean;
   conversations: Array<{ id: string; title: string }> | undefined;
   /** Active conversation id from the URL (`/c/:conversationId`), for list selection styling. */
   currentConversationId?: string;
+  /** Conversation ids that currently have a background stream in flight. */
+  backgroundStreamingConversationIds: ReadonlySet<string>;
   openConversation: (id: string) => void;
   onAfterNavigate?: () => void;
   onCompactSidebar?: () => void;
@@ -115,14 +124,42 @@ function SiteChatSidebarPanel({
   agent,
   agentId,
   accessToken,
+  anonymousIdentifier,
   navigate,
   isLoadingConversations,
   conversations,
   currentConversationId,
+  backgroundStreamingConversationIds,
   openConversation,
   onAfterNavigate,
   onCompactSidebar,
 }: SiteChatSidebarPanelProps) {
+  const queryClient = useQueryClient();
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+
+  const handleArchive = useCallback(
+    async (conversationId: string) => {
+      setArchivingId(conversationId);
+      try {
+        await archivePublicConversation({
+          conversationId,
+          accessToken,
+          anonymousIdentifier,
+          archived: true,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["public-agent-conversations", agentId, accessToken, anonymousIdentifier ?? ""],
+        });
+      } catch (error) {
+        const message = (error as { message?: string })?.message || "归档失败，请稍后重试";
+        toast.error(message);
+      } finally {
+        setArchivingId(null);
+      }
+    },
+    [accessToken, anonymousIdentifier, agentId, queryClient],
+  );
+
   return (
     <div className="space-y-4 px-1!">
       {isAgentLoading ? (
@@ -203,26 +240,52 @@ function SiteChatSidebarPanel({
                   const isSelected = Boolean(
                     currentConversationId && currentConversationId === c.id,
                   );
+                  const isGenerating = backgroundStreamingConversationIds.has(c.id);
+                  const isArchiving = archivingId === c.id;
                   return (
-                    <Button
-                      key={c.id}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-current={isSelected ? "true" : undefined}
-                      className={cn(
-                        "w-full min-w-0 justify-start rounded-sm px-2",
-                        "hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/10",
-                        isSelected && "bg-muted-foreground/10 font-medium",
-                      )}
-                      title={c.title}
-                      onClick={() => {
-                        openConversation(c.id);
-                        onAfterNavigate?.();
-                      }}
-                    >
-                      <span className="min-w-0 flex-1 truncate text-left">{c.title}</span>
-                    </Button>
+                    <div key={c.id} className="group relative">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-current={isSelected ? "true" : undefined}
+                        className={cn(
+                          "w-full min-w-0 justify-start rounded-sm px-2",
+                          "hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/10",
+                          isSelected && "bg-muted-foreground/10 font-medium",
+                        )}
+                        title={c.title}
+                        onClick={() => {
+                          openConversation(c.id);
+                          onAfterNavigate?.();
+                        }}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-left">{c.title}</span>
+                        {isGenerating ? (
+                          <LoaderCircle className="text-muted-foreground size-3.5 shrink-0 animate-spin" />
+                        ) : null}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        title="归档"
+                        aria-label={`归档 ${c.title}`}
+                        disabled={isArchiving}
+                        className={cn(
+                          "text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2",
+                          "size-6 rounded-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
+                          isArchiving && "opacity-100",
+                        )}
+                        onClick={() => void handleArchive(c.id)}
+                      >
+                        {isArchiving ? (
+                          <LoaderCircle className="size-3.5 animate-spin" />
+                        ) : (
+                          <Archive className="size-3.5" />
+                        )}
+                      </Button>
+                    </div>
                   );
                 })}
               </div>
@@ -371,15 +434,19 @@ export default function PublishChatPage() {
     [ensureFormReady, onSend],
   );
 
+  const backgroundStreamingConversationIds = useBackgroundStreamingConversations();
+
   const sidebarPanelProps: SiteChatSidebarPanelProps = {
     isAgentLoading,
     agent,
     agentId,
     accessToken,
+    anonymousIdentifier,
     navigate,
     isLoadingConversations,
     conversations,
     currentConversationId: conversationIdParam,
+    backgroundStreamingConversationIds,
     openConversation,
   };
 

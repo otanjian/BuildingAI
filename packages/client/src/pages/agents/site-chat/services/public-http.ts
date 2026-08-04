@@ -1,6 +1,8 @@
 import { createHttpClient } from "@buildingai/utils/http-client";
 import { isAxiosError } from "axios";
 
+import { getApiBaseUrl } from "@/utils/api";
+
 type ApiEnvelope<T> = {
   data?: T;
   message?: string;
@@ -26,6 +28,14 @@ function getAuthHeaders(accessToken: string, anonymousIdentifier?: string) {
     Authorization: `Bearer ${accessToken}`,
     ...(anonymousIdentifier ? { "X-Anonymous-Identifier": anonymousIdentifier } : {}),
   };
+}
+
+/** Creates an HTTP client authenticated for public agent API requests. */
+export function createPublicHttpClient(accessToken: string, anonymousIdentifier?: string) {
+  return createHttpClient({
+    baseURL: getApiBaseUrl(),
+    headers: getAuthHeaders(accessToken, anonymousIdentifier),
+  });
 }
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {

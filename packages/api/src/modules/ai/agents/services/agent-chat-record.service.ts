@@ -435,6 +435,10 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
             qb.andWhere("(r.metadata ->> 'isDebug') IS DISTINCT FROM 'true'");
         }
 
+        if (query.includeArchived !== true) {
+            qb.andWhere("r.archivedAt IS NULL");
+        }
+
         if (query.keyword?.trim()) {
             const k = `%${query.keyword.trim()}%`;
             qb.andWhere("(r.title ILIKE :keyword OR r.id::text ILIKE :keyword)", { keyword: k });
@@ -484,6 +488,27 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         const result = await this.chatRecordRepository.update(whereCondition, { isDeleted: true });
         if (result.affected === 0) {
             throw HttpErrorFactory.notFound("对话不存在或无权限删除");
+        }
+    }
+
+    /**
+     * Archive (or unarchive) a conversation owned by the given user.
+     * Archiving sets `archivedAt` to now; unarchiving clears it.
+     * The conversation record and its messages are never deleted.
+     */
+    async archive(conversationId: string, userId: string | null, archived: boolean): Promise<void> {
+        const whereCondition: any = { id: conversationId, isDeleted: false };
+        if (userId) {
+            whereCondition.userId = userId;
+        } else {
+            whereCondition.userId = null;
+        }
+
+        const result = await this.chatRecordRepository.update(whereCondition, {
+            archivedAt: archived ? new Date() : null,
+        });
+        if (result.affected === 0) {
+            throw HttpErrorFactory.notFound("对话不存在或无权限归档");
         }
     }
 

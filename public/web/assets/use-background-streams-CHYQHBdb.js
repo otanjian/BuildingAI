@@ -1,0 +1,1 @@
+import{s as e}from"./rolldown-runtime-C5c2KzVm.js";import{rF as t}from"./lucide-DnUHbOKR.js";import{i as n,n as r}from"./opening-statement-DZPnTr-S.js";var i=e(t(),1);function a(){return(0,i.useSyncExternalStore)(n,r,r)}export{a as t};

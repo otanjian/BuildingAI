@@ -15,6 +15,7 @@ export type AgentChatRecordItem = {
     consumedPower: number;
     feedbackStatus?: { like: number; dislike: number } | null;
     metadata?: Record<string, any> | null;
+    archivedAt?: string | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -38,6 +39,7 @@ export type ListAgentConversationsParams = {
     sortBy?: "createdAt" | "updatedAt";
     includeDebug?: boolean;
     includeAnonymous?: boolean;
+    includeArchived?: boolean;
 };
 
 export type ListAgentConversationsResult = {
@@ -61,6 +63,8 @@ export async function listAgentConversations(
     if (params?.includeDebug != null) search.set("includeDebug", String(params.includeDebug));
     if (params?.includeAnonymous != null)
         search.set("includeAnonymous", String(params.includeAnonymous));
+    if (params?.includeArchived != null)
+        search.set("includeArchived", String(params.includeArchived));
     const qs = search.toString();
     const path = qs
         ? `/ai-agents/${agentId}/chat/conversations?${qs}`

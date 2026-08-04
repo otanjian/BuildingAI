@@ -100,8 +100,8 @@ const AgentsWorkspacePage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { confirm: alertConfirm } = useAlertDialog();
 
-  const permissionsCodes = useAuthStore((state) => state.auth.userInfo?.permissionsCodes ?? []);
-  const hasAgentManagePermission = permissionsCodes.includes("agent.manage");
+  const permissionsCodes = useAuthStore((state) => state.auth.userInfo?.permissionsCodes);
+  const hasAgentManagePermission = permissionsCodes?.includes("agent.manage") ?? false;
 
   useEffect(() => {
     if (!hasAgentManagePermission) {

@@ -8,6 +8,7 @@ import SvgIcons from "@buildingai/ui/components/svg-icons";
 import { Navigate, useSearchParams } from "react-router-dom";
 
 import { LoginForm } from "./_components/login-form";
+import { StarField } from "./_components/star-field";
 
 function isAbsoluteHttpUrl(target: string) {
   return /^https?:\/\//i.test(target);
@@ -78,27 +79,8 @@ const LoginPage = () => {
         }}
       />
 
-      {/* Static particle dots */}
-      <div
-        className="pointer-events-none absolute top-[12%] left-[18%] size-[3px] rounded-full"
-        style={{ background: "rgba(99,102,241,0.55)", boxShadow: "0 0 6px rgba(99,102,241,0.35)" }}
-      />
-      <div
-        className="pointer-events-none absolute top-[22%] right-[22%] size-[2px] rounded-full"
-        style={{ background: "rgba(99,102,241,0.4)", boxShadow: "0 0 4px rgba(99,102,241,0.25)" }}
-      />
-      <div
-        className="pointer-events-none absolute top-[68%] right-[14%] size-[3px] rounded-full"
-        style={{ background: "rgba(56,189,248,0.5)", boxShadow: "0 0 5px rgba(56,189,248,0.3)" }}
-      />
-      <div
-        className="pointer-events-none absolute top-[78%] left-[28%] size-[2px] rounded-full"
-        style={{ background: "rgba(139,92,246,0.45)", boxShadow: "0 0 4px rgba(139,92,246,0.25)" }}
-      />
-      <div
-        className="pointer-events-none absolute top-[8%] right-[38%] size-[2px] rounded-full"
-        style={{ background: "rgba(59,130,246,0.35)", boxShadow: "0 0 3px rgba(59,130,246,0.2)" }}
-      />
+      {/* Twinkling starfield + occasional shooting stars */}
+      <StarField />
 
       <div className="relative z-10 flex w-full max-w-sm flex-col gap-6">
         <a href="#" className="flex items-center gap-2 self-center font-medium">

@@ -9,6 +9,7 @@ import {
   writeLastConversation,
 } from "../lib/embed-conversation-storage";
 import { getPublicConversationMessages } from "../services/public-conversation-messages";
+import { getPublicConversationDetail } from "../services/public-conversations";
 
 const OPERATOR_SYNC_INTERVAL_MS = 4000;
 const RESUME_PAGE_SIZE = 1;
@@ -125,22 +126,41 @@ export function useEmbedConversationResume(options: {
     setIsResuming(true);
     let cancelled = false;
 
-    void getPublicConversationMessages({
-      agentId,
+    // Skip resuming archived conversations: clear the cached reference and
+    // stay on the first-run screen instead.
+    void getPublicConversationDetail({
       accessToken,
       anonymousIdentifier,
       conversationId: cached.conversationId,
-      page: 1,
-      pageSize: RESUME_PAGE_SIZE,
     })
-      .then(() => {
+      .then((detail) => {
         if (cancelled) return;
-        navigate(
-          `/agents/${agentId}/${encodeURIComponent(accessToken)}/c/${cached.conversationId}`,
-          {
-            replace: true,
-          },
-        );
+        if (detail?.archivedAt) {
+          clearLastConversation(agentId);
+          setIsResuming(false);
+          return;
+        }
+        return getPublicConversationMessages({
+          agentId,
+          accessToken,
+          anonymousIdentifier,
+          conversationId: cached.conversationId,
+          page: 1,
+          pageSize: RESUME_PAGE_SIZE,
+        })
+          .then(() => {
+            if (cancelled) return;
+            navigate(
+              `/agents/${agentId}/${encodeURIComponent(accessToken)}/c/${cached.conversationId}`,
+              {
+                replace: true,
+              },
+            );
+          })
+          .catch(() => {
+            if (cancelled) return;
+            clearLastConversation(agentId);
+          });
       })
       .catch(() => {
         if (cancelled) return;

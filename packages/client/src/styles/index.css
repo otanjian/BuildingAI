@@ -44,3 +44,64 @@ html.embed-host-mode .prose table {
   max-width: 100%;
   overflow-x: auto;
 }
+
+/* ---------- Starfield background (login page) ---------- */
+.star {
+  --star-o: 0.6;
+  animation: star-twinkle 4s ease-in-out infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes star-twinkle {
+  0%,
+  100% {
+    opacity: var(--star-o);
+    transform: scale(1);
+  }
+  50% {
+    opacity: calc(var(--star-o) * 0.18);
+    transform: scale(0.7);
+  }
+}
+
+.shooting-star {
+  --shoot-rotate: 45deg;
+  --shoot-x: 52vw;
+  --shoot-y: 52vh;
+  position: absolute;
+  width: 160px;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #e2e8f0, rgba(165, 180, 252, 0.4), transparent);
+  filter: drop-shadow(0 0 6px rgba(199, 210, 254, 0.6));
+  opacity: 0;
+  transform: rotate(var(--shoot-rotate));
+  transform-origin: left center;
+  animation: star-shoot 9s linear infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes star-shoot {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(var(--shoot-rotate));
+    opacity: 0;
+  }
+  2% {
+    opacity: 0.9;
+  }
+  13% {
+    transform: translate3d(var(--shoot-x), var(--shoot-y), 0) rotate(var(--shoot-rotate));
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(var(--shoot-x), var(--shoot-y), 0) rotate(var(--shoot-rotate));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star,
+  .shooting-star {
+    animation: none !important;
+  }
+}
