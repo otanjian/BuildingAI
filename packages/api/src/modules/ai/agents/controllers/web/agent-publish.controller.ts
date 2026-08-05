@@ -24,6 +24,7 @@ const SENSITIVE_KEYS = [
     "squareReviewedBy",
     "squareReviewedAt",
     "thirdPartyIntegration",
+    "sensitiveWordConfig",
 ] as const;
 
 function toPublishedDetail(
@@ -191,12 +192,9 @@ export class AgentPublishWebController {
                 ? (extConfig.supportedUploadTypes as string[])
                 : null;
             const chatFeatures =
-                (
-                    (out.models as Array<{ role?: string; features?: string[] }> | undefined)?.find(
-                        (m) => m.role === "chat",
-                    )?.features
-                ) ??
-                [];
+                (out.models as Array<{ role?: string; features?: string[] }> | undefined)?.find(
+                    (m) => m.role === "chat",
+                )?.features ?? [];
 
             if (agent.createMode === "opencode") {
                 const fromFeatures = deriveUploadTypesFromModelFeatures(chatFeatures);

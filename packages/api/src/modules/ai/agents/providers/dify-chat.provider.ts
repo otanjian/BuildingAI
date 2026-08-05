@@ -29,6 +29,8 @@ import {
 import type { AgentChatCompletionParams } from "../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../services/agent-chat-message.service";
 import { AgentChatRecordService } from "../services/agent-chat-record.service";
+import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
+import { createSensitiveWordWriterFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
     write: (part: Record<string, any>) => void;
@@ -78,8 +80,15 @@ export class DifyChatProvider {
 
         const stream = createUIMessageStream({
             execute: async ({ writer }) => {
+                const sensitiveWordFilter = createSensitiveWordFilter(agent.sensitiveWordConfig);
+                const filteredWriter = createSensitiveWordWriterFromFilter(
+                    writer,
+                    sensitiveWordFilter,
+                    agent.sensitiveWordConfig?.applyToReasoning !== false,
+                );
+
                 if (localConversationId) {
-                    writer.write({
+                    filteredWriter.write({
                         type: "data-conversation-id",
                         data: localConversationId,
                         transient: true,
@@ -87,8 +96,8 @@ export class DifyChatProvider {
                 }
 
                 const assistantMessageId = generateId();
-                writer.write({ type: "start", messageId: assistantMessageId });
-                writer.write({ type: "start-step" });
+                filteredWriter.write({ type: "start", messageId: assistantMessageId });
+                filteredWriter.write({ type: "start-step" });
 
                 const textId = "txt-0";
                 let textStarted = false;
@@ -180,7 +189,7 @@ export class DifyChatProvider {
                             // 首次出现：发送 tool-input-available
                             if (!emittedToolInputIds.has(toolPart.toolCallId)) {
                                 emittedToolInputIds.add(toolPart.toolCallId);
-                                writer.write({
+                                filteredWriter.write({
                                     type: "tool-input-available",
                                     toolCallId: toolPart.toolCallId,
                                     toolName: toolPart.toolName,
@@ -194,7 +203,7 @@ export class DifyChatProvider {
                                 toolPart.state === "output-available" &&
                                 toolPart.output !== undefined
                             ) {
-                                writer.write({
+                                filteredWriter.write({
                                     type: "tool-output-available",
                                     toolCallId: toolPart.toolCallId,
                                     output: toolPart.output,
@@ -204,7 +213,7 @@ export class DifyChatProvider {
 
                             // 有错误：发送 tool-output-error
                             if (toolPart.state === "output-error" && toolPart.errorText) {
-                                writer.write({
+                                filteredWriter.write({
                                     type: "tool-output-error",
                                     toolCallId: toolPart.toolCallId,
                                     errorText: toolPart.errorText,
@@ -220,11 +229,15 @@ export class DifyChatProvider {
                         );
                         if (deltaText) {
                             if (!textStarted) {
-                                writer.write({ type: "text-start", id: textId });
+                                filteredWriter.write({ type: "text-start", id: textId });
                                 textStarted = true;
                             }
                             fullText += deltaText;
-                            writer.write({ type: "text-delta", id: textId, delta: deltaText });
+                            filteredWriter.write({
+                                type: "text-delta",
+                                id: textId,
+                                delta: deltaText,
+                            });
                         }
 
                         // ---- message_end ----
@@ -242,11 +255,11 @@ export class DifyChatProvider {
 
                 // 确保 text-start / text-end 配对
                 if (!textStarted) {
-                    writer.write({ type: "text-start", id: textId });
+                    filteredWriter.write({ type: "text-start", id: textId });
                 }
-                writer.write({ type: "text-end", id: textId });
-                writer.write({ type: "finish-step" });
-                writer.write({ type: "finish", finishReason: "stop" });
+                filteredWriter.write({ type: "text-end", id: textId });
+                filteredWriter.write({ type: "finish-step" });
+                filteredWriter.write({ type: "finish", finishReason: "stop" });
 
                 let userConsumedPower = 0;
                 if (
@@ -265,7 +278,7 @@ export class DifyChatProvider {
                         billingRule,
                     });
                 }
-                writer.write({
+                filteredWriter.write({
                     type: "data-usage",
                     data: {
                         inputTokens: usage?.inputTokens ?? 0,
@@ -281,18 +294,19 @@ export class DifyChatProvider {
                 });
 
                 const toolCallParts = Array.from(toolParts.values());
+                const filteredFullText = sensitiveWordFilter.filterText(fullText);
                 const responseMessage: UIMessage = {
                     id: assistantMessageId,
                     role: "assistant",
                     parts: [
                         ...toolCallParts,
                         ...(fullText || toolCallParts.length === 0
-                            ? [{ type: "text", text: fullText }]
+                            ? [{ type: "text", text: filteredFullText }]
                             : []),
                     ] as unknown as UIMessage["parts"],
                 };
                 const finished = [...params.messages, responseMessage];
-                writer.write({
+                filteredWriter.write({
                     type: "data-conversation-context",
                     data: {
                         messageId: assistantMessageId,

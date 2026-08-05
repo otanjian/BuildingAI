@@ -6,6 +6,7 @@ import type {
     ModelConfig,
     ModelRouting,
     QuickCommandConfig,
+    SensitiveWordConfig,
     ThirdPartyIntegrationConfig,
     ToolConfig,
     VoiceConfig,
@@ -156,6 +157,10 @@ export class UpdateAgentDto {
     @IsOptional()
     @IsObject()
     annotationConfig?: AnnotationConfig;
+
+    @IsOptional()
+    @IsObject()
+    sensitiveWordConfig?: SensitiveWordConfig;
 
     @IsOptional()
     @IsInt()

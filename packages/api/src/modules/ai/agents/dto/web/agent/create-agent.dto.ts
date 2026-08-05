@@ -1,4 +1,4 @@
-import type { ModelConfig } from "@buildingai/types/ai/agent-config.interface";
+import type { ModelConfig, SensitiveWordConfig } from "@buildingai/types/ai/agent-config.interface";
 import { IsArray, IsIn, IsObject, IsOptional, IsString, IsUUID } from "class-validator";
 
 export class CreateAgentDto {
@@ -20,6 +20,10 @@ export class CreateAgentDto {
     @IsOptional()
     @IsObject()
     modelConfig?: ModelConfig;
+
+    @IsOptional()
+    @IsObject()
+    sensitiveWordConfig?: SensitiveWordConfig;
 
     @IsOptional()
     @IsObject()

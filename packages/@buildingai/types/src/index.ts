@@ -59,6 +59,7 @@ export type {
     ModelRouting,
     PublishedAgentDetail,
     QuickCommandConfig,
+    SensitiveWordConfig,
     SpeechOptions,
     ThirdPartyIntegrationConfig,
     TokenUsage,

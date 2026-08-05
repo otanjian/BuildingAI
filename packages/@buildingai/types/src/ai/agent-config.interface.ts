@@ -245,6 +245,20 @@ export interface AnnotationConfig {
 }
 
 /**
+ * 敏感词过滤配置
+ */
+export interface SensitiveWordConfig {
+    /** 是否开启敏感词替换 */
+    enabled: boolean;
+    /** 敏感词列表（支持中英文，Latin 匹配大小写不敏感） */
+    words: string[];
+    /** 替换串，默认 "***" */
+    replacement?: string;
+    /** 是否同时过滤深度思考（reasoning）输出，默认 true */
+    applyToReasoning?: boolean;
+}
+
+/**
  * 第三方平台集成配置类型
  * 通用的配置接口，支持各种第三方平台的集成
  */
@@ -363,6 +377,7 @@ export interface AgentCore {
     voiceConfig?: VoiceConfig | null;
     toolConfig?: ToolConfig | null;
     annotationConfig?: AnnotationConfig | null;
+    sensitiveWordConfig?: SensitiveWordConfig | null;
     maxSteps?: number | null;
     memoryConfig?: MemoryConfig | null;
     publishConfig?: AgentPublishConfig | null;
@@ -425,6 +440,7 @@ export type UpdateAgentConfigParams = Partial<
         | "voiceConfig"
         | "toolConfig"
         | "annotationConfig"
+        | "sensitiveWordConfig"
         | "maxSteps"
         | "memoryConfig"
         | "datasetIds"
