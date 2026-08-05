@@ -61,6 +61,9 @@ import { ReflectionHandler } from "../handlers/reflection";
 import { CozeChatProvider } from "../providers/coze-chat.provider";
 import { DifyChatProvider } from "../providers/dify-chat.provider";
 import { OpencodeChatProvider } from "../providers/opencode-chat.provider";
+import type { SensitiveWordFilter } from "../utils/sensitive-word-filter";
+import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
+import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 import { AgentChatMessageService } from "./agent-chat-message.service";
 import { AgentChatRecordService } from "./agent-chat-record.service";
 import { AgentsService } from "./agents.service";
@@ -222,6 +225,12 @@ export class AgentChatCompletionService {
             const stream = createUIMessageStream({
                 ...(params.isToolApprovalFlow ? { originalMessages: params.messages } : {}),
                 execute: async ({ writer }) => {
+                    const sensitiveWordFilter = createSensitiveWordFilter(
+                        agent.sensitiveWordConfig,
+                    );
+                    const applySensitiveToReasoning =
+                        agent.sensitiveWordConfig?.applyToReasoning !== false;
+
                     if (conversationId) {
                         writer.write({
                             type: "data-conversation-id",
@@ -604,7 +613,15 @@ export class AgentChatCompletionService {
                                             await this.saveMessages({
                                                 finished,
                                                 responseMsg: responseMsg
-                                                    ? { ...responseMsg, id: assistantMessageId }
+                                                    ? {
+                                                          ...responseMsg,
+                                                          id: assistantMessageId,
+                                                          parts: this.filterResponseMessageParts(
+                                                              responseMsg.parts,
+                                                              sensitiveWordFilter,
+                                                              applySensitiveToReasoning,
+                                                          ),
+                                                      }
                                                     : responseMsg,
                                                 params,
                                                 conversationId,
@@ -656,7 +673,14 @@ export class AgentChatCompletionService {
                             },
                         });
 
-                        writer.merge(uiMessageStream);
+                        writer.merge(
+                            uiMessageStream.pipeThrough(
+                                createSensitiveWordTransformStreamFromFilter(
+                                    sensitiveWordFilter,
+                                    applySensitiveToReasoning,
+                                ),
+                            ),
+                        );
                     } catch (error) {
                         await closeMcpClients(mcpClients);
                         throw error;
@@ -735,6 +759,27 @@ export class AgentChatCompletionService {
                             .join("\n")
                       : "";
             return { role: m.role, content: raw || "(无文本内容)" };
+        });
+    }
+
+    /**
+     * Filter assistant response parts before persistence so the saved history
+     * matches what was streamed live. Tool / data parts are left untouched.
+     */
+    private filterResponseMessageParts(
+        parts: UIMessage["parts"],
+        filter: SensitiveWordFilter,
+        applyToReasoning: boolean,
+    ): UIMessage["parts"] {
+        if (!filter.enabled) return parts;
+        return parts.map((part) => {
+            if (part.type === "text" && typeof part.text === "string") {
+                return { ...part, text: filter.filterText(part.text) };
+            }
+            if (applyToReasoning && part.type === "reasoning" && typeof part.text === "string") {
+                return { ...part, text: filter.filterText(part.text) };
+            }
+            return part;
         });
     }
 

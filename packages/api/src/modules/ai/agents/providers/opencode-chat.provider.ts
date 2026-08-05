@@ -1,3 +1,6 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
 import { extractTextFromParts } from "@buildingai/ai-sdk/utils/token-usage";
 import type { Agent } from "@buildingai/db/entities";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -10,8 +13,6 @@ import {
     pipeUIMessageStreamToResponse,
     type UIMessage,
 } from "ai";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import type { ServerResponse } from "http";
 import { validate as isUUID } from "uuid";
 
@@ -33,6 +34,8 @@ import {
     type UiMessagePartLike,
 } from "../utils/opencode-prompt-parts";
 import { OpencodeTokenUsageAccumulator } from "../utils/opencode-token-usage";
+import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
+import { createSensitiveWordWriterFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
     write: (part: Record<string, any>) => void;
@@ -96,7 +99,9 @@ export class OpencodeChatProvider {
                 userId: params.userId,
                 anonymousIdentifier: params.anonymousIdentifier,
                 title: initialTitle,
-                metadata: params.isDebug ? { isDebug: true, provider: "opencode" } : { provider: "opencode" },
+                metadata: params.isDebug
+                    ? { isDebug: true, provider: "opencode" }
+                    : { provider: "opencode" },
             });
             localConversationId = record.id;
         }
@@ -123,15 +128,24 @@ export class OpencodeChatProvider {
                 const messageRoles = new Map<string, string>();
                 let htmlArtifact: HtmlArtifact | undefined;
 
+                const sensitiveWordFilter = createSensitiveWordFilter(agent.sensitiveWordConfig);
+                const filteredWriter = createSensitiveWordWriterFromFilter(
+                    writer,
+                    sensitiveWordFilter,
+                    agent.sensitiveWordConfig?.applyToReasoning !== false,
+                );
+
                 const billingRule = await this.getBillingRule();
                 const shouldCharge = params.isDebug !== true;
                 if (shouldCharge && params.userId && billingRule) {
                     await this.agentBillingHandler.validateUserPower(params.userId, billingRule);
                 }
 
-                const writeChunks = (chunks: ReturnType<OpencodeAssistantPartRouter["onDelta"]>) => {
+                const writeChunks = (
+                    chunks: ReturnType<OpencodeAssistantPartRouter["onDelta"]>,
+                ) => {
                     for (const chunk of chunks) {
-                        writer.write(chunk as any);
+                        filteredWriter.write(chunk as any);
                     }
                 };
 
@@ -199,7 +213,8 @@ export class OpencodeChatProvider {
                 };
                 if (params.abortSignal) {
                     if (params.abortSignal.aborted) onClientAbort();
-                    else params.abortSignal.addEventListener("abort", onClientAbort, { once: true });
+                    else
+                        params.abortSignal.addEventListener("abort", onClientAbort, { once: true });
                 }
 
                 let turnIdle = false;
@@ -271,7 +286,10 @@ export class OpencodeChatProvider {
 
                         if (event.type === "file.edited") {
                             const file = event.properties?.file;
-                            if (typeof file === "string" && isHtmlArtifactPath(file, artifactRoot)) {
+                            if (
+                                typeof file === "string" &&
+                                isHtmlArtifactPath(file, artifactRoot)
+                            ) {
                                 htmlArtifact = await this.buildHtmlArtifact({
                                     agentId: params.agentId,
                                     conversationId: localConversationId!,
@@ -397,9 +415,7 @@ export class OpencodeChatProvider {
                 }
 
                 if (streamError) {
-                    writeChunks(
-                        partRouter.appendErrorText(`OpenCode error: ${streamError}`),
-                    );
+                    writeChunks(partRouter.appendErrorText(`OpenCode error: ${streamError}`));
                 }
 
                 writeChunks(partRouter.endOpenReasoning());
@@ -449,13 +465,17 @@ export class OpencodeChatProvider {
                 });
 
                 const toolCallParts = Array.from(toolParts.values());
-                const reasoningParts = partRouter.getPersistedReasoningParts();
+                const reasoningParts = partRouter.getPersistedReasoningParts().map((part) => ({
+                    ...part,
+                    text: sensitiveWordFilter.filterText(part.text),
+                }));
+                const filteredFullText = sensitiveWordFilter.filterText(partRouter.fullText);
                 const responseParts: any[] = [...reasoningParts, ...toolCallParts];
                 if (
                     partRouter.fullText ||
                     (toolCallParts.length === 0 && reasoningParts.length === 0)
                 ) {
-                    responseParts.push({ type: "text", text: partRouter.fullText });
+                    responseParts.push({ type: "text", text: filteredFullText });
                 }
                 if (htmlArtifact) {
                     responseParts.push({
@@ -534,10 +554,9 @@ export class OpencodeChatProvider {
         const toolName = String(part.tool || "tool");
         const state = part.state as Record<string, any> | undefined;
         const status = String(state?.status ?? "pending");
-        const input = (state?.input && typeof state.input === "object" ? state.input : {}) as Record<
-            string,
-            any
-        >;
+        const input = (
+            state?.input && typeof state.input === "object" ? state.input : {}
+        ) as Record<string, any>;
 
         if (!emittedToolInputIds.has(toolCallId)) {
             emittedToolInputIds.add(toolCallId);

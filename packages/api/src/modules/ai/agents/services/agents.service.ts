@@ -115,6 +115,7 @@ export class AgentsService extends BaseService<Agent> {
             avatar: dto.avatar || this.defaultAvatar,
             createMode,
             modelConfig: createMode === "direct" ? dto.modelConfig : undefined,
+            sensitiveWordConfig: dto.sensitiveWordConfig,
             thirdPartyIntegration,
             showContext: true,
             showReference: true,
@@ -231,6 +232,7 @@ export class AgentsService extends BaseService<Agent> {
             contextConfig: dto.contextConfig,
             voiceConfig: dto.voiceConfig,
             annotationConfig: dto.annotationConfig,
+            sensitiveWordConfig: dto.sensitiveWordConfig,
         } satisfies Partial<Agent>;
 
         Object.assign(agent, next);

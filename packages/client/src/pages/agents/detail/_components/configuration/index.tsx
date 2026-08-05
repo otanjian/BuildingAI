@@ -9,6 +9,7 @@ import {
 import type {
   AnnotationConfig,
   ModelRouting,
+  SensitiveWordConfig,
   ThirdPartyIntegrationConfig,
   VoiceConfig,
 } from "@buildingai/types";
@@ -37,6 +38,7 @@ import {
   AutoFollowUp,
   ChatAvatar,
   QuickCommands,
+  SensitiveWordFilterConfig,
   StarterQuestions,
   WelcomeMessage,
 } from "./interface";
@@ -86,6 +88,7 @@ type ConfigState = {
   showContext: boolean;
   showReference: boolean;
   annotationConfig: AnnotationConfig | null;
+  sensitiveWordConfig: SensitiveWordConfig | null;
   enableWebSearch: boolean;
   enableFileUpload: boolean;
   maxSteps: number;
@@ -115,6 +118,7 @@ const getDefaultConfig = (): ConfigState => ({
   showContext: true,
   showReference: true,
   annotationConfig: null,
+  sensitiveWordConfig: null,
   enableWebSearch: false,
   enableFileUpload: false,
   maxSteps: 10,
@@ -269,6 +273,7 @@ export default function Configuration() {
       showContext: currentAgent.showContext ?? true,
       showReference: currentAgent.showReference ?? true,
       annotationConfig: currentAgent.annotationConfig ?? null,
+      sensitiveWordConfig: (currentAgent.sensitiveWordConfig as SensitiveWordConfig) ?? null,
       enableWebSearch: currentAgent.enableWebSearch ?? false,
       enableFileUpload: currentAgent.enableFileUpload ?? false,
       maxSteps: (currentAgent.maxSteps as number) ?? 10,
@@ -323,6 +328,7 @@ export default function Configuration() {
           showContext: next.showContext,
           showReference: next.showReference,
           annotationConfig: next.annotationConfig ?? undefined,
+          sensitiveWordConfig: next.sensitiveWordConfig ?? undefined,
           enableWebSearch: next.enableWebSearch,
           enableFileUpload: next.enableFileUpload,
           chatAvatarEnabled: next.chatAvatarEnabled,
@@ -622,6 +628,10 @@ export default function Configuration() {
                     <QuickCommands
                       value={config.quickCommands}
                       onChange={(v) => updateConfig("quickCommands", v)}
+                    />
+                    <SensitiveWordFilterConfig
+                      value={config.sensitiveWordConfig}
+                      onChange={(v) => updateConfig("sensitiveWordConfig", v)}
                     />
                     <ChatAvatar
                       value={config.chatAvatar}

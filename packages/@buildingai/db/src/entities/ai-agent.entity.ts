@@ -8,6 +8,7 @@ import type {
     ModelConfig,
     ModelRouting,
     QuickCommandConfig,
+    SensitiveWordConfig,
     ThirdPartyIntegrationConfig,
     ToolConfig,
     VoiceConfig,
@@ -154,6 +155,13 @@ export class Agent extends BaseEntity {
      */
     @Column({ type: "json", nullable: true, comment: "问答标注配置" })
     annotationConfig?: AnnotationConfig;
+
+    /**
+     * 敏感词过滤配置
+     * 开启后对智能体 AI 回复（正文与深度思考）做敏感词替换
+     */
+    @Column({ type: "json", nullable: true, comment: "敏感词过滤配置" })
+    sensitiveWordConfig?: SensitiveWordConfig;
 
     /**
      * 最大执行步数（ToolLoop 循环上限）
