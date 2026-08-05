@@ -238,7 +238,7 @@ async function printPredeployInfo(startTime) {
     }
 
     const packageJsonPath = path.join(rootDir, "package.json");
-    let projectName = "BuildingAI";
+    let projectName = "Bowi AI";
     let projectVersion = "unknown";
 
     // Try to read project info from package.json
@@ -282,7 +282,7 @@ async function printPredeployInfo(startTime) {
  * Show completion message after predeploy
  */
 function showCompletionMessage() {
-    Logger.success("Predeploy", "BuildingAI project predeploy completed!");
+    Logger.success("Predeploy", "Bowi AI project predeploy completed!");
     Logger.info(
         "Predeploy",
         "Project is ready for deployment. Use PM2 commands to start services.",
@@ -294,7 +294,7 @@ function showCompletionMessage() {
  */
 async function main() {
     const startTime = Date.now();
-    Logger.info("Predeploy", "Starting BuildingAI project predeploy...");
+    Logger.info("Predeploy", "Starting Bowi AI project predeploy...");
 
     try {
         // Generate extensions configuration

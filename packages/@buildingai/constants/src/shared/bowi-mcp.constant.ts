@@ -1,4 +1,4 @@
-/** Unified BuildingAI enterprise MCP server (hosted on ehcs-ai extension HTTP route). */
+/** Unified Bowi AI enterprise MCP server (hosted on ehcs-ai extension HTTP route). */
 export const BOWI_MCP_SERVER_NAME = "bowi-mcp";
 
 export type BowiMcpToolDefinition = {

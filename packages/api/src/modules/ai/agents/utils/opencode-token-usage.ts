@@ -152,7 +152,7 @@ export function toChatMessageUsage(
 }
 
 /**
- * Accumulates OpenCode token reports for one BuildingAI chat turn.
+ * Accumulates OpenCode token reports for one Bowi AI chat turn.
  * Primary source: assistant `message.updated` (latest tokens per message id).
  * Fallback: `step-finish` parts when message-level tokens stay empty.
  */

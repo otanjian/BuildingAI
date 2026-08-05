@@ -8,7 +8,7 @@ export interface HeadRendererOptions extends DocumentHeadOptions {
     /**
      * Title template string. Use "%s" as a placeholder for the page title.
      * Only applied when a page provides its own title via useDocumentHead.
-     * @example "%s - BuildingAI"
+     * @example "%s - Bowi AI"
      */
     titleTemplate?: string;
 }
@@ -139,7 +139,7 @@ function applyHead(
  * import { useHeadRenderer } from "@buildingai/hooks";
  *
  * function App() {
- *   useHeadRenderer({ title: "BuildingAI", description: "Default description" });
+ *   useHeadRenderer({ title: "Bowi AI", description: "Default description" });
  *   return <RouterOutlet />;
  * }
  * ```

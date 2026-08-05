@@ -2,7 +2,7 @@
  * @fileoverview Authentication related constants
  * @description Defines constants related to login and authentication
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 /**

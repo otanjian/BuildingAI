@@ -28,7 +28,7 @@ export class WebsiteSeeder extends BaseSeeder {
      */
     private readonly copyrightConfig: CopyrightConfig = {
         copyrightText: "Powered by",
-        copyrightBrand: "BuildingAI",
+        copyrightBrand: "Bowi AI",
         copyrightUrl: "https://buildingai.cc",
     };
 

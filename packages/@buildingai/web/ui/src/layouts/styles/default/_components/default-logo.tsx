@@ -9,7 +9,7 @@ import {
 import { cn } from "@buildingai/ui/lib/utils";
 import { Link } from "react-router-dom";
 
-const BOWI_AGENT_PLATFORM_NAME = "BowiAI Agent平台";
+const BOWI_AGENT_PLATFORM_NAME = "Bowi AI Agent平台";
 const BOWI_AGENT_PLATFORM_LOGO = "/static/avatars/bowiai-agent-platform.svg";
 
 export function DefaultLogo() {

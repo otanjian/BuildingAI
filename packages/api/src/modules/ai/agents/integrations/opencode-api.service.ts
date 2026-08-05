@@ -112,7 +112,7 @@ export class OpencodeApiService {
         const normalized = this.normalizeConfig(config);
         const response = await this.request(normalized, "/session", {
             method: "POST",
-            body: JSON.stringify({ title: title?.slice(0, 120) || "BuildingAI conversation" }),
+            body: JSON.stringify({ title: title?.slice(0, 120) || "Bowi AI conversation" }),
         });
         if (!response.ok) {
             const text = await response.text();

@@ -291,7 +291,7 @@ export default function ConsoleLayout({ children }: { children?: React.ReactNode
 
   if (!userInfo) return null;
 
-  // Platform iframe already gates AI Brain menus. Do not apply BuildingAI console RBAC
+  // Platform iframe already gates AI Brain menus. Do not apply Bowi AI console RBAC
   // here — a failed check used to Navigate to `/` and render DefaultLayout chat
   // (sidebar + welcome) inside the iframe, which looks like a broken floating card.
   if (!embedMode) {
@@ -309,7 +309,7 @@ export default function ConsoleLayout({ children }: { children?: React.ReactNode
     }
   }
 
-  // Platform iframe embed: content only (no BuildingAI console sidebar / navbar).
+  // Platform iframe embed: content only (no Bowi AI console sidebar / navbar).
   if (embedMode) {
     return (
       <div className="bd-console-layout bg-background h-dvh overflow-hidden">

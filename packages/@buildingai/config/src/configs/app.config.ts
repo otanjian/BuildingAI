@@ -1,9 +1,9 @@
 /**
  * @fileoverview Application global configuration
- * @description This file contains the global configuration for the BuildingAI application,
+ * @description This file contains the global configuration for the Bowi AI application,
  * including API endpoints, timeout settings, and environment-specific configurations.
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 import * as fs from "fs";
@@ -40,7 +40,7 @@ function getVersionFromPackageJson(): string {
  */
 export const AppConfig: AppConfigType = {
     /** Application name */
-    name: "BuildingAI",
+    name: "Bowi AI",
 
     /** Application version */
     version: getVersionFromPackageJson(),

@@ -163,7 +163,7 @@ export function resolveOpencodeFileUrl(
 }
 
 /**
- * Map BuildingAI UIMessage parts to OpenCode prompt_async parts (text + image file parts).
+ * Map Bowi AI UIMessage parts to OpenCode prompt_async parts (text + image file parts).
  */
 export function mapUiPartsToOpencodePromptParts(
     parts: UiMessagePartLike[] | undefined | null,

@@ -1,9 +1,9 @@
 /**
- * @fileoverview Centralized type definitions for BuildingAI
+ * @fileoverview Centralized type definitions for Bowi AI
  * @description This package contains shared type definitions to avoid circular dependencies
  * between packages. All common types should be defined here.
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 // Export HTTP related types

@@ -2,7 +2,7 @@
  * @fileoverview HTTP client related types and interfaces
  * @description Centralized HTTP type definitions to avoid circular dependencies
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 // Import external dependencies

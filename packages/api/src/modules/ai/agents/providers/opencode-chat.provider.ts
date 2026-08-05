@@ -58,7 +58,7 @@ type HtmlArtifact = {
 const MAX_TOOL_OUTPUT_CHARS = 8_000;
 
 /**
- * OpenCode agent chat provider — BuildingAI owns UI/history; OpenCode owns execution.
+ * OpenCode agent chat provider — Bowi AI owns UI/history; OpenCode owns execution.
  */
 @Injectable()
 export class OpencodeChatProvider {
@@ -176,7 +176,7 @@ export class OpencodeChatProvider {
                 if (!opencodeSessionId) {
                     const session = await this.opencodeApiService.createSession(
                         agent.thirdPartyIntegration,
-                        initialTitle || "BuildingAI conversation",
+                        initialTitle || "Bowi AI conversation",
                     );
                     opencodeSessionId = session.id;
                     await this.agentChatRecordService.updateMetadata(localConversationId, {
@@ -187,7 +187,7 @@ export class OpencodeChatProvider {
                 }
 
                 const systemHint = [
-                    "You are running as a BuildingAI OpenCode agent.",
+                    "You are running as a Bowi AI OpenCode agent.",
                     `Conversation id: ${localConversationId}`,
                     `Write report/dashboard HTML artifacts ONLY under: ${artifactRoot}`,
                     "Do not write HTML reports into other conversations' artifact directories.",

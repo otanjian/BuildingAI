@@ -27,8 +27,8 @@ export class WebsiteService extends BaseService<Dict> {
     async getConfig() {
         // 获取各组配置
         const webinfo = await this.getGroupConfig("webinfo", {
-            name: "BowiAI Agent平台",
-            description: "BowiAI Agent平台",
+            name: "Bowi AI Agent平台",
+            description: "Bowi AI Agent平台",
             icon: "",
             logo: "",
             customerServiceQrcode: "",

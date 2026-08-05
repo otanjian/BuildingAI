@@ -38,8 +38,8 @@ const MainLayout = () => {
   }, [data?.isInitialized, setIsInitialized]);
 
   useHeadRenderer({
-    title: websiteConfig?.webinfo.name || "BuildingAI",
-    titleTemplate: `%s - ${websiteConfig?.webinfo.name || "BuildingAI"}`,
+    title: websiteConfig?.webinfo.name || "Bowi AI",
+    titleTemplate: `%s - ${websiteConfig?.webinfo.name || "Bowi AI"}`,
     description: websiteConfig?.webinfo.description,
     icon: websiteConfig?.webinfo.icon || `/buildingai-favicon.ico?t=${new Date().getTime()}`,
   });

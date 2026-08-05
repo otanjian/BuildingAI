@@ -206,7 +206,7 @@ export async function releaseExtension() {
     }
 
     console.log("\n");
-    Logger.info("Extension", "Release a BuildingAI extension");
+    Logger.info("Extension", "Release a Bowi AI extension");
     console.log("━".repeat(60));
 
     try {
@@ -871,7 +871,7 @@ export async function createExtension() {
     const rl = createReadlineInterface();
 
     console.log("\n");
-    Logger.info("Extension", "Create a new BuildingAI extension from template");
+    Logger.info("Extension", "Create a new Bowi AI extension from template");
     console.log("━".repeat(60));
 
     try {
@@ -911,7 +911,7 @@ export async function createExtension() {
         const version = await prompt(rl, "Version", "0.0.1");
 
         // 4. Get extension description
-        const description = await prompt(rl, "Description", `A BuildingAI extension: ${name}`);
+        const description = await prompt(rl, "Description", `A Bowi AI extension: ${name}`);
 
         // 5. Get author name
         const author = await prompt(rl, "Author", "BowiAI Teams");

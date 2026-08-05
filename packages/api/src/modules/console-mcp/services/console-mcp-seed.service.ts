@@ -57,7 +57,7 @@ export class ConsoleMcpSeedService implements OnModuleInit {
                 existing.type = McpServerType.SYSTEM;
                 existing.description =
                     existing.description ||
-                    "BuildingAI console control-plane MCP (permission-gated tools)";
+                    "Bowi AI console control-plane MCP (permission-gated tools)";
                 await this.mcpServerRepository.save(existing);
                 this.logger.log(`Updated system MCP server ${CONSOLE_MCP_SERVER_NAME}`);
             }
@@ -67,7 +67,7 @@ export class ConsoleMcpSeedService implements OnModuleInit {
         const entity = this.mcpServerRepository.create({
             name: CONSOLE_MCP_SERVER_NAME,
             alias: "Console MCP",
-            description: "BuildingAI console control-plane MCP (permission-gated tools)",
+            description: "Bowi AI console control-plane MCP (permission-gated tools)",
             type: McpServerType.SYSTEM,
             url,
             communicationType: McpCommunicationType.STREAMABLEHTTP,

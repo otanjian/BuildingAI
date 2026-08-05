@@ -27,7 +27,7 @@ type EmbedConversationItem = {
 
 /**
  * Full-page conversation history for platform iframe embeds (`?_embed=1&_history=1`).
- * BuildingAI default sidebar is hidden in embed mode, so history needs its own surface.
+ * Bowi AI default sidebar is hidden in embed mode, so history needs its own surface.
  */
 export function EmbedHistoryPanel() {
   const navigate = useNavigate();

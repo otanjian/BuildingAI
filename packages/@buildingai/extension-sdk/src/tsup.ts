@@ -6,7 +6,7 @@ import * as path from "path";
 import type { Options } from "tsup";
 
 /**
- * BuildingAI extension tsup options
+ * Bowi AI extension tsup options
  */
 export interface BuildingAITsupOptions extends Options {
     /**
@@ -51,7 +51,7 @@ function createOnSuccessHandler(patterns: string[]) {
 }
 
 /**
- * Default tsup configuration for BuildingAI extensions
+ * Default tsup configuration for Bowi AI extensions
  */
 const defaultConfig: Options = {
     entry: ["src/api/**/*.ts"],
@@ -69,7 +69,7 @@ const defaultConfig: Options = {
 };
 
 /**
- * Define BuildingAI extension tsup configuration
+ * Define Bowi AI extension tsup configuration
  *
  * @param options - Custom tsup options to override defaults
  * @returns Merged tsup configuration

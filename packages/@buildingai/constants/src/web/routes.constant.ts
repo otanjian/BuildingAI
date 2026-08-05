@@ -2,7 +2,7 @@
  * @fileoverview Route path constants
  * @description Defines route path constants used in the application
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 /**
@@ -21,7 +21,7 @@ export const ROUTES = {
     /** Extension page path */
     EXTENSION: "/extension",
     APP: "/app",
-    /** BuildingAI middleware page path */
+    /** Bowi AI middleware page path */
     BUILDINGAI_MIDDLEWARE: "/buildingai-middleware",
 } as const;
 

@@ -1,5 +1,5 @@
 /**
- * Print the BuildingAI brand logo to console
+ * Print the Bowi AI brand logo to console
  */
 export const printBrandLogo = () => {
     const colorStart = `\x1b[38;2;97;95;255m`;

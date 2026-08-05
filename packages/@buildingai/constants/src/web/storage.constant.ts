@@ -2,7 +2,7 @@
  * @fileoverview Storage key name constants
  * @description Defines storage key name constants used in the application, such as Cookie, LocalStorage, etc.
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 /**

@@ -3,7 +3,7 @@
  * @description Defines types for MCP tool calls and related data structures
  * used across http, service, and other packages.
  *
- * @author BuildingAI Teams
+ * @author Bowi AI Teams
  */
 
 /**

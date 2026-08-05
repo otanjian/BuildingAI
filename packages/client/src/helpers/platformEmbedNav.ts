@@ -45,7 +45,7 @@ export function postBuildingAiEmbedReady(targetOrigin = "*"): void {
 }
 
 /**
- * Listen for platform leaf navigation inside BuildingAI.
+ * Listen for platform leaf navigation inside Bowi AI.
  * Mount once under the app router (e.g. MainLayout).
  */
 export function usePlatformEmbedNavBridge(): void {

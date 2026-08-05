@@ -19,7 +19,7 @@ type JsonRpcError = {
 };
 
 const SERVER_INSTRUCTIONS =
-    "BuildingAI console control-plane MCP. Authenticate with a Console MCP API key. Tools are filtered by the key owner's console permissions.";
+    "Bowi AI console control-plane MCP. Authenticate with a Console MCP API key. Tools are filtered by the key owner's console permissions.";
 
 @Injectable()
 export class ConsoleMcpRuntimeService {
