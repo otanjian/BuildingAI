@@ -14,8 +14,7 @@ export type BowiMcpToolDefinition = {
 const APP_ID_PROP = {
     appId: {
         type: "string",
-        description:
-            'Target application id (e.g. "inv-opt-ai", "ehcs-ai"). Required on every bowi-mcp tool call.',
+        description: 'Target application id (currently only "ehcs-ai"). Required on every bowi-mcp tool call.',
     },
 };
 
