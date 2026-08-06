@@ -41,7 +41,15 @@ export const SensitiveWordFilterConfig = memo(
           </div>
           <Switch
             checked={enabled}
-            onCheckedChange={(checked) => onChange(checked ? patch({ enabled: true }) : null)}
+            onCheckedChange={(checked) => {
+              // patch 内部已调用 onChange，不能再包一层 onChange，
+              // 否则 patch 的返回值 undefined 会覆盖掉刚设置的正确配置
+              if (checked) {
+                patch({ enabled: true });
+              } else {
+                onChange(null);
+              }
+            }}
           />
         </div>
 

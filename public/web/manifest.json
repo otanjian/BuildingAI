@@ -1,7 +1,7 @@
 {
-  "name": "BuildingAI",
-  "short_name": "BuildingAI",
-  "description": "BuildingAI - Fast Build Your AI Application",
+  "name": "Bowi AI",
+  "short_name": "Bowi AI",
+  "description": "Bowi AI - Fast Build Your AI Application",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
