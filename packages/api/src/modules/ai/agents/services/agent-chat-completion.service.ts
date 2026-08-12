@@ -656,6 +656,14 @@ export class AgentChatCompletionService {
                                                 .catch(() => {});
                                         }
                                     }
+
+                                    if (conversationId) {
+                                        writer.write({
+                                            type: "data-stream-complete",
+                                            data: conversationId,
+                                            transient: true,
+                                        } as any);
+                                    }
                                 } catch (error) {
                                     this.logger.error(
                                         `onFinish error: ${this.errMsg(error)}`,

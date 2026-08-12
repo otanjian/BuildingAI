@@ -119,10 +119,20 @@ export function usePublicAgentChatStream(
   );
 
   /**
-   * Conversation id of the most recent stream that emitted events (from the
-   * last `data-conversation-id` echo). Message-id events belong to this stream.
+   * Conversation id of the visible stream only (set from `data-conversation-id`
+   * when that echo belongs to the active conversation). Must not be overwritten
+   * by background streams.
    */
   const streamTargetConversationIdRef = useRef<string | undefined>(undefined);
+
+  /**
+   * Maps each `chatSessionKey` to the conversation id owned by that Chat
+   * instance's in-flight stream. Background `onFinish`/`onError` callbacks
+   * close over their session key and unregister via this map so concurrent
+   * streams cannot clear each other's generating badge.
+   */
+  const streamOwnerBySessionRef = useRef(new Map<string, string>());
+  const pendingUsageHydrateConversationIdRef = useRef<string | undefined>(undefined);
 
   /**
    * Key passed to `useChat({ id })`. Changes only when the user explicitly
@@ -261,6 +271,24 @@ export function usePublicAgentChatStream(
       },
       transport,
       onData: (data) => {
+        if (data.type === "data-stream-complete" && data.data) {
+          const id = data.data as string;
+          if (!isUUID(id)) return;
+          // Payload carries conversationId — required because AI SDK useChat
+          // routes all Chat instances through one callbacksRef, so onFinish
+          // cannot trust chatSessionKey to identify which stream ended.
+          for (const [sessionKey, ownedId] of streamOwnerBySessionRef.current) {
+            if (ownedId === id) streamOwnerBySessionRef.current.delete(sessionKey);
+          }
+          unregisterBackgroundStream(id);
+          finalizeConversationSideEffects();
+          if (id === activeConversationIdRef.current) {
+            void refetchActiveConversationMessages(id);
+            pendingUsageHydrateConversationIdRef.current = id;
+          }
+          return;
+        }
+
         if (data.type === "data-conversation-id" && data.data) {
           const id = data.data as string;
           if (!isUUID(id)) return;
@@ -274,16 +302,21 @@ export function usePublicAgentChatStream(
             (activeId !== undefined && activeId === id) ||
             (activeId === undefined && sendTargetConversationIdRef.current === null);
 
-          streamTargetConversationIdRef.current = id;
+          registerBackgroundStream(id);
+
+          // Never bind background echoes to the current chatSessionKey — that
+          // key belongs to the visible Chat after a switch (callbacksRef shares
+          // onData across instances).
           if (!isActiveStream) return;
 
+          streamOwnerBySessionRef.current.set(chatSessionKey, id);
+          streamTargetConversationIdRef.current = id;
           if (activeId === undefined) {
             activeConversationIdRef.current = id;
           }
           const wasEmpty = !conversationIdRef.current;
           conversationIdRef.current = id;
           setConversationIdState(id);
-          registerBackgroundStream(id);
           if (shouldNavigateRef.current && wasEmpty) {
             navigate(`/agents/${agentId}/${accessToken}/c/${id}`, { replace: true });
             queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
@@ -312,21 +345,32 @@ export function usePublicAgentChatStream(
         }
       },
       onFinish: () => {
-        const finishedConversationId = streamTargetConversationIdRef.current;
-        const isActiveFinish =
-          finishedConversationId !== undefined &&
-          finishedConversationId === activeConversationIdRef.current;
+        // Prefer data-stream-complete for unregister. Fallback only clears the
+        // owner bound to this session key when it is still the active chat.
+        const ownedId = streamOwnerBySessionRef.current.get(chatSessionKey);
+        streamOwnerBySessionRef.current.delete(chatSessionKey);
+        if (ownedId && ownedId === activeConversationIdRef.current) {
+          unregisterBackgroundStream(ownedId);
+          finalizeConversationSideEffects();
+        }
 
-        unregisterBackgroundStream(finishedConversationId);
-        finalizeConversationSideEffects();
-
-        if (!isActiveFinish) return;
-        void hydrateLastAssistantUsageFromServer();
+        const hydrateId = pendingUsageHydrateConversationIdRef.current;
+        if (hydrateId && hydrateId === activeConversationIdRef.current) {
+          pendingUsageHydrateConversationIdRef.current = undefined;
+          void hydrateLastAssistantUsageFromServer();
+        }
       },
       onError: (error) => {
+        const ownedId = streamOwnerBySessionRef.current.get(chatSessionKey);
+        streamOwnerBySessionRef.current.delete(chatSessionKey);
+        const fallbackId =
+          ownedId && ownedId === activeConversationIdRef.current
+            ? ownedId
+            : activeConversationIdRef.current;
+        unregisterBackgroundStream(fallbackId);
+
         const isActiveError =
-          streamTargetConversationIdRef.current === activeConversationIdRef.current;
-        unregisterBackgroundStream(streamTargetConversationIdRef.current);
+          fallbackId !== undefined && fallbackId === activeConversationIdRef.current;
 
         if (!isActiveError) {
           console.warn("Background agent chat stream error:", error);
@@ -498,6 +542,29 @@ export function usePublicAgentChatStream(
     }
   }, [accessToken, agentId, anonymousIdentifier, scheduleTimeout, setMessages]);
 
+  const refetchActiveConversationMessages = useCallback(
+    async (conversationId: string | undefined): Promise<void> => {
+      if (!conversationId || !isUUID(conversationId)) return;
+      if (activeConversationIdRef.current !== conversationId) return;
+
+      try {
+        const res = await getPublicConversationMessages({
+          agentId,
+          accessToken,
+          anonymousIdentifier,
+          conversationId,
+          page: 1,
+          pageSize: 50,
+        });
+        if (activeConversationIdRef.current !== conversationId) return;
+        setMessages(res.items);
+      } catch (error) {
+        console.warn("Failed to refetch public agent conversation messages after finish", error);
+      }
+    },
+    [accessToken, agentId, anonymousIdentifier, setMessages],
+  );
+
   useEffect(() => {
     const nextConversationId = normalizedInitialConversationId;
     const prevConversationId = prevInitialConversationIdRef.current;
@@ -595,7 +662,10 @@ export function usePublicAgentChatStream(
       pendingParentIdRef.current = lastAssistantDbIdRef.current ?? null;
       const targetConversationId = conversationIdRef.current;
       sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) registerBackgroundStream(targetConversationId);
+      if (targetConversationId) {
+        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
+        registerBackgroundStream(targetConversationId);
+      }
 
       const fileParts: FileUIPart[] | undefined =
         files && files.length > 0
@@ -612,7 +682,7 @@ export function usePublicAgentChatStream(
         ...(fileParts && { files: fileParts }),
       });
     },
-    [status, sendMessage],
+    [status, sendMessage, chatSessionKey],
   );
 
   const sendWithParent = useCallback(
@@ -633,7 +703,10 @@ export function usePublicAgentChatStream(
 
       const targetConversationId = conversationIdRef.current;
       sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) registerBackgroundStream(targetConversationId);
+      if (targetConversationId) {
+        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
+        registerBackgroundStream(targetConversationId);
+      }
 
       const fileParts: FileUIPart[] | undefined =
         files && files.length > 0
@@ -650,7 +723,7 @@ export function usePublicAgentChatStream(
         ...(fileParts && { files: fileParts }),
       });
     },
-    [status, sendMessage, resolveMessageDbId],
+    [status, sendMessage, resolveMessageDbId, chatSessionKey],
   );
 
   const handleRegenerate = useCallback(
@@ -670,18 +743,23 @@ export function usePublicAgentChatStream(
 
       const targetConversationId = conversationIdRef.current;
       sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) registerBackgroundStream(targetConversationId);
+      if (targetConversationId) {
+        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
+        registerBackgroundStream(targetConversationId);
+      }
 
       regenerate({
         messageId: msg.id,
         body: { trigger: "regenerate-message" },
       });
     },
-    [messages, regenerate, resolveMessageDbId],
+    [messages, regenerate, resolveMessageDbId, chatSessionKey],
   );
 
   const stopWithFinalize = useCallback(() => {
-    const conversationId = conversationIdRef.current;
+    const conversationId =
+      streamOwnerBySessionRef.current.get(chatSessionKey) ?? conversationIdRef.current;
+    streamOwnerBySessionRef.current.delete(chatSessionKey);
     const targetAssistantId = [...messagesRef.current]
       .reverse()
       .find((m) => m.role === "assistant")?.id;
@@ -695,7 +773,13 @@ export function usePublicAgentChatStream(
       finalizeConversationSideEffects(token);
       void hydrateLastAssistantUsageFromServer();
     }, STOP_FINALIZE_DELAY_MS);
-  }, [stop, scheduleTimeout, finalizeConversationSideEffects, hydrateLastAssistantUsageFromServer]);
+  }, [
+    stop,
+    scheduleTimeout,
+    finalizeConversationSideEffects,
+    hydrateLastAssistantUsageFromServer,
+    chatSessionKey,
+  ]);
 
   return {
     conversationId: conversationIdState ?? conversationIdRef.current,

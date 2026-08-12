@@ -267,6 +267,13 @@ export class CozeChatProvider {
                     filteredWriter.write({ type: "text-start", id: textId });
                 }
                 filteredWriter.write({ type: "text-end", id: textId });
+                if (localConversationId) {
+                    filteredWriter.write({
+                        type: "data-stream-complete",
+                        data: localConversationId,
+                        transient: true,
+                    } as any);
+                }
                 filteredWriter.write({ type: "finish-step" });
                 filteredWriter.write({ type: "finish", finishReason: "stop" });
 

@@ -120,6 +120,11 @@ export class OpencodeChatProvider {
                 writer.write({ type: "start", messageId: assistantMessageId });
                 writer.write({ type: "start-step" });
 
+                let earlySavedUserMessageId: string | undefined;
+                if (params.isRegenerate && params.regenerateParentId) {
+                    earlySavedUserMessageId = params.regenerateParentId;
+                }
+
                 const partRouter = new OpencodeAssistantPartRouter();
                 const tokenUsage = new OpencodeTokenUsageAccumulator();
                 const toolParts = new Map<string, DynamicToolPart>();
@@ -373,6 +378,32 @@ export class OpencodeChatProvider {
                     model: config.model,
                 });
 
+                // Persist user message as soon as the remote turn is accepted so
+                // mid-stream reopen can load at least the user turn from BuildingAI.
+                if (
+                    saveConversation &&
+                    localConversationId &&
+                    lastUserMessage &&
+                    !params.isRegenerate &&
+                    !earlySavedUserMessageId
+                ) {
+                    const savedUserMessage = await this.agentChatMessageService.createMessage({
+                        conversationId: localConversationId,
+                        agentId: params.agentId,
+                        userId: params.userId,
+                        anonymousIdentifier: params.anonymousIdentifier,
+                        message: lastUserMessage as ChatUIMessage,
+                        formVariables: params.formVariables,
+                        formFieldsInputs: params.formFieldsInputs,
+                        parentId: params.parentId,
+                    });
+                    earlySavedUserMessageId = savedUserMessage.id;
+                    writer.write({
+                        type: "data-user-message-id",
+                        data: savedUserMessage.id,
+                    });
+                }
+
                 const maxWaitMs = 15 * 60 * 1000;
                 await Promise.race([
                     turnDone,
@@ -420,15 +451,6 @@ export class OpencodeChatProvider {
 
                 writeChunks(partRouter.endOpenReasoning());
                 writeChunks(partRouter.ensureTextClosed());
-                writer.write({ type: "finish-step" });
-                writer.write({
-                    type: "finish",
-                    finishReason: params.abortSignal?.aborted
-                        ? "stop"
-                        : streamError
-                          ? "error"
-                          : "stop",
-                });
 
                 const usage = tokenUsage.finalize();
                 let userConsumedPower = 0;
@@ -490,28 +512,53 @@ export class OpencodeChatProvider {
                     parts: responseParts as UIMessage["parts"],
                 };
 
-                await this.agentChatRecordService.updateMetadata(localConversationId, {
-                    provider: "opencode",
-                    opencodeSessionId,
-                    artifactRoot,
-                    lastHtmlArtifact: htmlArtifact,
-                });
-
-                await this.saveMessages({
-                    conversationId: localConversationId,
-                    params,
-                    writer,
-                    lastUser: lastUserMessage,
-                    responseMessage,
-                    usage,
-                    userConsumedPower,
-                    metadata: {
+                if (saveConversation && localConversationId) {
+                    await this.agentChatRecordService.updateMetadata(localConversationId, {
                         provider: "opencode",
                         opencodeSessionId,
                         artifactRoot,
-                        htmlArtifact,
-                        toolCalls: toolCallParts,
-                    },
+                        lastHtmlArtifact: htmlArtifact,
+                    });
+
+                    // Persist before finish so client onFinish / reopen can load DB rows.
+                    await this.saveMessages({
+                        conversationId: localConversationId,
+                        params,
+                        writer,
+                        lastUser: lastUserMessage,
+                        savedUserMessageId: earlySavedUserMessageId,
+                        responseMessage,
+                        usage,
+                        userConsumedPower,
+                        metadata: {
+                            provider: "opencode",
+                            opencodeSessionId,
+                            artifactRoot,
+                            htmlArtifact,
+                            toolCalls: toolCallParts,
+                        },
+                    });
+                }
+
+                // Must carry conversationId: AI SDK useChat shares onFinish via
+                // callbacksRef, so the client cannot trust chatSessionKey to
+                // clear the correct sidebar "generating" badge.
+                if (localConversationId) {
+                    writer.write({
+                        type: "data-stream-complete",
+                        data: localConversationId,
+                        transient: true,
+                    } as any);
+                }
+
+                writer.write({ type: "finish-step" });
+                writer.write({
+                    type: "finish",
+                    finishReason: params.abortSignal?.aborted
+                        ? "stop"
+                        : streamError
+                          ? "error"
+                          : "stop",
                 });
             },
             onError: (error) => {
@@ -753,6 +800,8 @@ export class OpencodeChatProvider {
         params: AgentChatCompletionParams;
         writer: ProviderWriter;
         lastUser?: UIMessage;
+        /** When set, skip creating the user message (already persisted earlier this turn). */
+        savedUserMessageId?: string;
         responseMessage: UIMessage;
         usage?: ChatMessageUsage;
         userConsumedPower?: number;
@@ -763,32 +812,37 @@ export class OpencodeChatProvider {
             params: chatParams,
             writer,
             lastUser,
+            savedUserMessageId,
             responseMessage,
             usage,
             userConsumedPower,
         } = params;
 
-        let userMessageId: string | undefined;
-        if (chatParams.isRegenerate) {
-            userMessageId = chatParams.regenerateParentId;
-        } else if (lastUser) {
-            const savedUserMessage = await this.agentChatMessageService.createMessage({
-                conversationId,
-                agentId: chatParams.agentId,
-                userId: chatParams.userId,
-                message: lastUser,
-                formVariables: chatParams.formVariables,
-                formFieldsInputs: chatParams.formFieldsInputs,
-                parentId: chatParams.parentId,
-            });
-            userMessageId = savedUserMessage.id;
-            writer.write({ type: "data-user-message-id", data: savedUserMessage.id });
+        let userMessageId: string | undefined = savedUserMessageId;
+        if (!userMessageId) {
+            if (chatParams.isRegenerate) {
+                userMessageId = chatParams.regenerateParentId;
+            } else if (lastUser) {
+                const savedUserMessage = await this.agentChatMessageService.createMessage({
+                    conversationId,
+                    agentId: chatParams.agentId,
+                    userId: chatParams.userId,
+                    anonymousIdentifier: chatParams.anonymousIdentifier,
+                    message: lastUser,
+                    formVariables: chatParams.formVariables,
+                    formFieldsInputs: chatParams.formFieldsInputs,
+                    parentId: chatParams.parentId,
+                });
+                userMessageId = savedUserMessage.id;
+                writer.write({ type: "data-user-message-id", data: savedUserMessage.id });
+            }
         }
 
         const savedAssistantMessage = await this.agentChatMessageService.createMessage({
             conversationId,
             agentId: chatParams.agentId,
             userId: chatParams.userId,
+            anonymousIdentifier: chatParams.anonymousIdentifier,
             message: {
                 ...(responseMessage as ChatUIMessage),
                 ...(usage ? { usage } : {}),

@@ -228,10 +228,20 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
   );
 
   /**
-   * Conversation id of the most recent stream that emitted events (from the
-   * last `data-conversation-id` echo). Message-id events belong to this stream.
+   * Conversation id of the visible stream only (set from `data-conversation-id`
+   * when that echo belongs to the active conversation). Must not be overwritten
+   * by background streams.
    */
   const streamTargetConversationIdRef = useRef<string | undefined>(undefined);
+
+  /**
+   * Maps each `chatSessionKey` to the conversation id owned by that Chat
+   * instance's in-flight stream. Background `onFinish`/`onError` callbacks
+   * close over their session key and unregister via this map so concurrent
+   * streams cannot clear each other's generating badge.
+   */
+  const streamOwnerBySessionRef = useRef(new Map<string, string>());
+  const pendingUsageHydrateConversationIdRef = useRef<string | undefined>(undefined);
 
   /**
    * Key passed to `useChat({ id })`. Changes only when the user explicitly
@@ -268,6 +278,21 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     },
     transport,
     onData: (data) => {
+      if (data.type === "data-stream-complete" && data.data) {
+        const id = data.data as string;
+        if (!isUUID(id)) return;
+        for (const [sessionKey, ownedId] of streamOwnerBySessionRef.current) {
+          if (ownedId === id) streamOwnerBySessionRef.current.delete(sessionKey);
+        }
+        unregisterBackgroundStream(id);
+        finalizeConversationSideEffects();
+        if (id === activeConversationIdRef.current) {
+          void refetchActiveConversationMessages(id);
+          pendingUsageHydrateConversationIdRef.current = id;
+        }
+        return;
+      }
+
       if (data.type === "data-conversation-id" && data.data) {
         const id = data.data as string;
         if (!isUUID(id)) return;
@@ -281,16 +306,18 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
           (activeId !== undefined && activeId === id) ||
           (activeId === undefined && sendTargetConversationIdRef.current === null);
 
-        streamTargetConversationIdRef.current = id;
+        registerBackgroundStream(id);
+
         if (!isActiveStream) return;
 
+        streamOwnerBySessionRef.current.set(chatSessionKey, id);
+        streamTargetConversationIdRef.current = id;
         if (activeId === undefined) {
           activeConversationIdRef.current = id;
         }
         const wasEmpty = !conversationIdRef.current;
         conversationIdRef.current = id;
         setConversationIdState(id);
-        registerBackgroundStream(id);
         if (wasEmpty && !disableAutoNavigate) {
           navigate(`/agents/${agentId}/c/${id}`, { replace: true });
           queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
@@ -318,21 +345,30 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
       }
     },
     onFinish: () => {
-      const finishedConversationId = streamTargetConversationIdRef.current;
-      const isActiveFinish =
-        finishedConversationId !== undefined &&
-        finishedConversationId === activeConversationIdRef.current;
+      const ownedId = streamOwnerBySessionRef.current.get(chatSessionKey);
+      streamOwnerBySessionRef.current.delete(chatSessionKey);
+      if (ownedId && ownedId === activeConversationIdRef.current) {
+        unregisterBackgroundStream(ownedId);
+        finalizeConversationSideEffects();
+      }
 
-      unregisterBackgroundStream(finishedConversationId);
-      finalizeConversationSideEffects();
-
-      if (!isActiveFinish) return;
-      void hydrateLastAssistantUsageFromServer();
+      const hydrateId = pendingUsageHydrateConversationIdRef.current;
+      if (hydrateId && hydrateId === activeConversationIdRef.current) {
+        pendingUsageHydrateConversationIdRef.current = undefined;
+        void hydrateLastAssistantUsageFromServer();
+      }
     },
     onError: (error) => {
+      const ownedId = streamOwnerBySessionRef.current.get(chatSessionKey);
+      streamOwnerBySessionRef.current.delete(chatSessionKey);
+      const fallbackId =
+        ownedId && ownedId === activeConversationIdRef.current
+          ? ownedId
+          : activeConversationIdRef.current;
+      unregisterBackgroundStream(fallbackId);
+
       const isActiveError =
-        streamTargetConversationIdRef.current === activeConversationIdRef.current;
-      unregisterBackgroundStream(streamTargetConversationIdRef.current);
+        fallbackId !== undefined && fallbackId === activeConversationIdRef.current;
 
       if (!isActiveError) {
         console.warn("Background agent chat stream error:", error);
@@ -536,6 +572,50 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     }
   }, [agentId, conversationIdRef, scheduleTimeout, setChatMessages]);
 
+  const refetchActiveConversationMessages = useCallback(
+    async (conversationId: string | undefined): Promise<void> => {
+      if (!conversationId || !isUUID(conversationId)) return;
+      if (activeConversationIdRef.current !== conversationId) return;
+
+      try {
+        const pageSize = 50;
+        const res = await listAgentConversationMessages(agentId, conversationId, {
+          page: 1,
+          pageSize,
+        });
+        if (activeConversationIdRef.current !== conversationId) return;
+        const total = res.total;
+        const items = (res.items ?? []).map((item, idx) => {
+          const base = (item.message ?? {}) as Record<string, unknown>;
+          const baseMetadata = (base.metadata ?? {}) as Record<string, unknown>;
+          const sequenceAsc = total - 1 - idx;
+          return {
+            ...base,
+            id: item.id,
+            role: (base.role ?? item.role) as UIMessage["role"],
+            metadata: {
+              ...baseMetadata,
+              parentId: item.parentId ?? null,
+              sequence: sequenceAsc,
+            },
+          } as UIMessage;
+        });
+        items.sort((a, b) => {
+          const sa = (a.metadata as { sequence?: number } | undefined)?.sequence;
+          const sb = (b.metadata as { sequence?: number } | undefined)?.sequence;
+          return (typeof sa === "number" ? sa : 0) - (typeof sb === "number" ? sb : 0);
+        });
+        setChatMessages(items);
+        if (items.length > 0) {
+          lastMessageDbIdRef.current = items[items.length - 1].id;
+        }
+      } catch (error) {
+        console.warn("Failed to refetch agent conversation messages after finish", error);
+      }
+    },
+    [agentId, setChatMessages, lastMessageDbIdRef],
+  );
+
   const handleRegenerate = useCallback(
     (messageId: string) => {
       setStatusOverride(null);
@@ -553,14 +633,17 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
 
       const targetConversationId = conversationIdRef.current;
       sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) registerBackgroundStream(targetConversationId);
+      if (targetConversationId) {
+        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
+        registerBackgroundStream(targetConversationId);
+      }
 
       regenerate({
         messageId: msg.id,
         body: { trigger: "regenerate-message" },
       });
     },
-    [regenerate, messages, resolveMessageDbId],
+    [regenerate, messages, resolveMessageDbId, chatSessionKey],
   );
 
   const send = useCallback(
@@ -579,7 +662,10 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
 
       const targetConversationId = conversationIdRef.current;
       sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) registerBackgroundStream(targetConversationId);
+      if (targetConversationId) {
+        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
+        registerBackgroundStream(targetConversationId);
+      }
 
       const fileParts: FileUIPart[] | undefined =
         files && files.length > 0
@@ -596,7 +682,7 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
         ...(fileParts && { files: fileParts }),
       });
     },
-    [sendMessage, status, lastMessageDbIdRef, resolveMessageDbId],
+    [sendMessage, status, lastMessageDbIdRef, resolveMessageDbId, chatSessionKey],
   );
 
   const streamingMessageId =
@@ -649,7 +735,9 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
   const effectiveStatus = statusOverride ?? status;
 
   const stopWithFinalize = useCallback(() => {
-    const conversationId = conversationIdRef.current;
+    const conversationId =
+      streamOwnerBySessionRef.current.get(chatSessionKey) ?? conversationIdRef.current;
+    streamOwnerBySessionRef.current.delete(chatSessionKey);
     const targetAssistantId = [...messagesRef.current]
       .reverse()
       .find((m) => m.role === "assistant")?.id;
@@ -669,6 +757,7 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     finalizeConversationSideEffects,
     hydrateLastAssistantUsageFromServer,
     conversationIdRef,
+    chatSessionKey,
   ]);
 
   return {
