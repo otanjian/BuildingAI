@@ -3,6 +3,7 @@ import type { EmbeddingModelV3, LanguageModelV3 } from "@ai-sdk/provider";
 
 import type { AIProvider, BaseProviderSettings, ProviderModelInfo } from "../../types";
 import { fetchProviderModels } from "../../utils/fetch-models";
+import { transformVolcengineRequestBody } from "../volcengine/request-transformer";
 
 export interface VolcengineCodingProviderSettings extends BaseProviderSettings {}
 
@@ -31,6 +32,7 @@ class VolcengineCodingProviderImpl implements AIProvider {
                         : `Bearer ${this.settings.apiKey}`,
                 ...this.settings.headers,
             },
+            transformRequestBody: transformVolcengineRequestBody,
         });
     }
 
