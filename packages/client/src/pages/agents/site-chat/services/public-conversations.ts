@@ -7,18 +7,22 @@ import { createPublicHttpClient, fetchPublicJson } from "./public-http";
 export type PublicConversation = {
   id: string;
   title: string;
+  /** Server-backed OpenCode turn status from conversation metadata */
+  opencodeTurnStatus?: string;
 };
 
 export type PublicConversationDetail = {
   id: string;
   title?: string | null;
   archivedAt?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type PublicConversationListResult = {
   items: Array<{
     id: string;
     title?: string | null;
+    metadata?: Record<string, unknown> | null;
   }>;
 };
 
@@ -37,6 +41,10 @@ export async function getPublicConversations(args: {
   return (data.items ?? []).map((item) => ({
     id: item.id,
     title: item.title?.trim() || "新对话",
+    opencodeTurnStatus:
+      typeof item.metadata?.opencodeTurnStatus === "string"
+        ? item.metadata.opencodeTurnStatus
+        : undefined,
   }));
 }
 
@@ -49,6 +57,27 @@ export async function archivePublicConversation(args: {
   const url = `${getApiBaseUrl()}/v1/conversations/${args.conversationId}/archive`;
   const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
   await client.patch<void>(url, { archived: args.archived });
+}
+
+export async function updatePublicConversationTitle(args: {
+  conversationId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+  title: string;
+}): Promise<void> {
+  const url = `${getApiBaseUrl()}/v1/conversations/${args.conversationId}`;
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  await client.patch<void>(url, { title: args.title });
+}
+
+export async function stopPublicConversation(args: {
+  conversationId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+}): Promise<void> {
+  const url = `${getApiBaseUrl()}/v1/conversations/${args.conversationId}/stop`;
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  await client.post<void>(url);
 }
 
 export async function getPublicConversationDetail(args: {
@@ -73,7 +102,11 @@ export function usePublicConversations(
       anonymousIdentifier ?? "",
     ],
     enabled: Boolean(agentId && accessToken),
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const items = query.state.data ?? [];
+      return items.some((c) => c.opencodeTurnStatus === "running") ? 4000 : false;
+    },
     retry: false,
     queryFn: () =>
       getPublicConversations({

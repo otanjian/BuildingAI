@@ -29,6 +29,8 @@ export interface UsePublicAgentMessagesPagingOptions {
   conversationId: string | undefined;
   setMessages: (messages: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])) => void;
   shouldLoadInitial: boolean;
+  /** When true, refetch messages periodically (detached OpenCode turn in progress). */
+  pollWhileRunning?: boolean;
   onLoadError?: () => void;
 }
 
@@ -49,6 +51,7 @@ export function usePublicAgentMessagesPaging(
     conversationId,
     setMessages,
     shouldLoadInitial,
+    pollWhileRunning = false,
     onLoadError,
   } = options;
 
@@ -59,6 +62,22 @@ export function usePublicAgentMessagesPaging(
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const nextPageRef = useRef(2);
   const loadMoreLockRef = useRef(false);
+
+  const fetchPageOne = useCallback(() => {
+    if (!conversationId) return Promise.resolve();
+    return getPublicConversationMessages({
+      agentId,
+      accessToken,
+      anonymousIdentifier,
+      conversationId,
+      page: 1,
+      pageSize: PAGE_SIZE,
+    }).then((res) => {
+      setHasMoreMessages(res.page < res.totalPages);
+      nextPageRef.current = Math.max(2, res.page + 1);
+      setMessages(res.items);
+    });
+  }, [agentId, accessToken, anonymousIdentifier, conversationId, setMessages]);
 
   useEffect(() => {
     const prevId = prevConversationIdRef.current;
@@ -80,19 +99,7 @@ export function usePublicAgentMessagesPaging(
     if (!shouldFetch) return;
 
     setIsLoadingMessages(true);
-    getPublicConversationMessages({
-      agentId,
-      accessToken,
-      anonymousIdentifier,
-      conversationId,
-      page: 1,
-      pageSize: PAGE_SIZE,
-    })
-      .then((res) => {
-        setHasMoreMessages(res.page < res.totalPages);
-        nextPageRef.current = Math.max(2, res.page + 1);
-        setMessages(res.items);
-      })
+    void fetchPageOne()
       .catch(() => {
         onLoadError?.();
       })
@@ -100,14 +107,19 @@ export function usePublicAgentMessagesPaging(
         setIsLoadingMessages(false);
       });
   }, [
-    agentId,
-    accessToken,
-    anonymousIdentifier,
     conversationId,
     shouldLoadInitial,
-    setMessages,
+    fetchPageOne,
     onLoadError,
   ]);
+
+  useEffect(() => {
+    if (!conversationId || !pollWhileRunning) return;
+    const id = window.setInterval(() => {
+      void fetchPageOne().catch(() => {});
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [conversationId, pollWhileRunning, fetchPageOne]);
 
   const loadMoreMessages = useCallback(() => {
     if (!conversationId) return;

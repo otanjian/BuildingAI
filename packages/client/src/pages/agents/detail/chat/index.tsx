@@ -4,6 +4,7 @@ import {
   useArchiveAgentConversation,
   useCopyAgentFromSquareMutation,
   usePublishedAgentDetailQuery,
+  useUpdateAgentConversation,
 } from "@buildingai/services/web";
 import type { FormFieldConfig } from "@buildingai/types/ai/agent-config.interface";
 import type { PromptInputMessage } from "@buildingai/ui/components/ai-elements/prompt-input";
@@ -17,6 +18,12 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Input } from "@buildingai/ui/components/ui/input";
 import { Label } from "@buildingai/ui/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@buildingai/ui/components/ui/popover";
+import {
+  type ImperativePanelHandle,
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@buildingai/ui/components/ui/resizable";
 import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { Separator } from "@buildingai/ui/components/ui/separator";
 import {
@@ -30,18 +37,19 @@ import {
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
+import { formatRemainingPowerLabel } from "@buildingai/ui/lib/remaining-power-label";
 import { cn } from "@buildingai/ui/lib/utils";
+import { useAuthStore } from "@buildingai/web/stores";
 import {
-  Archive,
   Bot,
   ChevronDown,
   ChevronLeft,
   ListIndentDecrease,
-  LoaderCircle,
   PanelLeft,
+  PanelRight,
   Settings2,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -54,7 +62,9 @@ import {
   useAssistantContext,
 } from "@/components/ask-assistant-ui";
 
+import { AgentHistoryConversationRow } from "../../_shared/agent-history-conversation-row";
 import { useBackgroundStreamingConversations } from "../../_shared/use-background-streams";
+import { OpencodeWorkspacePanel } from "../_components/opencode-workspace-panel";
 import { useAssistantForAgent } from "../_hooks/use-assistant-for-agent";
 import { hasRenderableOpeningStatement } from "../_utils/opening-statement";
 
@@ -142,7 +152,10 @@ function AgentInfoPanel({
 }) {
   const copyAgentMutation = useCopyAgentFromSquareMutation(agent?.id ?? "");
   const archiveMutation = useArchiveAgentConversation();
+  const updateConversationMutation = useUpdateAgentConversation();
   const navigate = useNavigate();
+  const userPower = useAuthStore((state) => state.auth.userInfo?.power);
+  const remainingPowerLabel = formatRemainingPowerLabel(userPower);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
 
@@ -167,6 +180,18 @@ function AgentInfoPanel({
       }
     },
     [agent?.id, archiveMutation],
+  );
+
+  const handleRename = useCallback(
+    async (conversationId: string, title: string) => {
+      if (!agent?.id) return;
+      await updateConversationMutation.mutateAsync({
+        agentId: agent.id,
+        conversationId,
+        title,
+      });
+    },
+    [agent?.id, updateConversationMutation],
   );
 
   const handleCopyAgent = useCallback(async () => {
@@ -206,7 +231,7 @@ function AgentInfoPanel({
       : `${chatModelBillingRule.power} 积分 / ${formatTokenCount(chatModelBillingRule.tokens)} tokens`;
   return (
     <div className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden">
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden px-6 py-3 pr-3!">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden px-4 py-3 pl-5">
         {isLoading ? (
           <>
             <Skeleton className="h-8 w-48" />
@@ -272,10 +297,13 @@ function AgentInfoPanel({
               <div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
                 <span>智能体消耗</span>
               </div>
-              <div className="flex flex-wrap items-baseline gap-3 text-xs">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
                 <span className="text-foreground text-sm font-semibold">
                   {modelConsumptionText}
                 </span>
+                {remainingPowerLabel ? (
+                  <span className="text-muted-foreground tabular-nums">{remainingPowerLabel}</span>
+                ) : null}
               </div>
             </div>
 
@@ -349,53 +377,21 @@ function AgentInfoPanel({
                       className="h-full min-h-0 w-full min-w-0"
                       viewportClassName="[&>div]:block!"
                     >
-                      {conversations.map((item) => {
-                        const isArchiving = archivingId === item.id;
-                        return (
-                          <div key={item.id} className="group relative">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className={cn(
-                                "w-full min-w-0 justify-start rounded-sm px-2",
-                                "hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/10",
-                                currentConversationId === item.id &&
-                                  "bg-muted-foreground/10 dark:bg-muted-foreground/10",
-                              )}
-                              title={item.title}
-                              onClick={() => navigate(`/agents/${agent?.id}/c/${item.id}`)}
-                            >
-                              <span className="min-w-0 flex-1 truncate text-left">
-                                {item.title}
-                              </span>
-                              {backgroundStreamingConversationIds.has(item.id) ? (
-                                <LoaderCircle className="text-muted-foreground size-3.5 shrink-0 animate-spin" />
-                              ) : null}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              title="归档"
-                              aria-label={`归档 ${item.title}`}
-                              disabled={isArchiving}
-                              className={cn(
-                                "text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2",
-                                "size-6 rounded-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
-                                isArchiving && "opacity-100",
-                              )}
-                              onClick={() => void handleArchive(item.id)}
-                            >
-                              {isArchiving ? (
-                                <LoaderCircle className="size-3.5 animate-spin" />
-                              ) : (
-                                <Archive className="size-3.5" />
-                              )}
-                            </Button>
-                          </div>
-                        );
-                      })}
+                      {conversations.map((item) => (
+                        <AgentHistoryConversationRow
+                          key={item.id}
+                          title={item.title}
+                          isSelected={currentConversationId === item.id}
+                          isGenerating={
+                            backgroundStreamingConversationIds.has(item.id) ||
+                            item.metadata?.opencodeTurnStatus === "running"
+                          }
+                          isArchiving={archivingId === item.id}
+                          onSelect={() => navigate(`/agents/${agent?.id}/c/${item.id}`)}
+                          onRename={(title) => handleRename(item.id, title)}
+                          onArchive={() => handleArchive(item.id)}
+                        />
+                      ))}
                     </ScrollArea>
                   </div>
                 ) : (
@@ -626,11 +622,13 @@ const AgentChatPage = () => {
   const chatAvatar = agent?.chatAvatar ?? undefined;
   const agentAvatar = agent?.avatar ?? undefined;
 
+  // Prefer dedicated chat avatar when enabled; otherwise fall back to agent avatar
+  // so header and message bubbles stay consistent.
   const assistantAvatar = chatAvatarEnabled
     ? chatAvatar?.trim()
       ? chatAvatar
       : agentAvatar
-    : undefined;
+    : agentAvatar;
 
   const formVariables = useMemo(() => {
     if (Object.keys(formValues).length === 0) return undefined;
@@ -694,7 +692,31 @@ const AgentChatPage = () => {
   const [formPopoverOpen, setFormPopoverOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const workspacePanelRef = useRef<ImperativePanelHandle>(null);
   const hasForm = formFields.length > 0;
+  const isOpencodeAgent = agent?.createMode === "opencode";
+
+  useEffect(() => {
+    if (!isOpencodeAgent) return;
+    const api = workspacePanelRef.current;
+    if (!api) return;
+    if (workspacePanelOpen) {
+      if (api.isCollapsed()) api.expand();
+    } else if (!api.isCollapsed()) {
+      api.collapse();
+    }
+  }, [isOpencodeAgent, workspacePanelOpen]);
+
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)");
+    const sync = () => {
+      if (mql.matches) setWorkspacePanelOpen(false);
+    };
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
 
   /**
    * Auto-open the form variables popover when any form fields exist,
@@ -711,135 +733,11 @@ const AgentChatPage = () => {
         className={cn(
           "flex h-dvh w-full",
           "md:gap-0",
-          panelExpanded ? "md:bg-muted md:py-2 md:pl-2" : "bg-background",
+          panelExpanded ? "md:bg-muted md:py-2 md:pr-2" : "bg-background",
         )}
       >
-        <div
-          className={cn(
-            "bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden",
-            panelExpanded && "md:rounded-sm",
-          )}
-        >
-          <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
-            <div className="flex items-center gap-1">
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="shrink-0 md:hidden"
-                  aria-label="打开菜单"
-                >
-                  <PanelLeft className="size-4" />
-                </Button>
-              </SheetTrigger>
-              <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
-                <ChevronLeft />
-              </Button>
-              <div className="flex items-center gap-2">
-                <Avatar className="size-8 rounded-lg after:rounded-lg">
-                  <AvatarImage
-                    className="rounded-lg"
-                    src={agent?.avatar ?? undefined}
-                    alt={agent?.name ?? ""}
-                  />
-                  <AvatarFallback className="rounded-lg">
-                    <Bot className="size-4" />
-                  </AvatarFallback>
-                </Avatar>
-                <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
-                  {agent?.name}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center gap-0.5">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="hidden md:inline-flex"
-                title={panelExpanded ? "收起侧栏" : "展开侧栏"}
-                onClick={() => setPanelExpanded((v) => !v)}
-              >
-                {panelExpanded ? (
-                  <ListIndentDecrease className="size-4 rotate-180" />
-                ) : (
-                  <ListIndentDecrease className="size-4" />
-                )}
-              </Button>
-              {hasForm && (
-                <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button size="icon" variant="ghost" title="表单变量">
-                      <Settings2 className="size-4" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-80" align="end">
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium">表单变量</h4>
-                      <p className="text-muted-foreground text-xs">
-                        填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
-                      </p>
-                      <Separator />
-                      {formFields.map((field) => (
-                        <div key={field.name} className="space-y-1.5">
-                          <Label className="text-xs">
-                            {field.label}
-                            {field.required ? (
-                              <span className="text-destructive ml-0.5">*</span>
-                            ) : null}
-                          </Label>
-                          {field.type === "textarea" ? (
-                            <Textarea
-                              placeholder={`输入 ${field.label}`}
-                              value={formValues[field.name] ?? ""}
-                              onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                              rows={2}
-                              className="resize-none text-xs"
-                            />
-                          ) : field.type === "select" ? (
-                            <select
-                              className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
-                              value={formValues[field.name] ?? ""}
-                              onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                            >
-                              <option value="">请选择</option>
-                              {getSelectOptions(field).map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <Input
-                              placeholder={`输入 ${field.label}`}
-                              value={formValues[field.name] ?? ""}
-                              onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                              className="h-8 text-xs"
-                              maxLength={field.maxLength}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              )}
-            </div>
-          </header>
-          <AssistantProvider {...contextValue}>
-            <ChatContent
-              agentAvatar={agentAvatar}
-              agentName={agent?.name}
-              // agentDescription={agent?.description}
-              formFields={formFields}
-              formValues={formValues}
-              onOpenForm={() => setFormPopoverOpen(true)}
-              openingStatement={agent?.openingStatement}
-              openingQuestions={agent?.openingQuestions ?? []}
-            />
-          </AssistantProvider>
-        </div>
         {panelExpanded && (
-          <div className="hidden md:flex">
+          <aside className="hidden md:flex">
             <AgentInfoPanel
               agent={agent}
               isLoading={isAgentLoading}
@@ -848,6 +746,294 @@ const AgentChatPage = () => {
               currentConversationId={uuid}
               backgroundStreamingConversationIds={backgroundStreamingConversationIds}
             />
+          </aside>
+        )}
+        {isOpencodeAgent ? (
+          <ResizablePanelGroup
+            direction="horizontal"
+            autoSaveId="opencode-workspace-outer"
+            className="min-h-0 min-w-0 flex-1"
+          >
+            <ResizablePanel defaultSize={100} minSize={40}>
+              <div
+                className={cn(
+                  "bg-background relative flex h-full min-w-0 flex-col overflow-hidden",
+                  panelExpanded && "md:rounded-sm",
+                )}
+              >
+                <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
+                  <div className="flex items-center gap-1">
+                    <SheetTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0 md:hidden"
+                        aria-label="打开菜单"
+                      >
+                        <PanelLeft className="size-4" />
+                      </Button>
+                    </SheetTrigger>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="hidden md:inline-flex"
+                      title={panelExpanded ? "收起侧栏" : "展开侧栏"}
+                      onClick={() => setPanelExpanded((v) => !v)}
+                    >
+                      {panelExpanded ? (
+                        <ListIndentDecrease className="size-4" />
+                      ) : (
+                        <ListIndentDecrease className="size-4 rotate-180" />
+                      )}
+                    </Button>
+                    <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
+                      <ChevronLeft />
+                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="size-8 rounded-lg after:rounded-lg">
+                        <AvatarImage
+                          className="rounded-lg"
+                          src={agent?.avatar ?? undefined}
+                          alt={agent?.name ?? ""}
+                        />
+                        <AvatarFallback className="rounded-lg">
+                          <Bot className="size-4" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
+                        {agent?.name}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-0.5">
+                    {hasForm && (
+                      <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button size="icon" variant="ghost" title="表单变量">
+                            <Settings2 className="size-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80" align="end">
+                          <div className="space-y-3">
+                            <h4 className="text-sm font-medium">表单变量</h4>
+                            <p className="text-muted-foreground text-xs">
+                              填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
+                            </p>
+                            <Separator />
+                            {formFields.map((field) => (
+                              <div key={field.name} className="space-y-1.5">
+                                <Label className="text-xs">
+                                  {field.label}
+                                  {field.required ? (
+                                    <span className="text-destructive ml-0.5">*</span>
+                                  ) : null}
+                                </Label>
+                                {field.type === "textarea" ? (
+                                  <Textarea
+                                    placeholder={`输入 ${field.label}`}
+                                    value={formValues[field.name] ?? ""}
+                                    onChange={(e) =>
+                                      handleFormValueChange(field.name, e.target.value)
+                                    }
+                                    rows={2}
+                                    className="resize-none text-xs"
+                                  />
+                                ) : field.type === "select" ? (
+                                  <select
+                                    className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
+                                    value={formValues[field.name] ?? ""}
+                                    onChange={(e) =>
+                                      handleFormValueChange(field.name, e.target.value)
+                                    }
+                                  >
+                                    <option value="">请选择</option>
+                                    {getSelectOptions(field).map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <Input
+                                    placeholder={`输入 ${field.label}`}
+                                    value={formValues[field.name] ?? ""}
+                                    onChange={(e) =>
+                                      handleFormValueChange(field.name, e.target.value)
+                                    }
+                                    className="h-8 text-xs"
+                                    maxLength={field.maxLength}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="hidden md:inline-flex"
+                      title={workspacePanelOpen ? "收起工作区" : "打开工作区"}
+                      aria-pressed={workspacePanelOpen}
+                      onClick={() => setWorkspacePanelOpen((open) => !open)}
+                    >
+                      <PanelRight className="size-4" />
+                    </Button>
+                  </div>
+                </header>
+                <AssistantProvider {...contextValue}>
+                  <ChatContent
+                    agentAvatar={agentAvatar}
+                    agentName={agent?.name}
+                    formFields={formFields}
+                    formValues={formValues}
+                    onOpenForm={() => setFormPopoverOpen(true)}
+                    openingStatement={agent?.openingStatement}
+                    openingQuestions={agent?.openingQuestions ?? []}
+                  />
+                </AssistantProvider>
+              </div>
+            </ResizablePanel>
+            <ResizableHandle withHandle={workspacePanelOpen} className="hidden md:flex" />
+            <ResizablePanel
+              ref={workspacePanelRef}
+              collapsible
+              collapsedSize={0}
+              defaultSize={0}
+              minSize={18}
+              maxSize={48}
+              onCollapse={() => setWorkspacePanelOpen(false)}
+              onExpand={() => setWorkspacePanelOpen(true)}
+            >
+              {agentId ? (
+                <OpencodeWorkspacePanel agentId={agentId} className="border-border border-l" />
+              ) : null}
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <div
+            className={cn(
+              "bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden",
+              panelExpanded && "md:rounded-sm",
+            )}
+          >
+            <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
+              <div className="flex items-center gap-1">
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 md:hidden"
+                    aria-label="打开菜单"
+                  >
+                    <PanelLeft className="size-4" />
+                  </Button>
+                </SheetTrigger>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="hidden md:inline-flex"
+                  title={panelExpanded ? "收起侧栏" : "展开侧栏"}
+                  onClick={() => setPanelExpanded((v) => !v)}
+                >
+                  {panelExpanded ? (
+                    <ListIndentDecrease className="size-4" />
+                  ) : (
+                    <ListIndentDecrease className="size-4 rotate-180" />
+                  )}
+                </Button>
+                <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
+                  <ChevronLeft />
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Avatar className="size-8 rounded-lg after:rounded-lg">
+                    <AvatarImage
+                      className="rounded-lg"
+                      src={agent?.avatar ?? undefined}
+                      alt={agent?.name ?? ""}
+                    />
+                    <AvatarFallback className="rounded-lg">
+                      <Bot className="size-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
+                    {agent?.name}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-0.5">
+                {hasForm && (
+                  <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button size="icon" variant="ghost" title="表单变量">
+                        <Settings2 className="size-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-medium">表单变量</h4>
+                        <p className="text-muted-foreground text-xs">
+                          填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
+                        </p>
+                        <Separator />
+                        {formFields.map((field) => (
+                          <div key={field.name} className="space-y-1.5">
+                            <Label className="text-xs">
+                              {field.label}
+                              {field.required ? (
+                                <span className="text-destructive ml-0.5">*</span>
+                              ) : null}
+                            </Label>
+                            {field.type === "textarea" ? (
+                              <Textarea
+                                placeholder={`输入 ${field.label}`}
+                                value={formValues[field.name] ?? ""}
+                                onChange={(e) => handleFormValueChange(field.name, e.target.value)}
+                                rows={2}
+                                className="resize-none text-xs"
+                              />
+                            ) : field.type === "select" ? (
+                              <select
+                                className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
+                                value={formValues[field.name] ?? ""}
+                                onChange={(e) => handleFormValueChange(field.name, e.target.value)}
+                              >
+                                <option value="">请选择</option>
+                                {getSelectOptions(field).map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <Input
+                                placeholder={`输入 ${field.label}`}
+                                value={formValues[field.name] ?? ""}
+                                onChange={(e) => handleFormValueChange(field.name, e.target.value)}
+                                className="h-8 text-xs"
+                                maxLength={field.maxLength}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+            </header>
+            <AssistantProvider {...contextValue}>
+              <ChatContent
+                agentAvatar={agentAvatar}
+                agentName={agent?.name}
+                formFields={formFields}
+                formValues={formValues}
+                onOpenForm={() => setFormPopoverOpen(true)}
+                openingStatement={agent?.openingStatement}
+                openingQuestions={agent?.openingQuestions ?? []}
+              />
+            </AssistantProvider>
           </div>
         )}
         <SheetContent

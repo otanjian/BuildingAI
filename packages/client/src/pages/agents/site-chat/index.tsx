@@ -29,11 +29,9 @@ import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { cn } from "@buildingai/ui/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  Archive,
   Bot,
   ClipboardPenLine,
   ListIndentDecrease,
-  LoaderCircle,
   MessageSquarePlus,
   PanelLeft,
 } from "lucide-react";
@@ -51,6 +49,7 @@ import {
   StreamingIndicator,
 } from "@/components/ask-assistant-ui";
 
+import { AgentHistoryConversationRow } from "../_shared/agent-history-conversation-row";
 import { useBackgroundStreamingConversations } from "../_shared/use-background-streams";
 import {
   useEmbedFormContext,
@@ -59,7 +58,10 @@ import {
 } from "./_hooks/use-embed-form-context";
 import { usePublicAgentAssistant } from "./_hooks/use-public-agent-assistant";
 import { isOperatorMessage } from "./lib/embed-conversation-storage";
-import { archivePublicConversation } from "./services/public-conversations";
+import {
+  archivePublicConversation,
+  updatePublicConversationTitle,
+} from "./services/public-conversations";
 
 const AGENT_MODEL_ID = "agent";
 
@@ -160,6 +162,21 @@ function SiteChatSidebarPanel({
     [accessToken, anonymousIdentifier, agentId, queryClient],
   );
 
+  const handleRename = useCallback(
+    async (conversationId: string, title: string) => {
+      await updatePublicConversationTitle({
+        conversationId,
+        accessToken,
+        anonymousIdentifier,
+        title,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["public-agent-conversations", agentId, accessToken, anonymousIdentifier ?? ""],
+      });
+    },
+    [accessToken, anonymousIdentifier, agentId, queryClient],
+  );
+
   return (
     <div className="space-y-4 px-1!">
       {isAgentLoading ? (
@@ -236,58 +253,24 @@ function SiteChatSidebarPanel({
               </div>
             ) : conversations && conversations.length > 0 ? (
               <div className="space-y-1">
-                {conversations.map((c) => {
-                  const isSelected = Boolean(
-                    currentConversationId && currentConversationId === c.id,
-                  );
-                  const isGenerating = backgroundStreamingConversationIds.has(c.id);
-                  const isArchiving = archivingId === c.id;
-                  return (
-                    <div key={c.id} className="group relative">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-current={isSelected ? "true" : undefined}
-                        className={cn(
-                          "w-full min-w-0 justify-start rounded-sm px-2",
-                          "hover:bg-muted-foreground/10 dark:hover:bg-muted-foreground/10",
-                          isSelected && "bg-muted-foreground/10 font-medium",
-                        )}
-                        title={c.title}
-                        onClick={() => {
-                          openConversation(c.id);
-                          onAfterNavigate?.();
-                        }}
-                      >
-                        <span className="min-w-0 flex-1 truncate text-left">{c.title}</span>
-                        {isGenerating ? (
-                          <LoaderCircle className="text-muted-foreground size-3.5 shrink-0 animate-spin" />
-                        ) : null}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        title="归档"
-                        aria-label={`归档 ${c.title}`}
-                        disabled={isArchiving}
-                        className={cn(
-                          "text-muted-foreground absolute top-1/2 right-1 -translate-y-1/2",
-                          "size-6 rounded-sm opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
-                          isArchiving && "opacity-100",
-                        )}
-                        onClick={() => void handleArchive(c.id)}
-                      >
-                        {isArchiving ? (
-                          <LoaderCircle className="size-3.5 animate-spin" />
-                        ) : (
-                          <Archive className="size-3.5" />
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })}
+                {conversations.map((c) => (
+                  <AgentHistoryConversationRow
+                    key={c.id}
+                    title={c.title}
+                    isSelected={Boolean(currentConversationId && currentConversationId === c.id)}
+                    isGenerating={
+                      backgroundStreamingConversationIds.has(c.id) ||
+                      c.opencodeTurnStatus === "running"
+                    }
+                    isArchiving={archivingId === c.id}
+                    onSelect={() => {
+                      openConversation(c.id);
+                      onAfterNavigate?.();
+                    }}
+                    onRename={(title) => handleRename(c.id, title)}
+                    onArchive={() => handleArchive(c.id)}
+                  />
+                ))}
               </div>
             ) : (
               <div className="text-muted-foreground text-xs">暂无对话记录</div>

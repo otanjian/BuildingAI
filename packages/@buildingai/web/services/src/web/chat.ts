@@ -301,6 +301,7 @@ export function useUpdateAgentConversation(): UseMutationResult<
             }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["unified-conversations"] });
+            queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
         },
     });
 }
@@ -331,4 +332,27 @@ export function useArchiveAgentConversation(): UseMutationResult<
             queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
         },
     });
+}
+
+export function useStopAgentConversation(): UseMutationResult<
+    unknown,
+    unknown,
+    { agentId: string; conversationId: string },
+    unknown
+> {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ agentId, conversationId }: { agentId: string; conversationId: string }) =>
+            stopAgentConversation(agentId, conversationId),
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
+            queryClient.invalidateQueries({
+                queryKey: ["agents", "chat", "messages", variables.conversationId],
+            });
+        },
+    });
+}
+
+export function stopAgentConversation(agentId: string, conversationId: string) {
+    return apiHttpClient.post(`/ai-agents/${agentId}/chat/conversations/${conversationId}/stop`);
 }

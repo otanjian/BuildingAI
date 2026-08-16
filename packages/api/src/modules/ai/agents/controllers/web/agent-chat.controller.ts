@@ -38,6 +38,9 @@ import { AgentChatRecordService } from "../../services/agent-chat-record.service
 import { AgentVoiceService } from "../../services/agent-voice.service";
 import { AgentsService } from "../../services/agents.service";
 import { OpencodeArtifactService } from "../../services/opencode-artifact.service";
+import { OpencodeSessionRecoverService } from "../../services/opencode-session-recover.service";
+import { OpencodeWorkspaceService } from "../../services/opencode-workspace.service";
+import { OpencodeChatProvider } from "../../providers/opencode-chat.provider";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
@@ -49,7 +52,43 @@ export class AgentChatWebController {
         private readonly agentChatMessageFeedbackService: AgentChatMessageFeedbackService,
         private readonly agentsService: AgentsService,
         private readonly opencodeArtifactService: OpencodeArtifactService,
+        private readonly opencodeWorkspaceService: OpencodeWorkspaceService,
+        private readonly opencodeChatProvider: OpencodeChatProvider,
+        private readonly opencodeSessionRecover: OpencodeSessionRecoverService,
     ) {}
+
+    /**
+     * Read OpenCode workspace file content (read-only preview).
+     * GET /ai-agents/:id/opencode/workspace/files/content?path=
+     */
+    @Get(":id/opencode/workspace/files/content")
+    async getOpencodeWorkspaceFileContent(
+        @Param("id") agentId: string,
+        @Query("path") filePath?: string,
+    ) {
+        if (!filePath?.trim()) {
+            throw HttpErrorFactory.badRequest("文件路径不能为空");
+        }
+        return this.opencodeWorkspaceService.readFile({
+            agentId,
+            path: filePath,
+        });
+    }
+
+    /**
+     * List OpenCode workspace directory entries (lazy tree).
+     * GET /ai-agents/:id/opencode/workspace/files?path=
+     */
+    @Get(":id/opencode/workspace/files")
+    async listOpencodeWorkspaceFiles(
+        @Param("id") agentId: string,
+        @Query("path") listPath?: string,
+    ) {
+        return this.opencodeWorkspaceService.listDirectory({
+            agentId,
+            path: listPath,
+        });
+    }
 
     @AgentPublicAccess({ route: "chat-messages", targetPath: ":id/chat/stream" })
     @Post(":id/chat/stream")
@@ -376,6 +415,15 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
+        const agent = await this.agentsService.findOneById(agentId);
+        if (agent?.createMode === "opencode") {
+            await this.opencodeSessionRecover.recoverConversation({
+                agent,
+                conversationId,
+                userId: playground.id,
+                anonymousIdentifier,
+            });
+        }
         return this.agentChatMessageService.listConversationMessages(
             conversationId,
             query,
@@ -383,16 +431,53 @@ export class AgentChatWebController {
         );
     }
 
+    @Post(":id/chat/conversations/:conversationId/stop")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/stop",
+        targetPath: ":id/chat/conversations/:conversationId/stop",
+        method: "POST",
+    })
+    async stopConversationTurn(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权操作该对话");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权操作该对话");
+        }
+        const agent = await this.agentsService.findOneById(agentId);
+        if (!agent || agent.createMode !== "opencode") {
+            throw HttpErrorFactory.badRequest("Stop is only supported for OpenCode agents");
+        }
+        return this.opencodeChatProvider.stopTurn(conversationId, agent);
+    }
+
     @Patch(":id/chat/conversations/:conversationId")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId",
+        targetPath: ":id/chat/conversations/:conversationId",
+        method: "PATCH",
+    })
     async updateConversation(
         @Param("id") agentId: string,
         @Param("conversationId") conversationId: string,
         @Body("title") title: string,
         @Playground() playground: UserPlayground,
+        @Req() req: Request,
     ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
         const record = await this.agentChatRecordService.getConversation(conversationId);
         if (!record) throw HttpErrorFactory.notFound("对话不存在");
         if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权修改该对话");
+        }
         if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权修改该对话");
         if (!title?.trim()) throw HttpErrorFactory.badRequest("标题不能为空");
         await this.agentChatRecordService.updateTitle(conversationId, title.trim());

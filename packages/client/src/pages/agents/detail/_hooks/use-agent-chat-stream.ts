@@ -1,6 +1,11 @@
 import { useChat } from "@ai-sdk/react";
-import { type AgentChatMessageItem, listAgentConversationMessages } from "@buildingai/services/web";
+import {
+  type AgentChatMessageItem,
+  listAgentConversationMessages,
+  stopAgentConversation,
+} from "@buildingai/services/web";
 import { useAuthStore } from "@buildingai/stores";
+import { shouldRefreshUserPowerAfterUsage } from "@buildingai/ui/lib/remaining-power-label";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ChatStatus, FileUIPart, UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
@@ -291,6 +296,10 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
           pendingUsageHydrateConversationIdRef.current = id;
         }
         return;
+      }
+
+      if (data.type === "data-usage" && shouldRefreshUserPowerAfterUsage(data.data)) {
+        queryClient.invalidateQueries({ queryKey: ["user", "info"] });
       }
 
       if (data.type === "data-conversation-id" && data.data) {
@@ -744,6 +753,11 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     const token =
       conversationId && targetAssistantId ? `${conversationId}:${targetAssistantId}` : undefined;
 
+    if (conversationId && agentId) {
+      void stopAgentConversation(agentId, conversationId).catch((error) => {
+        console.warn("Failed to stop OpenCode conversation turn", error);
+      });
+    }
     stop();
     unregisterBackgroundStream(conversationId);
 
@@ -758,6 +772,7 @@ export function useAgentChatStream(options: UseAgentChatStreamOptions): UseAgent
     hydrateLastAssistantUsageFromServer,
     conversationIdRef,
     chatSessionKey,
+    agentId,
   ]);
 
   return {

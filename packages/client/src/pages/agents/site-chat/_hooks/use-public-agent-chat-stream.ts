@@ -13,6 +13,7 @@ import {
   unregisterBackgroundStream,
 } from "../../_shared/background-streams";
 import { getPublicConversationMessages } from "../services/public-conversation-messages";
+import { stopPublicConversation } from "../services/public-conversations";
 
 const STOP_FINALIZE_DELAY_MS = 350;
 const USAGE_HYDRATE_RETRY_INTERVAL_MS = 1000;
@@ -766,6 +767,16 @@ export function usePublicAgentChatStream(
     const token =
       conversationId && targetAssistantId ? `${conversationId}:${targetAssistantId}` : undefined;
 
+    // Explicit stop: abort HTTP subscriber AND server-owned OpenCode turn.
+    if (conversationId && accessToken) {
+      void stopPublicConversation({
+        conversationId,
+        accessToken,
+        anonymousIdentifier,
+      }).catch((error) => {
+        console.warn("Failed to stop OpenCode conversation turn", error);
+      });
+    }
     stop();
     unregisterBackgroundStream(conversationId);
 
@@ -779,6 +790,8 @@ export function usePublicAgentChatStream(
     finalizeConversationSideEffects,
     hydrateLastAssistantUsageFromServer,
     chatSessionKey,
+    accessToken,
+    anonymousIdentifier,
   ]);
 
   return {

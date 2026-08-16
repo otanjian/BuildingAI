@@ -21,6 +21,8 @@ import { OpencodeApiService } from "../integrations/opencode-api.service";
 import type { AgentChatCompletionParams } from "../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../services/agent-chat-message.service";
 import { AgentChatRecordService } from "../services/agent-chat-record.service";
+import { OpencodeSessionRecoverService } from "../services/opencode-session-recover.service";
+import { OpencodeTurnRunnerService } from "../services/opencode-turn-runner.service";
 import {
     isHtmlArtifactPath,
     preferredHtmlEntryRelativePath,
@@ -34,6 +36,7 @@ import {
     type UiMessagePartLike,
 } from "../utils/opencode-prompt-parts";
 import { OpencodeTokenUsageAccumulator } from "../utils/opencode-token-usage";
+import { mergeOpencodeTurnMetadata } from "../utils/opencode-turn-status";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
 import { createSensitiveWordWriterFromFilter } from "../utils/sensitive-word-stream";
 
@@ -73,7 +76,39 @@ export class OpencodeChatProvider {
         private readonly agentChatMessageService: AgentChatMessageService,
         private readonly agentBillingHandler: AgentBillingHandler,
         private readonly agentConfigService: AgentConfigService,
+        private readonly turnRunner: OpencodeTurnRunnerService,
+        private readonly sessionRecover: OpencodeSessionRecoverService,
     ) {}
+
+    /**
+     * Explicit user stop — cancels the detached turn and aborts OpenCode.
+     */
+    async stopTurn(
+        conversationId: string,
+        agent?: Agent,
+    ): Promise<{ cancelled: boolean; abortedRemote: boolean }> {
+        const cancelled = this.turnRunner.cancel(conversationId);
+        let abortedRemote = false;
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        const sessionId = record?.metadata?.opencodeSessionId;
+        if (typeof sessionId === "string" && agent) {
+            await this.opencodeApiService.abortSession({
+                config: agent.thirdPartyIntegration,
+                sessionId,
+            });
+            abortedRemote = true;
+        }
+        if (record) {
+            await this.agentChatRecordService.updateMetadata(
+                conversationId,
+                mergeOpencodeTurnMetadata(record.metadata as Record<string, unknown>, {
+                    status: "aborted",
+                    at: new Date().toISOString(),
+                }),
+            );
+        }
+        return { cancelled, abortedRemote };
+    }
 
     async streamChat(
         agent: Agent,
@@ -106,10 +141,36 @@ export class OpencodeChatProvider {
             localConversationId = record.id;
         }
 
+        if (localConversationId) {
+            await this.sessionRecover.recoverConversation({
+                agent,
+                conversationId: localConversationId,
+                userId: params.userId,
+                anonymousIdentifier: params.anonymousIdentifier,
+            });
+            if (this.turnRunner.isRunning(localConversationId)) {
+                throw HttpErrorFactory.badRequest(
+                    "This conversation already has an OpenCode turn in progress",
+                );
+            }
+        }
+
         const stream = createUIMessageStream({
             execute: async ({ writer }) => {
+                const safeWrite = (part: Record<string, any>) => {
+                    try {
+                        writer.write(part as any);
+                    } catch (error) {
+                        this.logger.debug(
+                            `OpenCode stream subscriber write failed: ${
+                                error instanceof Error ? error.message : String(error)
+                            }`,
+                        );
+                    }
+                };
+
                 if (localConversationId) {
-                    writer.write({
+                    safeWrite({
                         type: "data-conversation-id",
                         data: localConversationId,
                         transient: true,
@@ -117,8 +178,8 @@ export class OpencodeChatProvider {
                 }
 
                 const assistantMessageId = generateId();
-                writer.write({ type: "start", messageId: assistantMessageId });
-                writer.write({ type: "start-step" });
+                safeWrite({ type: "start", messageId: assistantMessageId });
+                safeWrite({ type: "start-step" });
 
                 let earlySavedUserMessageId: string | undefined;
                 if (params.isRegenerate && params.regenerateParentId) {
@@ -132,10 +193,12 @@ export class OpencodeChatProvider {
                 /** OpenCode messageID -> role (ignore user/system text echo) */
                 const messageRoles = new Map<string, string>();
                 let htmlArtifact: HtmlArtifact | undefined;
+                let turnHandle: ReturnType<OpencodeTurnRunnerService["start"]> | undefined;
+                let timedOut = false;
 
                 const sensitiveWordFilter = createSensitiveWordFilter(agent.sensitiveWordConfig);
                 const filteredWriter = createSensitiveWordWriterFromFilter(
-                    writer,
+                    { write: safeWrite },
                     sensitiveWordFilter,
                     agent.sensitiveWordConfig?.applyToReasoning !== false,
                 );
@@ -212,15 +275,17 @@ export class OpencodeChatProvider {
                     "Do not write HTML reports into other conversations' artifact directories.",
                 ].join("\n");
 
-                const turnAbort = new AbortController();
-                const onClientAbort = () => {
-                    if (!turnAbort.signal.aborted) turnAbort.abort();
-                };
-                if (params.abortSignal) {
-                    if (params.abortSignal.aborted) onClientAbort();
-                    else
-                        params.abortSignal.addEventListener("abort", onClientAbort, { once: true });
-                }
+                // Detached turn: lifetime is owned by the runner, not HTTP abortSignal.
+                turnHandle = this.turnRunner.start(localConversationId);
+                let persistStarted = false;
+                try {
+                await this.agentChatRecordService.updateMetadata(
+                    localConversationId,
+                    mergeOpencodeTurnMetadata(
+                        { provider: "opencode", opencodeSessionId, artifactRoot },
+                        { status: "running", at: new Date().toISOString() },
+                    ),
+                );
 
                 let turnIdle = false;
                 let streamError: string | undefined;
@@ -232,12 +297,19 @@ export class OpencodeChatProvider {
                     if (turnIdle) return;
                     turnIdle = true;
                     settleTurn?.();
-                    if (!turnAbort.signal.aborted) turnAbort.abort();
                 };
+                const onRunnerAbort = () => {
+                    finishTurn();
+                };
+                if (turnHandle.signal.aborted) onRunnerAbort();
+                else
+                    turnHandle.signal.addEventListener("abort", onRunnerAbort, {
+                        once: true,
+                    });
 
                 const eventLoop = this.opencodeApiService.streamEvents({
                     config: agent.thirdPartyIntegration,
-                    signal: turnAbort.signal,
+                    signal: turnHandle.signal,
                     shouldStop: (event) => {
                         if (event.type === "session.idle") {
                             return event.properties?.sessionID === opencodeSessionId;
@@ -362,7 +434,7 @@ export class OpencodeChatProvider {
                 });
 
                 const eventPromise = eventLoop.catch((error) => {
-                    if (!turnAbort.signal.aborted) {
+                    if (!turnHandle?.signal.aborted) {
                         this.logger.warn(
                             `OpenCode event loop ended: ${error instanceof Error ? error.message : String(error)}`,
                         );
@@ -398,168 +470,252 @@ export class OpencodeChatProvider {
                         parentId: params.parentId,
                     });
                     earlySavedUserMessageId = savedUserMessage.id;
-                    writer.write({
+                    await this.agentChatRecordService.updateStats(localConversationId);
+                    safeWrite({
                         type: "data-user-message-id",
                         data: savedUserMessage.id,
                     });
                 }
 
-                const maxWaitMs = 15 * 60 * 1000;
-                await Promise.race([
-                    turnDone,
-                    new Promise<void>((resolve) => {
-                        setTimeout(() => {
-                            if (!turnIdle) {
-                                streamError = "OpenCode turn timed out";
-                                finishTurn();
+                /**
+                 * Turn completion must outlive the HTTP stream. Switching
+                 * conversations cancels the UI stream / req, which would
+                 * otherwise abort this execute() before saveMessages and leave
+                 * metadata stuck at `running` forever (timeout never fires).
+                 */
+                persistStarted = true;
+                const persistTurn = this.turnRunner.keepAlive(
+                    (async () => {
+                        try {
+                            const maxWaitMs = 15 * 60 * 1000;
+                            await Promise.race([
+                                turnDone,
+                                new Promise<void>((resolve) => {
+                                    setTimeout(() => {
+                                        if (!turnIdle) {
+                                            timedOut = true;
+                                            streamError = "OpenCode turn timed out";
+                                            finishTurn();
+                                            this.turnRunner.cancel(localConversationId);
+                                        }
+                                        resolve();
+                                    }, maxWaitMs);
+                                }),
+                            ]);
+
+                            const userStopped =
+                                Boolean(turnHandle?.signal.aborted) && !timedOut;
+                            if (timedOut || userStopped) {
+                                await this.opencodeApiService.abortSession({
+                                    config: agent.thirdPartyIntegration,
+                                    sessionId: opencodeSessionId,
+                                });
                             }
-                            resolve();
-                        }, maxWaitMs);
-                    }),
-                ]);
 
-                if (params.abortSignal?.aborted) {
-                    await this.opencodeApiService.abortSession({
-                        config: agent.thirdPartyIntegration,
-                        sessionId: opencodeSessionId,
-                    });
-                }
+                            await Promise.race([
+                                eventPromise,
+                                new Promise((resolve) => setTimeout(resolve, 500)),
+                            ]);
 
-                await Promise.race([
-                    eventPromise,
-                    new Promise((resolve) => setTimeout(resolve, 500)),
-                ]);
+                            if (!htmlArtifact) {
+                                htmlArtifact = await this.detectHtmlArtifact({
+                                    agentId: params.agentId,
+                                    conversationId: localConversationId,
+                                    artifactRoot,
+                                    exclude: preExistingHtmlFiles,
+                                });
+                                if (htmlArtifact) {
+                                    safeWrite({
+                                        type: "data-artifact",
+                                        data: htmlArtifact,
+                                    } as any);
+                                }
+                            }
 
-                if (!htmlArtifact) {
-                    htmlArtifact = await this.detectHtmlArtifact({
-                        agentId: params.agentId,
-                        conversationId: localConversationId,
-                        artifactRoot,
-                        exclude: preExistingHtmlFiles,
-                    });
-                    if (htmlArtifact) {
-                        writer.write({
-                            type: "data-artifact",
-                            data: htmlArtifact,
-                        } as any);
+                            if (streamError) {
+                                writeChunks(
+                                    partRouter.appendErrorText(`OpenCode error: ${streamError}`),
+                                );
+                            }
+
+                            writeChunks(partRouter.endOpenReasoning());
+                            writeChunks(partRouter.ensureTextClosed());
+
+                            const usage = tokenUsage.finalize();
+                            let userConsumedPower = 0;
+                            if (
+                                shouldCharge &&
+                                saveConversation &&
+                                localConversationId &&
+                                params.userId &&
+                                billingRule &&
+                                (usage.totalTokens ?? 0) > 0
+                            ) {
+                                userConsumedPower = await this.agentBillingHandler.deduct({
+                                    userId: params.userId,
+                                    conversationId: localConversationId,
+                                    agentId: params.agentId,
+                                    usage,
+                                    billingRule,
+                                });
+                            }
+
+                            safeWrite({
+                                type: "data-usage",
+                                data: {
+                                    inputTokens: usage.inputTokens ?? 0,
+                                    outputTokens: usage.outputTokens ?? 0,
+                                    totalTokens: usage.totalTokens ?? 0,
+                                    inputTokenDetails: usage.inputTokenDetails,
+                                    outputTokenDetails: usage.outputTokenDetails,
+                                    reasoningTokens: usage.reasoningTokens,
+                                    cachedInputTokens: usage.cachedInputTokens,
+                                    raw: usage.raw,
+                                    userConsumedPower,
+                                },
+                            });
+
+                            const toolCallParts = Array.from(toolParts.values());
+                            const reasoningParts = partRouter
+                                .getPersistedReasoningParts()
+                                .map((part) => ({
+                                    ...part,
+                                    text: sensitiveWordFilter.filterText(part.text),
+                                }));
+                            const filteredFullText = sensitiveWordFilter.filterText(
+                                partRouter.fullText,
+                            );
+                            const responseParts: any[] = [...reasoningParts, ...toolCallParts];
+                            if (
+                                partRouter.fullText ||
+                                (toolCallParts.length === 0 && reasoningParts.length === 0)
+                            ) {
+                                responseParts.push({ type: "text", text: filteredFullText });
+                            }
+                            if (htmlArtifact) {
+                                responseParts.push({
+                                    type: "data-artifact",
+                                    data: htmlArtifact,
+                                });
+                            }
+
+                            const responseMessage: UIMessage = {
+                                id: assistantMessageId,
+                                role: "assistant",
+                                parts: responseParts as UIMessage["parts"],
+                            };
+
+                            const terminalStatus = timedOut
+                                ? "timed_out"
+                                : userStopped
+                                  ? "aborted"
+                                  : streamError
+                                    ? "aborted"
+                                    : "completed";
+
+                            if (saveConversation && localConversationId) {
+                                await this.agentChatRecordService.updateMetadata(
+                                    localConversationId,
+                                    mergeOpencodeTurnMetadata(
+                                        {
+                                            provider: "opencode",
+                                            opencodeSessionId,
+                                            artifactRoot,
+                                            lastHtmlArtifact: htmlArtifact,
+                                        },
+                                        {
+                                            status: terminalStatus,
+                                            at: new Date().toISOString(),
+                                        },
+                                    ),
+                                );
+
+                                await this.saveMessages({
+                                    conversationId: localConversationId,
+                                    params,
+                                    writer: { write: safeWrite },
+                                    lastUser: lastUserMessage,
+                                    savedUserMessageId: earlySavedUserMessageId,
+                                    responseMessage,
+                                    usage,
+                                    userConsumedPower,
+                                    metadata: {
+                                        provider: "opencode",
+                                        opencodeSessionId,
+                                        artifactRoot,
+                                        htmlArtifact,
+                                        toolCalls: toolCallParts,
+                                    },
+                                });
+                            }
+
+                            if (localConversationId) {
+                                safeWrite({
+                                    type: "data-stream-complete",
+                                    data: localConversationId,
+                                    transient: true,
+                                } as any);
+                            }
+
+                            safeWrite({ type: "finish-step" });
+                            safeWrite({
+                                type: "finish",
+                                finishReason:
+                                    userStopped || timedOut || streamError ? "error" : "stop",
+                            });
+                        } finally {
+                            if (localConversationId) {
+                                this.turnRunner.complete(localConversationId);
+                            }
+                        }
+                    })(),
+                );
+
+                // Stay on the HTTP stream while the client is connected; if they
+                // disconnect (switch chat), end this execute without cancelling
+                // persistTurn — it keeps listening / saving in the background.
+                const clientDisconnected = new Promise<"disconnect">((resolve) => {
+                    if (params.abortSignal?.aborted) {
+                        resolve("disconnect");
+                        return;
                     }
+                    params.abortSignal?.addEventListener(
+                        "abort",
+                        () => resolve("disconnect"),
+                        { once: true },
+                    );
+                });
+
+                const outcome = await Promise.race([
+                    persistTurn.then(() => "done" as const),
+                    clientDisconnected,
+                ]);
+
+                if (outcome === "disconnect") {
+                    this.logger.log(
+                        `OpenCode HTTP subscriber disconnected for ${localConversationId}; turn continues in background`,
+                    );
+                    // Do not cancel the runner / OpenCode session.
+                    return;
                 }
-
-                if (streamError) {
-                    writeChunks(partRouter.appendErrorText(`OpenCode error: ${streamError}`));
-                }
-
-                writeChunks(partRouter.endOpenReasoning());
-                writeChunks(partRouter.ensureTextClosed());
-
-                const usage = tokenUsage.finalize();
-                let userConsumedPower = 0;
+            } catch (error) {
+                // If setup failed before persistTurn, clear runner.
                 if (
-                    shouldCharge &&
-                    saveConversation &&
+                    !persistStarted &&
                     localConversationId &&
-                    params.userId &&
-                    billingRule &&
-                    (usage.totalTokens ?? 0) > 0
+                    this.turnRunner.isRunning(localConversationId)
                 ) {
-                    userConsumedPower = await this.agentBillingHandler.deduct({
-                        userId: params.userId,
-                        conversationId: localConversationId,
-                        agentId: params.agentId,
-                        usage,
-                        billingRule,
-                    });
+                    this.turnRunner.complete(localConversationId);
+                    await this.agentChatRecordService.updateMetadata(
+                        localConversationId,
+                        mergeOpencodeTurnMetadata(
+                            { provider: "opencode" },
+                            { status: "aborted", at: new Date().toISOString() },
+                        ),
+                    );
                 }
-
-                writer.write({
-                    type: "data-usage",
-                    data: {
-                        inputTokens: usage.inputTokens ?? 0,
-                        outputTokens: usage.outputTokens ?? 0,
-                        totalTokens: usage.totalTokens ?? 0,
-                        inputTokenDetails: usage.inputTokenDetails,
-                        outputTokenDetails: usage.outputTokenDetails,
-                        reasoningTokens: usage.reasoningTokens,
-                        cachedInputTokens: usage.cachedInputTokens,
-                        raw: usage.raw,
-                        userConsumedPower,
-                    },
-                });
-
-                const toolCallParts = Array.from(toolParts.values());
-                const reasoningParts = partRouter.getPersistedReasoningParts().map((part) => ({
-                    ...part,
-                    text: sensitiveWordFilter.filterText(part.text),
-                }));
-                const filteredFullText = sensitiveWordFilter.filterText(partRouter.fullText);
-                const responseParts: any[] = [...reasoningParts, ...toolCallParts];
-                if (
-                    partRouter.fullText ||
-                    (toolCallParts.length === 0 && reasoningParts.length === 0)
-                ) {
-                    responseParts.push({ type: "text", text: filteredFullText });
-                }
-                if (htmlArtifact) {
-                    responseParts.push({
-                        type: "data-artifact",
-                        data: htmlArtifact,
-                    });
-                }
-
-                const responseMessage: UIMessage = {
-                    id: assistantMessageId,
-                    role: "assistant",
-                    parts: responseParts as UIMessage["parts"],
-                };
-
-                if (saveConversation && localConversationId) {
-                    await this.agentChatRecordService.updateMetadata(localConversationId, {
-                        provider: "opencode",
-                        opencodeSessionId,
-                        artifactRoot,
-                        lastHtmlArtifact: htmlArtifact,
-                    });
-
-                    // Persist before finish so client onFinish / reopen can load DB rows.
-                    await this.saveMessages({
-                        conversationId: localConversationId,
-                        params,
-                        writer,
-                        lastUser: lastUserMessage,
-                        savedUserMessageId: earlySavedUserMessageId,
-                        responseMessage,
-                        usage,
-                        userConsumedPower,
-                        metadata: {
-                            provider: "opencode",
-                            opencodeSessionId,
-                            artifactRoot,
-                            htmlArtifact,
-                            toolCalls: toolCallParts,
-                        },
-                    });
-                }
-
-                // Must carry conversationId: AI SDK useChat shares onFinish via
-                // callbacksRef, so the client cannot trust chatSessionKey to
-                // clear the correct sidebar "generating" badge.
-                if (localConversationId) {
-                    writer.write({
-                        type: "data-stream-complete",
-                        data: localConversationId,
-                        transient: true,
-                    } as any);
-                }
-
-                writer.write({ type: "finish-step" });
-                writer.write({
-                    type: "finish",
-                    finishReason: params.abortSignal?.aborted
-                        ? "stop"
-                        : streamError
-                          ? "error"
-                          : "stop",
-                });
+                throw error;
+            }
             },
             onError: (error) => {
                 const message = error instanceof Error ? error.message : String(error);

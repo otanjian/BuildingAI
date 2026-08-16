@@ -118,3 +118,4 @@ extensions/**/.nitro/
 # OS files
 .DS_Store
 **/.DS_Store
+.superpowers/

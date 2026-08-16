@@ -188,6 +188,13 @@ export function usePublicAgentAssistant(args: {
     navigate(`/agents/${agentId}/${accessToken}`);
   }, [navigate, agentId, accessToken]);
 
+  const pollWhileRunning = Boolean(
+    conversations?.some(
+      (c) =>
+        c.id === conversationIdForMessageOps && c.opencodeTurnStatus === "running",
+    ),
+  );
+
   const { isLoadingMessages, isLoadingMoreMessages, hasMoreMessages, loadMoreMessages } =
     usePublicAgentMessagesPaging({
       agentId,
@@ -206,6 +213,7 @@ export function usePublicAgentAssistant(args: {
         streamMessages.length === 0 &&
         !editInProgressRef.current,
       ),
+      pollWhileRunning,
       onLoadError: handleMessagesLoadError,
     });
 
@@ -252,8 +260,10 @@ export function usePublicAgentAssistant(args: {
   );
 
   const assistantAvatar = useMemo(() => {
-    if (!agent?.chatAvatarEnabled) return undefined;
-    return agent?.chatAvatar?.trim() ? agent?.chatAvatar : (agent?.avatar ?? undefined);
+    if (agent?.chatAvatarEnabled) {
+      return agent?.chatAvatar?.trim() ? agent.chatAvatar : (agent?.avatar ?? undefined);
+    }
+    return agent?.avatar ?? undefined;
   }, [agent?.chatAvatar, agent?.avatar, agent?.chatAvatarEnabled]);
 
   const voiceConfig = useMemo(

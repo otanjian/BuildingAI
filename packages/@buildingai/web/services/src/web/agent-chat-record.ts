@@ -123,6 +123,13 @@ export function useAgentConversationsQuery(
         queryKey: [...CONVERSATIONS_KEY, agentId ?? "", params],
         queryFn: () => listAgentConversations(agentId!, params),
         enabled: !!agentId && options?.enabled !== false,
+        refetchInterval: (query) => {
+            const items = (query.state.data as { items?: AgentChatRecordItem[] } | undefined)?.items;
+            if (!items?.length) return false;
+            return items.some((item) => item.metadata?.opencodeTurnStatus === "running")
+                ? 4000
+                : false;
+        },
     });
 }
 

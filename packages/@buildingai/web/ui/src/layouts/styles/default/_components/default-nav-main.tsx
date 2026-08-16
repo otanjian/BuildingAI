@@ -78,6 +78,10 @@ import {
   TIME_GROUP_LABELS,
   type TimeGroup,
 } from "../utils/conversation-group";
+import {
+  agentHistoryAgentNameClassName,
+  resolveAgentHistoryTitleDisplay,
+} from "./agent-history-title";
 
 interface NavSubItem {
   id: string;
@@ -201,6 +205,8 @@ function HistoryCommandItem({
     [handleSaveRename, handleCancel],
   );
 
+  const titleDisplay = resolveAgentHistoryTitleDisplay({ title, agentName });
+
   return (
     <CommandItem className="h-9" value={id} onSelect={handleSelect}>
       {isEditing ? (
@@ -213,11 +219,19 @@ function HistoryCommandItem({
           autoFocus
         />
       ) : (
-        <span className="line-clamp-1 flex-1">
-          {agentName ? (
-            <span className="text-muted-foreground mr-1 text-xs font-normal">{agentName}</span>
+        <span className="line-clamp-1 flex-1" title={titleDisplay.accessibleLabel}>
+          {titleDisplay.hasAgentName ? (
+            <>
+              <span className="sr-only">{titleDisplay.agentName} </span>
+              <span
+                aria-hidden
+                className={agentHistoryAgentNameClassName("command-item")}
+              >
+                {titleDisplay.agentName}
+              </span>
+            </>
           ) : null}
-          {title}
+          {titleDisplay.title}
         </span>
       )}
       <CommandShortcut>
@@ -415,11 +429,21 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
     ],
   );
 
+  const titleDisplay = resolveAgentHistoryTitleDisplay({
+    title: subItem.title,
+    agentName: isAgent ? subItem.agentName : undefined,
+  });
+
   return (
     <>
       <SidebarMenuSubItem>
         <SidebarMenuSubButton asChild isActive={isActive} className="h-9">
-          <Link to={subItem.path || ""} className="flex items-center justify-between">
+          <Link
+            to={subItem.path || ""}
+            className="flex items-center justify-between"
+            aria-label={titleDisplay.accessibleLabel}
+            title={titleDisplay.accessibleLabel}
+          >
             <span
               className={cn(
                 "line-clamp-1",
@@ -427,12 +451,18 @@ function ConversationSubItem({ subItem, isActive }: { subItem: NavSubItem; isAct
                 { "font-bold": isActive },
               )}
             >
-              {isAgent && subItem.agentName ? (
-                <span className="text-muted-foreground mr-1 text-xs font-normal">
-                  {subItem.agentName}
-                </span>
+              {titleDisplay.hasAgentName ? (
+                <>
+                  <span className="sr-only">{titleDisplay.agentName} </span>
+                  <span
+                    aria-hidden
+                    className={agentHistoryAgentNameClassName("menu-sub-item")}
+                  >
+                    {titleDisplay.agentName}
+                  </span>
+                </>
               ) : null}
-              {subItem.title}
+              {titleDisplay.title}
             </span>
           </Link>
         </SidebarMenuSubButton>

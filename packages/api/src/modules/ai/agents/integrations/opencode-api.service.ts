@@ -25,6 +25,19 @@ export interface OpencodeSession {
     title?: string;
 }
 
+export type OpencodeFileNode = {
+    name: string;
+    path: string;
+    type: "file" | "directory";
+    ignored?: boolean;
+};
+
+export type OpencodeFileContent = {
+    path: string;
+    content: string;
+    encoding?: string;
+};
+
 export type OpencodeSseHandler = (event: {
     type: string;
     properties?: Record<string, any>;
@@ -177,6 +190,137 @@ export class OpencodeApiService {
             const text = await response.text();
             this.logger.warn(`OpenCode abort failed: ${response.status} ${text}`);
         }
+    }
+
+    /**
+     * List messages for an OpenCode session (`GET /session/:id/message`).
+     */
+    async listSessionMessages(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        sessionId: string;
+    }): Promise<
+        Array<{
+            info?: {
+                id?: string;
+                role?: string;
+                finish?: string | null;
+                error?: unknown;
+                time?: { created?: number; updated?: number };
+            };
+            parts?: Array<Record<string, unknown>>;
+        }>
+    > {
+        const normalized = this.normalizeConfig(params.config);
+        const response = await this.request(
+            normalized,
+            `/session/${encodeURIComponent(params.sessionId)}/message`,
+            { method: "GET" },
+        );
+        if (!response.ok) {
+            const text = await response.text();
+            throw HttpErrorFactory.badRequest(
+                `OpenCode list session messages failed: ${response.status} ${text}`,
+            );
+        }
+        const body = (await response.json()) as unknown;
+        if (!Array.isArray(body)) {
+            throw HttpErrorFactory.badRequest(
+                "OpenCode list session messages returned unexpected payload",
+            );
+        }
+        return body as Array<{
+            info?: {
+                id?: string;
+                role?: string;
+                finish?: string | null;
+                error?: unknown;
+                time?: { created?: number; updated?: number };
+            };
+            parts?: Array<Record<string, unknown>>;
+        }>;
+    }
+
+    /**
+     * List files/directories under a workspace-relative path via OpenCode `GET /file`.
+     */
+    async listFiles(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        path: string;
+    }): Promise<OpencodeFileNode[]> {
+        const normalized = this.normalizeConfig(params.config);
+        const listPath = params.path?.trim() || ".";
+        const response = await this.request(
+            normalized,
+            `/file?path=${encodeURIComponent(listPath)}`,
+            { method: "GET" },
+        );
+        if (!response.ok) {
+            const text = await response.text();
+            throw HttpErrorFactory.badRequest(
+                `OpenCode file list failed: ${response.status} ${text}`,
+            );
+        }
+        const body = (await response.json()) as unknown;
+        if (!Array.isArray(body)) {
+            throw HttpErrorFactory.badRequest("OpenCode file list returned unexpected payload");
+        }
+        return body.map((item) => this.normalizeFileNode(item));
+    }
+
+    /**
+     * Read file content via OpenCode `GET /file/content`.
+     */
+    async readFileContent(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        path: string;
+    }): Promise<OpencodeFileContent> {
+        const normalized = this.normalizeConfig(params.config);
+        const filePath = params.path?.trim();
+        if (!filePath || filePath === "." || filePath === "/") {
+            throw HttpErrorFactory.badRequest("File path is required");
+        }
+        const response = await this.request(
+            normalized,
+            `/file/content?path=${encodeURIComponent(filePath)}`,
+            { method: "GET" },
+        );
+        if (!response.ok) {
+            const text = await response.text();
+            throw HttpErrorFactory.badRequest(
+                `OpenCode file content failed: ${response.status} ${text}`,
+            );
+        }
+        const body = (await response.json()) as Record<string, unknown>;
+        const content =
+            typeof body.content === "string"
+                ? body.content
+                : typeof body.text === "string"
+                  ? body.text
+                  : null;
+        if (content === null) {
+            throw HttpErrorFactory.badRequest("Unsupported or binary file content");
+        }
+        return {
+            path: typeof body.path === "string" ? body.path : filePath,
+            content,
+            encoding: typeof body.encoding === "string" ? body.encoding : undefined,
+        };
+    }
+
+    private normalizeFileNode(item: unknown): OpencodeFileNode {
+        const row = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+        const typeRaw = String(row.type ?? "file").toLowerCase();
+        const type = typeRaw === "directory" || typeRaw === "dir" ? "directory" : "file";
+        const entryPath = String(row.path ?? row.name ?? "").replace(/\/+$/, "");
+        const name =
+            String(row.name ?? "").trim() ||
+            (entryPath ? entryPath.split("/").filter(Boolean).pop() ?? entryPath : "");
+        return {
+            name,
+            path: entryPath,
+            type,
+            ignored: Boolean(row.ignored),
+        };
     }
 
     /**

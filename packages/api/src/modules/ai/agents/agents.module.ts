@@ -58,6 +58,9 @@ import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
+import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
+import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
+import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
 @Module({
     imports: [
         TypeOrmModule.forFeature([
@@ -120,6 +123,9 @@ import { OpencodeArtifactService } from "./services/opencode-artifact.service";
         OpencodeApiService,
         OpencodeChatProvider,
         OpencodeArtifactService,
+        OpencodeSessionRecoverService,
+        OpencodeTurnRunnerService,
+        OpencodeWorkspaceService,
         // Shared services (same pattern as AiChatModule)
         AiModelService,
         AiProviderService,
