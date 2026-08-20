@@ -90,7 +90,8 @@ function makeHarness(options: {
         }),
         getTerminalNoop: jest.fn(async () => ({ changed: false, turn })),
     };
-    return { turn, saved, manager, dataSource, billing, records, turns };
+    const telemetry = { increment: jest.fn() };
+    return { turn, saved, manager, dataSource, billing, records, turns, telemetry };
 }
 
 function createService(module: Record<string, any>, harness: ReturnType<typeof makeHarness>) {
@@ -99,6 +100,7 @@ function createService(module: Record<string, any>, harness: ReturnType<typeof m
         harness.billing,
         harness.records,
         harness.turns,
+        harness.telemetry,
     );
 }
 
@@ -213,6 +215,10 @@ describe("OpencodeTurnTerminalCommitService", () => {
             createService(module, billingFailure).commit(successInput()),
         ).rejects.toThrow("billing database offline");
         expect(billingFailure.turns.transition).not.toHaveBeenCalled();
+        expect(billingFailure.telemetry.increment).toHaveBeenCalledWith(
+            "commit_retry",
+            expect.objectContaining({ turnId: TURN_ID, outcome: "completed" }),
+        );
 
         const saveFailure = makeHarness({ saveFailure: new Error("save failed") });
         await expect(createService(module, saveFailure).commit(successInput())).rejects.toThrow(

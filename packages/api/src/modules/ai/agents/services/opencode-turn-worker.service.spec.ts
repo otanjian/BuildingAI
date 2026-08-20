@@ -111,7 +111,8 @@ function makeHarness(options: {
             return currentTurn;
         }),
     };
-    return { currentTurn, manager, dataSource, api, mutations, baselines, commits, turns };
+    const telemetry = { observe: jest.fn() };
+    return { currentTurn, manager, dataSource, api, mutations, baselines, commits, turns, telemetry };
 }
 
 function createService(module: Record<string, any>, harness: ReturnType<typeof makeHarness>) {
@@ -122,6 +123,7 @@ function createService(module: Record<string, any>, harness: ReturnType<typeof m
         harness.baselines,
         harness.commits,
         harness.turns,
+        harness.telemetry,
     );
 }
 
@@ -193,6 +195,11 @@ describe("OpencodeTurnWorkerService", () => {
             createService(module, harness).runStep({ turnId: TURN_ID, leaseToken: LEASE_TOKEN }),
         ).resolves.toMatchObject({ action: "continue", activityChanged: false });
         expect(harness.turns.recordActiveEvidence).not.toHaveBeenCalled();
+        expect(harness.telemetry.observe).toHaveBeenCalledWith(
+            "status_latency_ms",
+            expect.any(Number),
+            expect.objectContaining({ turnId: TURN_ID, outcome: "busy" }),
+        );
     });
 
     it("preserves a question failure intent when later remote evidence changes", async () => {

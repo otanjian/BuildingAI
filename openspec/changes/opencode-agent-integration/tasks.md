@@ -28,5 +28,8 @@
 ## 5. Workspace guidance & verification
 
 - [x] 5.1 Add or update workspace guidance (e.g. AGENTS snippet / agent default prompt) so reports write under `artifacts/{conversationId}/`
-- [ ] 5.2 End-to-end manual verification: new chat → stream tools → HTML iframe; resume history; second conversation isolated artifacts
+- [ ] 5.2 Superseded OpenCode verification: durable tools/artifact/history/isolation smoke is tracked by `opencode-turn-consistency` 9.4/9.5
 - [x] 5.3 Run targeted lint/typecheck/tests for touched packages; fix regressions
+> Ownership reconciliation (2026-08-21): deterministic per-turn BuildingAI
+> projection, lifecycle, and remaining OpenCode E2E verification are superseded by
+> `opencode-turn-consistency`. Base agent configuration and artifact APIs remain here.

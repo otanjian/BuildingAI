@@ -11,7 +11,7 @@ import { DataSource, In, type Repository } from "@buildingai/db/typeorm";
 import { UserDictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { AgentConfigService } from "@modules/config/services/agent-config.service";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { createIdGenerator } from "ai";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -28,6 +28,7 @@ import {
     type OpencodeTurnCommand,
 } from "../utils/opencode-turn-command";
 import { AgentsService } from "./agents.service";
+import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 
 const generateOpencodeMessageId = createIdGenerator({ prefix: "msg", size: 24 });
 
@@ -78,6 +79,8 @@ export class OpencodeTurnAcceptanceService {
         private readonly agentBillingHandler: AgentBillingHandler,
         private readonly opencodeApiService: OpencodeApiService,
         private readonly userDictService: UserDictService,
+        @Optional()
+        private readonly telemetry?: OpencodeTurnTelemetryService,
     ) {}
 
     hashRequest(input: OpencodeTurnAcceptanceInput): string {
@@ -135,6 +138,7 @@ export class OpencodeTurnAcceptanceService {
                     },
                 });
                 if (active) {
+                    this.recordAcceptanceConflict(input, "active-conversation");
                     throw HttpErrorFactory.conflict(
                         `Conversation already has active turn ${active.id}`,
                     );
@@ -154,6 +158,7 @@ export class OpencodeTurnAcceptanceService {
                 throw HttpErrorFactory.badRequest("Only OpenCode agents accept durable turns");
             }
             if (!isOpencodeDurableTurnsEnabled(agent)) {
+                this.recordAcceptanceConflict(input, "rollout-disabled");
                 throw HttpErrorFactory.conflict("OpenCode durable turns are disabled for this agent");
             }
 
@@ -409,6 +414,7 @@ export class OpencodeTurnAcceptanceService {
             turn.conversation.agentId !== input.agentId ||
             turn.requestHash !== requestHash
         ) {
+            this.recordAcceptanceConflict(input, "turn-id-reuse");
             throw HttpErrorFactory.conflict("OpenCode turn identifier conflicts with another command");
         }
         return {
@@ -417,6 +423,18 @@ export class OpencodeTurnAcceptanceService {
             status: turn.status,
             duplicate: true,
         };
+    }
+
+    private recordAcceptanceConflict(
+        input: Pick<OpencodeTurnAcceptanceInput, "turnId" | "conversationId" | "agentId">,
+        reason: string,
+    ): void {
+        this.telemetry?.increment("acceptance_conflict", {
+            turnId: input.turnId,
+            conversationId: input.conversationId,
+            agentId: input.agentId,
+            reason,
+        });
     }
 
     private assertConversationOwner(

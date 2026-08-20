@@ -1,6 +1,8 @@
 import { InjectDataSource } from "@buildingai/db/@nestjs/typeorm";
 import { DataSource } from "@buildingai/db/typeorm";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
+
+import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 
 export type OpencodeTurnInvariantAudit = {
     terminalAssistantViolations: number;
@@ -11,7 +13,10 @@ export type OpencodeTurnInvariantAudit = {
 
 @Injectable()
 export class OpencodeTurnInvariantService {
-    constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+    constructor(
+        @InjectDataSource() private readonly dataSource: DataSource,
+        @Optional() private readonly telemetry?: OpencodeTurnTelemetryService,
+    ) {}
 
     async audit(): Promise<OpencodeTurnInvariantAudit> {
         const [terminalRows, billedRows, duplicateRows] = await Promise.all([
@@ -58,7 +63,13 @@ export class OpencodeTurnInvariantService {
             billedCompletedWithoutAssistant: this.count(billedRows),
             duplicateDeductions: this.count(duplicateRows),
         };
-        return { ...result, healthy: Object.values(result).every((value) => value === 0) };
+        const healthy = Object.values(result).every((value) => value === 0);
+        this.telemetry?.gauge(
+            "billing_invariant_violation",
+            Object.values(result).reduce((sum, value) => sum + value, 0),
+            { ...result, healthy },
+        );
+        return { ...result, healthy };
     }
 
     private count(rows: Array<{ count?: string | number }>): number {

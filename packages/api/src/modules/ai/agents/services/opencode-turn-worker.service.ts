@@ -1,7 +1,7 @@
 import { InjectDataSource } from "@buildingai/db/@nestjs/typeorm";
 import { AgentOpencodeTurn } from "@buildingai/db/entities";
 import { DataSource } from "@buildingai/db/typeorm";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -19,6 +19,7 @@ import { buildOpencodeTurnProjection } from "./opencode-turn-projection";
 import { OpencodeTurnMutationCoordinator } from "./opencode-turn-mutation-coordinator";
 import { OpencodeTurnRepository } from "./opencode-turn.repository";
 import { OpencodeTurnTerminalCommitService } from "./opencode-turn-terminal-commit";
+import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 
 const DEFAULT_READ_TIMEOUT_MS = 5_000;
 const DEFAULT_INACTIVITY_TIMEOUT_MS = 60_000;
@@ -34,6 +35,8 @@ export class OpencodeTurnWorkerService {
         private readonly artifactBaselineService: OpencodeArtifactBaselineService,
         private readonly terminalCommitService: OpencodeTurnTerminalCommitService,
         private readonly turnRepository: OpencodeTurnRepository,
+        @Optional()
+        private readonly telemetry?: OpencodeTurnTelemetryService,
     ) {}
 
     async runStep(input: {
@@ -68,12 +71,28 @@ export class OpencodeTurnWorkerService {
         if (!sessionId) throw new Error("Active OpenCode turn has no mapped session");
         const config = turn.conversation.agent?.thirdPartyIntegration;
         const timeoutMs = input.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
-        const remoteStatus = await this.opencodeApiService.getSessionStatus({
-            config,
-            sessionId,
-            signal: input.signal,
-            timeoutMs,
-        });
+        const statusStartedAt = Date.now();
+        let remoteStatus: OpencodeSessionStatus;
+        try {
+            remoteStatus = await this.opencodeApiService.getSessionStatus({
+                config,
+                sessionId,
+                signal: input.signal,
+                timeoutMs,
+            });
+            this.telemetry?.observe("status_latency_ms", Date.now() - statusStartedAt, {
+                turnId: turn.id,
+                conversationId: turn.conversationId,
+                outcome: remoteStatus.type,
+            });
+        } catch (error) {
+            this.telemetry?.observe("status_latency_ms", Date.now() - statusStartedAt, {
+                turnId: turn.id,
+                conversationId: turn.conversationId,
+                outcome: (error as { kind?: string }).kind ?? "error",
+            });
+            throw error;
+        }
         const sessionUpdatedAt = await this.opencodeApiService.getSessionUpdatedAt({
             config,
             sessionId,

@@ -7,11 +7,12 @@ import {
 } from "@buildingai/db/entities";
 import { DataSource } from "@buildingai/db/typeorm";
 import type { ChatMessageUsage, ChatUIMessage } from "@buildingai/types";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import { AgentBillingHandler } from "../handlers/agent-billing";
 import { AgentChatRecordService } from "./agent-chat-record.service";
 import { OpencodeTurnRepository } from "./opencode-turn.repository";
+import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 
 type TerminalOutcome = Extract<OpencodeTurnStatus, "completed" | "cancelled" | "failed">;
 
@@ -42,6 +43,8 @@ export class OpencodeTurnTerminalCommitService {
         private readonly billingHandler: AgentBillingHandler,
         private readonly chatRecordService: AgentChatRecordService,
         private readonly turnRepository: OpencodeTurnRepository,
+        @Optional()
+        private readonly telemetry?: OpencodeTurnTelemetryService,
     ) {}
 
     async commit(
@@ -50,7 +53,14 @@ export class OpencodeTurnTerminalCommitService {
         try {
             return await this.commitTransaction(input);
         } catch (error) {
-            if (!this.isInsufficientBalance(error)) throw error;
+            if (!this.isInsufficientBalance(error)) {
+                this.telemetry?.increment("commit_retry", {
+                    turnId: input.turnId,
+                    outcome: input.outcome,
+                    errorKind: error instanceof Error ? error.name : "unknown",
+                });
+                throw error;
+            }
             return this.commitTransaction({
                 ...input,
                 outcome: "failed",

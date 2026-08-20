@@ -181,6 +181,7 @@ function makeHarness(options: {
     const userDictService = {
         getGroupValues: jest.fn(async () => ({ locale: "zh-CN" })),
     };
+    const telemetry = { increment: jest.fn() };
     return {
         saved,
         manager,
@@ -193,6 +194,7 @@ function makeHarness(options: {
         agentBillingHandler,
         opencodeApiService,
         userDictService,
+        telemetry,
     };
 }
 
@@ -206,6 +208,7 @@ function createService(module: Record<string, any>, harness: ReturnType<typeof m
         harness.agentBillingHandler,
         harness.opencodeApiService,
         harness.userDictService,
+        harness.telemetry,
     );
 }
 
@@ -407,6 +410,10 @@ describe("OpencodeTurnAcceptanceService", () => {
         });
         const service = createService(module, harness);
         await expect(service.accept(input())).rejects.toThrow(/active turn.*55555555/i);
+        expect(harness.telemetry.increment).toHaveBeenCalledWith(
+            "acceptance_conflict",
+            expect.objectContaining({ reason: "active-conversation", turnId: TURN_ID }),
+        );
         expect(harness.manager.save).not.toHaveBeenCalled();
         expect(harness.queryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
     });

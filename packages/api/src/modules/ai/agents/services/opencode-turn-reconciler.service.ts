@@ -3,6 +3,7 @@ import { DataSource } from "@buildingai/db/typeorm";
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from "@nestjs/common";
 
 import { OpencodeTurnLeaseLostError, OpencodeTurnLeaseRepository } from "./opencode-turn-lease.repository";
+import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 import { OpencodeTurnWorkerService } from "./opencode-turn-worker.service";
 
 export type OpencodeTurnWorkerOptions = {
@@ -33,6 +34,7 @@ export class OpencodeTurnReconcilerService implements OnModuleInit, OnModuleDest
         private readonly leaseRepository: OpencodeTurnLeaseRepository,
         private readonly worker: OpencodeTurnWorkerService,
         @Optional() options?: Partial<OpencodeTurnWorkerOptions>,
+        @Optional() private readonly telemetry?: OpencodeTurnTelemetryService,
     ) {
         this.options = {
             capacity: options?.capacity ?? Number(process.env.OPENCODE_TURN_WORKER_CAPACITY ?? 2),
@@ -60,6 +62,19 @@ export class OpencodeTurnReconcilerService implements OnModuleInit, OnModuleDest
 
     async tick(): Promise<void> {
         if (this.destroying || this.ticking) return;
+        try {
+            await this.telemetry?.refreshQueueMetrics(
+                this.dataSource.manager,
+                this.options.capacity,
+                this.inFlight.size,
+            );
+        } catch (error) {
+            this.logger.warn(
+                `OpenCode turn metrics refresh failed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
         const freeSlots = this.options.capacity - this.inFlight.size;
         if (freeSlots <= 0) return;
         this.ticking = true;
@@ -71,6 +86,17 @@ export class OpencodeTurnReconcilerService implements OnModuleInit, OnModuleDest
                     leaseDurationMs: this.options.leaseDurationMs,
                 }),
             );
+            if (claims.length > 0) {
+                this.telemetry?.increment(
+                    "recovery_claim",
+                    {
+                        claimCount: claims.length,
+                        workerCapacity: this.options.capacity,
+                        inFlight: this.inFlight.size,
+                    },
+                    claims.length,
+                );
+            }
             if (this.destroying) {
                 await Promise.allSettled(
                     claims.map((claim) =>

@@ -128,6 +128,7 @@ function makeHarness(
             return { changed: true, turn };
         }),
     };
+    const telemetry = { increment: jest.fn() };
     return {
         turn,
         conversation,
@@ -138,6 +139,7 @@ function makeHarness(
         api,
         baseline,
         turnRepository,
+        telemetry,
     };
 }
 
@@ -148,6 +150,7 @@ function createService(module: Record<string, any>, harness: ReturnType<typeof m
         harness.api,
         harness.baseline,
         harness.turnRepository,
+        harness.telemetry,
     );
 }
 
@@ -238,6 +241,10 @@ describe("OpencodeTurnMutationCoordinator", () => {
                 leaseToken: LEASE_TOKEN,
             }),
         ).resolves.toMatchObject({ kind: "observing", message: remoteMessage });
+        expect(harness.telemetry.increment).toHaveBeenCalledWith(
+            "recovery_claim",
+            expect.objectContaining({ recovery: "correlated-remote-message", turnId: TURN_ID }),
+        );
         expect(harness.api.promptAsync).not.toHaveBeenCalled();
     });
 
@@ -277,6 +284,10 @@ describe("OpencodeTurnMutationCoordinator", () => {
                 ambiguityWindowMs: 10_000,
             }),
         ).resolves.toMatchObject({ kind: "waiting", sessionId: "ses_existing" });
+        expect(harness.telemetry.increment).toHaveBeenCalledWith(
+            "dispatch_ambiguity",
+            expect.objectContaining({ turnId: TURN_ID, ambiguityAgeMs: expect.any(Number) }),
+        );
         expect(harness.api.promptAsync).not.toHaveBeenCalled();
     });
 

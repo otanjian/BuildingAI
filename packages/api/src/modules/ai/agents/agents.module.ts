@@ -70,6 +70,7 @@ import { OpencodeTurnMutationCoordinator } from "./services/opencode-turn-mutati
 import { OpencodeTurnReconcilerService } from "./services/opencode-turn-reconciler.service";
 import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
 import { OpencodeTurnTerminalCommitService } from "./services/opencode-turn-terminal-commit";
+import { OpencodeTurnTelemetryService } from "./services/opencode-turn-telemetry.service";
 import { OpencodeTurnWorkerService } from "./services/opencode-turn-worker.service";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
@@ -148,6 +149,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeTurnMutationCoordinator,
         OpencodeTurnReconcilerService,
         OpencodeTurnTerminalCommitService,
+        OpencodeTurnTelemetryService,
         OpencodeTurnWorkerService,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,

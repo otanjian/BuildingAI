@@ -5,7 +5,7 @@ import {
     OPENCODE_TURN_ACTIVE_STATUSES,
 } from "@buildingai/db/entities";
 import { DataSource, In, Not, type EntityManager, type QueryRunner } from "@buildingai/db/typeorm";
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import {
     OpencodeApiService,
@@ -18,6 +18,7 @@ import {
     OpencodeTurnLeaseLostError,
     OpencodeTurnRepository,
 } from "./opencode-turn.repository";
+import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 
 const DEFAULT_MUTATION_TIMEOUT_MS = 5_000;
 const DEFAULT_AMBIGUITY_WINDOW_MS = 5_000;
@@ -53,6 +54,8 @@ export class OpencodeTurnMutationCoordinator {
         private readonly opencodeApiService: OpencodeApiService,
         private readonly artifactBaselineService: OpencodeArtifactBaselineService,
         private readonly turnRepository: OpencodeTurnRepository,
+        @Optional()
+        private readonly telemetry?: OpencodeTurnTelemetryService,
     ) {}
 
     async dispatch(input: {
@@ -122,6 +125,13 @@ export class OpencodeTurnMutationCoordinator {
                 timeoutMs: input.mutationTimeoutMs ?? DEFAULT_MUTATION_TIMEOUT_MS,
             });
             if (remoteMessage) {
+                if (turn.startedAt) {
+                    this.telemetry?.increment("recovery_claim", {
+                        turnId: turn.id,
+                        conversationId: turn.conversationId,
+                        recovery: "correlated-remote-message",
+                    });
+                }
                 return { kind: "observing", sessionId, message: remoteMessage };
             }
 
@@ -131,6 +141,11 @@ export class OpencodeTurnMutationCoordinator {
                 turn.startedAt &&
                 now.getTime() - turn.startedAt.getTime() < ambiguityWindowMs
             ) {
+                this.telemetry?.increment("dispatch_ambiguity", {
+                    turnId: turn.id,
+                    conversationId: turn.conversationId,
+                    ambiguityAgeMs: now.getTime() - turn.startedAt.getTime(),
+                });
                 return {
                     kind: "waiting",
                     sessionId,
