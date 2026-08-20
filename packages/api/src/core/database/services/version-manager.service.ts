@@ -84,8 +84,10 @@ export class VersionManagerService implements OnModuleInit {
             TerminalLogger.log("System Upgrade", "Starting upgrade process...");
 
             // Execute upgrade for each version sequentially
+            let previousVersion = versionInfo.installed;
             for (const version of versionInfo.upgradeVersions) {
-                await this.executeVersionUpgrade(version);
+                await this.executeVersionUpgrade(previousVersion, version);
+                previousVersion = version;
             }
 
             this.logger.log(`✅ Upgrade completed: ${versionInfo.current}`);
@@ -105,7 +107,7 @@ export class VersionManagerService implements OnModuleInit {
      * 2. Execute upgrade script for this version
      * 3. Write version file to mark completion
      */
-    private async executeVersionUpgrade(version: string): Promise<void> {
+    private async executeVersionUpgrade(fromVersion: string | null, version: string): Promise<void> {
         try {
             this.logger.log(`\n${"=".repeat(60)}`);
             this.logger.log(`🔄 Upgrading to version: ${version}`);
@@ -113,7 +115,7 @@ export class VersionManagerService implements OnModuleInit {
             TerminalLogger.log("Version Upgrade", `Upgrading to ${version}...`);
 
             // Step 1: Execute database migrations for this version
-            await this.executeMigrationForVersion(version);
+            await this.executeMigrationForVersion(fromVersion, version);
 
             // Step 2: Execute upgrade script for this version
             await this.executeUpgradeScriptForVersion(version);
@@ -133,11 +135,14 @@ export class VersionManagerService implements OnModuleInit {
     /**
      * Execute database migration for a single version
      */
-    private async executeMigrationForVersion(version: string): Promise<void> {
+    private async executeMigrationForVersion(
+        fromVersion: string | null,
+        version: string,
+    ): Promise<void> {
         try {
             this.logger.log(`📦 Executing database migrations for ${version}...`);
 
-            await this.migrationRunner.runCrossVersionMigrations([version]);
+            await this.migrationRunner.runMigrations(fromVersion, version);
 
             this.logger.log(`✅ Database migrations for ${version} completed`);
         } catch (error) {
