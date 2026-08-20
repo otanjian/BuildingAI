@@ -45,12 +45,12 @@
 
 ## 6. Turn-scoped control and pure history
 
-- [ ] 6.1 Add Stop tests for pre-dispatch, running, committing, ambiguous abort, repeated, terminal, stale, delayed-old-turn, and anonymous-owner requests
-- [ ] 6.2 Implement exact-turn cancellation recording, authorized `cancelRequested` status, and lease-owner abort/settlement before terminal cancellation; remove conversation-only abort ownership
-- [ ] 6.3 Add interaction tests proving automatic permission handling, exact-session question rejection, duplicate-observation idempotency, and one visible failed outcome
-- [ ] 6.4 Add controller tests proving conversation/message GETs perform only BuildingAI reads while OpenCode is slow, unavailable, busy, or waiting on interaction
-- [ ] 6.5 Remove synchronous recovery, permission, question, and abort side effects from history GET and route recovery through the reconciler
-- [ ] 6.6 Add and implement archive/delete guards proving archive is visibility-only and active-turn deletion is rejected until terminal
+- [x] 6.1 Add Stop tests for pre-dispatch, running, committing, ambiguous abort, repeated, terminal, stale, delayed-old-turn, and anonymous-owner requests
+- [x] 6.2 Implement exact-turn cancellation recording, authorized `cancelRequested` status, and lease-owner abort/settlement before terminal cancellation; remove conversation-only abort ownership
+- [x] 6.3 Add interaction tests proving automatic permission handling, exact-session question rejection, duplicate-observation idempotency, and one visible failed outcome
+- [x] 6.4 Add controller tests proving conversation/message GETs perform only BuildingAI reads while OpenCode is slow, unavailable, busy, or waiting on interaction
+- [x] 6.5 Remove synchronous recovery, permission, question, and abort side effects from history GET and route recovery through the reconciler
+- [x] 6.6 Add and implement archive/delete guards proving archive is visibility-only and active-turn deletion is rejected until terminal
 
 ## 7. Deterministic OpenCode client
 

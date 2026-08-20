@@ -59,12 +59,12 @@ export function decideOpencodeTurnObservation(
     const activityChanged = evidenceChanged(input.previousEvidence, input.currentEvidence);
 
     const permissionId = input.pendingPermissionIds[0];
-    if (permissionId) {
+    if (permissionId && activityChanged) {
         return { kind: "reply-permission", activityChanged: true, requestId: permissionId };
     }
 
     const questionId = input.pendingQuestionIds[0];
-    if (questionId) {
+    if (questionId && activityChanged) {
         return {
             kind: "reject-question",
             activityChanged: true,

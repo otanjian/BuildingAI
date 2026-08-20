@@ -5,6 +5,8 @@ import {
     type AgentChatMessage,
     AgentChatMessageFeedback,
     AgentChatRecord,
+    AgentOpencodeTurn,
+    OPENCODE_TURN_ACTIVE_STATUSES,
     User,
 } from "@buildingai/db/entities";
 import { In, Repository, type EntityManager } from "@buildingai/db/typeorm";
@@ -490,6 +492,12 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
     }
 
     async softDelete(conversationId: string, userId: string | null): Promise<void> {
+        const activeTurn = await this.findActiveOpencodeTurn(conversationId);
+        if (activeTurn) {
+            throw HttpErrorFactory.conflict(
+                `Conversation has active OpenCode turn ${activeTurn.id}`,
+            );
+        }
         const whereCondition: any = { id: conversationId, isDeleted: false };
         if (userId) {
             whereCondition.userId = userId;
@@ -501,6 +509,16 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         if (result.affected === 0) {
             throw HttpErrorFactory.notFound("对话不存在或无权限删除");
         }
+    }
+
+    async findActiveOpencodeTurn(conversationId: string) {
+        return this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).findOne({
+            where: {
+                conversationId,
+                status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
+            },
+            select: { id: true, status: true },
+        });
     }
 
     /**

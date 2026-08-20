@@ -135,6 +135,11 @@ describe("OpencodeTurnWebController", () => {
         const acceptance = {
             accept: jest.fn(async (value) => ({ ...value, status: "accepted" })),
             getStatus: jest.fn(async (value) => ({ ...value, status: "running" })),
+            requestCancel: jest.fn(async (value) => ({
+                ...value,
+                status: "running",
+                cancelRequested: true,
+            })),
         };
         return {
             acceptance,
@@ -194,6 +199,13 @@ describe("OpencodeTurnWebController", () => {
             }),
         );
         expect(acceptance.getStatus).toHaveBeenCalledWith({
+            agentId: AGENT_ID,
+            turnId: TURN_ID,
+            userId: USER_ID,
+            anonymousIdentifier: "anonymous-owner",
+        });
+        await controller.stopTurn(AGENT_ID, TURN_ID, { id: USER_ID }, req);
+        expect(acceptance.requestCancel).toHaveBeenCalledWith({
             agentId: AGENT_ID,
             turnId: TURN_ID,
             userId: USER_ID,

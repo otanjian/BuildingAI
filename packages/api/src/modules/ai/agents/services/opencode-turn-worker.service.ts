@@ -159,8 +159,20 @@ export class OpencodeTurnWorkerService {
             cancelRequested: Boolean(turn.cancelRequestedAt),
         });
 
-        if (decision.activityChanged) {
-            await this.recordEvidence(turn, input.leaseToken, currentEvidenceHash, null, null);
+        const preserveControlIntent =
+            turn.errorCode !== "OPENCODE_FINAL_EVIDENCE_CHECK" && Boolean(turn.errorCode);
+        if (
+            decision.activityChanged &&
+            decision.kind !== "reply-permission" &&
+            decision.kind !== "reject-question"
+        ) {
+            await this.recordEvidence(
+                turn,
+                input.leaseToken,
+                currentEvidenceHash,
+                preserveControlIntent ? turn.errorCode : null,
+                preserveControlIntent ? turn.errorMessage : null,
+            );
         }
 
         switch (decision.kind) {
@@ -171,6 +183,13 @@ export class OpencodeTurnWorkerService {
                     requestId: decision.requestId,
                     signal: input.signal,
                 });
+                await this.recordEvidence(
+                    turn,
+                    input.leaseToken,
+                    currentEvidenceHash,
+                    preserveControlIntent ? turn.errorCode : null,
+                    preserveControlIntent ? turn.errorMessage : null,
+                );
                 return { action: decision.kind, activityChanged: true };
             case "reject-question":
                 await this.mutationCoordinator.rejectQuestion({

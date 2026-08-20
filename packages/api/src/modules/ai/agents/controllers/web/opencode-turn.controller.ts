@@ -62,6 +62,26 @@ export class OpencodeTurnWebController {
         });
     }
 
+    @Post(":id/chat/opencode-turns/:turnId/stop")
+    @AgentPublicAccess({
+        route: "opencode-turns/:turnId/stop",
+        targetPath: ":id/chat/opencode-turns/:turnId/stop",
+        method: "POST",
+    })
+    async stopTurn(
+        @Param("id", new ParseUUIDPipe({ version: "4" })) agentId: string,
+        @Param("turnId", new ParseUUIDPipe({ version: "4" })) turnId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ) {
+        return this.acceptanceService.requestCancel({
+            agentId,
+            turnId,
+            userId: playground.id,
+            anonymousIdentifier: this.extractAnonymousIdentifier(req),
+        });
+    }
+
     private extractAnonymousIdentifier(req: Request): string | undefined {
         const value = req.headers["x-anonymous-identifier"];
         return typeof value === "string" && value.trim() ? value.trim() : undefined;

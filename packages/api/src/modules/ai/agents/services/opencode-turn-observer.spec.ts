@@ -53,6 +53,20 @@ function observation(
                     : overrides.remoteStatus.type,
         };
     }
+    if (
+        (overrides.pendingPermissionIds || overrides.pendingQuestionIds) &&
+        !overrides.currentEvidence
+    ) {
+        merged.currentEvidence = {
+            ...merged.currentEvidence,
+            interactionFingerprint: [
+                ...(overrides.pendingPermissionIds ?? []).map((id) => `permission:${id}`),
+                ...(overrides.pendingQuestionIds ?? []).map((id) => `question:${id}`),
+            ]
+                .sort()
+                .join("|"),
+        };
+    }
     return merged;
 }
 
@@ -211,6 +225,24 @@ describe("decideOpencodeTurnObservation", () => {
             activityChanged: true,
             requestId: "per_1",
         });
+    });
+
+    it("does not repeat an interaction mutation for unchanged observed evidence", () => {
+        const currentEvidence = {
+            statusKey: "busy",
+            sessionUpdatedAt: 100,
+            messageFingerprint: "msg_user",
+            interactionFingerprint: "permission:per_1",
+        };
+        expect(
+            decideOpencodeTurnObservation(
+                observation({
+                    previousEvidence: currentEvidence,
+                    currentEvidence,
+                    pendingPermissionIds: ["per_1"],
+                }),
+            ),
+        ).toEqual({ kind: "continue", activityChanged: false });
     });
 
     it("rejects questions deterministically", () => {

@@ -39,7 +39,6 @@ import { AgentChatRecordService } from "../../services/agent-chat-record.service
 import { AgentVoiceService } from "../../services/agent-voice.service";
 import { AgentsService } from "../../services/agents.service";
 import { OpencodeArtifactService } from "../../services/opencode-artifact.service";
-import { OpencodeSessionRecoverService } from "../../services/opencode-session-recover.service";
 import { OpencodeWorkspaceService } from "../../services/opencode-workspace.service";
 import { OpencodeChatProvider } from "../../providers/opencode-chat.provider";
 
@@ -56,7 +55,6 @@ export class AgentChatWebController {
         private readonly opencodeArtifactService: OpencodeArtifactService,
         private readonly opencodeWorkspaceService: OpencodeWorkspaceService,
         private readonly opencodeChatProvider: OpencodeChatProvider,
-        private readonly opencodeSessionRecover: OpencodeSessionRecoverService,
     ) {}
 
     /**
@@ -417,15 +415,6 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
-        const agent = await this.agentsService.findOneById(agentId);
-        if (agent?.createMode === "opencode") {
-            await this.opencodeSessionRecover.recoverConversation({
-                agent,
-                conversationId,
-                userId: playground.id,
-                anonymousIdentifier,
-            });
-        }
         return this.agentChatMessageService.listConversationMessages(
             conversationId,
             query,
@@ -636,6 +625,12 @@ export class AgentChatWebController {
         if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权操作该对话");
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权操作该对话");
+        }
+        const activeTurn = await this.agentChatRecordService.findActiveOpencodeTurn(conversationId);
+        if (activeTurn) {
+            throw HttpErrorFactory.conflict(
+                `OpenCode turn ${activeTurn.id} requires the turn-scoped Stop endpoint`,
+            );
         }
         const agent = await this.agentsService.findOneById(agentId);
         if (!agent || agent.createMode !== "opencode") {

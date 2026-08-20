@@ -125,7 +125,10 @@ function makeHarness(options: {
         rollbackTransaction: jest.fn(async () => undefined),
         release: jest.fn(async () => undefined),
     };
-    const dataSource = { createQueryRunner: jest.fn(() => queryRunner) };
+    const dataSource = {
+        createQueryRunner: jest.fn(() => queryRunner),
+        transaction: jest.fn(async (callback: any) => callback(manager)),
+    };
     const turnRepository = {
         findOne: jest.fn(async () => options.fastTurn ?? null),
     };
@@ -448,5 +451,106 @@ describe("OpencodeTurnAcceptanceService", () => {
         });
         expect(status).not.toHaveProperty("dispatchSnapshot");
         expect(status).not.toHaveProperty("artifactBaseline");
+    });
+
+    it.each(["accepted", "running"])(
+        "records cancellation only for the exact %s turn",
+        async (status) => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness();
+        const active = existingTurn({ status });
+        harness.manager.findOne.mockResolvedValue(active);
+        const service = createService(module, harness);
+
+        await expect(
+            service.requestCancel({
+                agentId: AGENT_ID,
+                turnId: TURN_ID,
+                userId: USER_ID,
+            }),
+        ).resolves.toMatchObject({ status, cancelRequested: true });
+        expect(harness.manager.save).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ id: TURN_ID, cancelRequestedAt: expect.any(Date) }),
+        );
+        expect(harness.opencodeApiService.createSession).not.toHaveBeenCalled();
+        },
+    );
+
+    it("makes repeated Stop requests idempotent", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness();
+        const active = existingTurn({ status: "running" });
+        harness.manager.findOne.mockResolvedValue(active);
+        const service = createService(module, harness);
+
+        await service.requestCancel({ agentId: AGENT_ID, turnId: TURN_ID, userId: USER_ID });
+        await service.requestCancel({ agentId: AGENT_ID, turnId: TURN_ID, userId: USER_ID });
+        expect(harness.manager.save).toHaveBeenCalledTimes(1);
+        expect(active.cancelRequestedAt).toBeInstanceOf(Date);
+    });
+
+    it("authorizes anonymous Stop through both persisted owner identifiers", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness();
+        harness.manager.findOne.mockResolvedValue(
+            existingTurn({
+                conversation: conversation({ anonymousIdentifier: "anonymous-owner" }),
+            }),
+        );
+
+        await expect(
+            createService(module, harness).requestCancel({
+                agentId: AGENT_ID,
+                turnId: TURN_ID,
+                userId: USER_ID,
+                anonymousIdentifier: "anonymous-owner",
+            }),
+        ).resolves.toMatchObject({ cancelRequested: true });
+    });
+
+    it.each(["committing", "completed", "cancelled", "failed"])(
+        "treats Stop for a %s turn as an idempotent no-op",
+        async (status) => {
+            const module = loadModule();
+            if (!module) return;
+            const harness = makeHarness();
+            const current = existingTurn({
+                status,
+                assistantMessageId:
+                    status === "committing" ? null : "55555555-5555-4555-8555-555555555555",
+            });
+            harness.manager.findOne.mockResolvedValue(current);
+
+            await expect(
+                createService(module, harness).requestCancel({
+                    agentId: AGENT_ID,
+                    turnId: TURN_ID,
+                    userId: USER_ID,
+                }),
+            ).resolves.toMatchObject({ status, cancelRequested: false });
+            expect(harness.manager.save).not.toHaveBeenCalled();
+        },
+    );
+
+    it("does not reveal or mutate another owner's turn on Stop", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness();
+        harness.manager.findOne.mockResolvedValue(
+            existingTurn({ conversation: conversation({ userId: "other-user" }) }),
+        );
+
+        await expect(
+            createService(module, harness).requestCancel({
+                agentId: AGENT_ID,
+                turnId: TURN_ID,
+                userId: USER_ID,
+            }),
+        ).rejects.toThrow(/not found/i);
+        expect(harness.manager.save).not.toHaveBeenCalled();
     });
 });

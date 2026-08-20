@@ -333,6 +333,35 @@ export class OpencodeTurnAcceptanceService {
         });
         if (!turn) throw HttpErrorFactory.notFound("OpenCode turn not found");
         this.assertConversationOwner(turn.conversation, input);
+        return this.toStatusResult(turn);
+    }
+
+    async requestCancel(input: {
+        agentId: string;
+        turnId: string;
+        userId?: string;
+        anonymousIdentifier?: string;
+    }): Promise<OpencodeTurnStatusResult> {
+        return this.dataSource.transaction(async (manager) => {
+            const turn = await manager.findOne(AgentOpencodeTurn, {
+                where: { id: input.turnId },
+                relations: { conversation: true },
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!turn) throw HttpErrorFactory.notFound("OpenCode turn not found");
+            this.assertConversationOwner(turn.conversation, input);
+            if (
+                (turn.status === "accepted" || turn.status === "running") &&
+                !turn.cancelRequestedAt
+            ) {
+                turn.cancelRequestedAt = new Date();
+                await manager.save(AgentOpencodeTurn, turn);
+            }
+            return this.toStatusResult(turn);
+        });
+    }
+
+    private toStatusResult(turn: AgentOpencodeTurn): OpencodeTurnStatusResult {
         return {
             conversationId: turn.conversationId,
             turnId: turn.id,
