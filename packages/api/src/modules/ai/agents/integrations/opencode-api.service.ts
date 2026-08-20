@@ -23,7 +23,56 @@ export interface OpencodeSession {
     id: string;
     directory?: string;
     title?: string;
+    time?: { created?: number; updated?: number };
 }
+
+export type OpencodeSessionStatus =
+    | { type: "idle" }
+    | { type: "busy" }
+    | { type: "retry"; attempt: number; message: string; next: number };
+
+export type OpencodeSessionMessage = {
+    info?: {
+        id?: string;
+        sessionID?: string;
+        role?: string;
+        parentID?: string;
+        finish?: string | null;
+        error?: unknown;
+        time?: { created?: number; updated?: number; completed?: number };
+    };
+    parts?: Array<Record<string, unknown>>;
+};
+
+export type OpencodeApiErrorKind =
+    | "cancelled"
+    | "deadline"
+    | "not_found"
+    | "conflict"
+    | "retryable"
+    | "remote"
+    | "unreachable"
+    | "invalid_response";
+
+export class OpencodeApiError extends Error {
+    constructor(
+        readonly kind: OpencodeApiErrorKind,
+        readonly operation: string,
+        message: string,
+        readonly status?: number,
+        options?: ErrorOptions,
+    ) {
+        super(message, options);
+        this.name = "OpencodeApiError";
+    }
+}
+
+type OpencodeOperationOptions = {
+    signal?: AbortSignal;
+    timeoutMs?: number;
+};
+
+const DEFAULT_OPENCODE_READ_TIMEOUT_MS = 5_000;
 
 export type OpencodeFileNode = {
     name: string;
@@ -121,37 +170,142 @@ export class OpencodeApiService {
     async createSession(
         config: ThirdPartyIntegrationConfig | null | undefined,
         title?: string,
+        options: OpencodeOperationOptions = {},
     ): Promise<OpencodeSession> {
         const normalized = this.normalizeConfig(config);
-        const response = await this.request(normalized, "/session", {
-            method: "POST",
-            body: JSON.stringify({ title: title?.slice(0, 120) || "Bowi AI conversation" }),
+        const operation = "create-session";
+        const response = await this.requestWithDeadline(
+            normalized,
+            "/session",
+            {
+                method: "POST",
+                body: JSON.stringify({ title: title?.slice(0, 120) || "Bowi AI conversation" }),
+            },
+            { operation, ...options },
+        );
+        await this.assertOperationResponse(response, operation);
+        return (await this.parseJson(response, operation)) as OpencodeSession;
+    }
+
+    async getSessionStatus(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSessionStatus> {
+        const body = await this.requestJson<Record<string, unknown>>({
+            operation: "get-session-status",
+            config: params.config,
+            path: "/session/status",
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
         });
-        if (!response.ok) {
-            const text = await response.text();
-            throw HttpErrorFactory.badRequest(
-                `OpenCode create session failed: ${response.status} ${text}`,
+        const raw = body[params.sessionId];
+        if (raw === undefined) return { type: "idle" };
+        if (!raw || typeof raw !== "object") {
+            throw this.invalidResponse("get-session-status", "Session status is not an object");
+        }
+        const status = raw as Record<string, unknown>;
+        if (status.type === "idle" || status.type === "busy") {
+            return { type: status.type };
+        }
+        if (
+            status.type === "retry" &&
+            typeof status.attempt === "number" &&
+            Number.isFinite(status.attempt) &&
+            typeof status.message === "string" &&
+            typeof status.next === "number" &&
+            Number.isFinite(status.next)
+        ) {
+            return {
+                type: "retry",
+                attempt: status.attempt,
+                message: status.message,
+                next: status.next,
+            };
+        }
+        throw this.invalidResponse("get-session-status", "Session status has an unknown shape");
+    }
+
+    async getSessionUpdatedAt(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<number> {
+        const body = await this.requestJson<Record<string, unknown>>({
+            operation: "get-session-update-time",
+            config: params.config,
+            path: `/session/${encodeURIComponent(params.sessionId)}`,
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
+        });
+        const time = body.time;
+        const updated =
+            time && typeof time === "object"
+                ? (time as Record<string, unknown>).updated
+                : undefined;
+        if (typeof updated !== "number" || !Number.isFinite(updated)) {
+            throw this.invalidResponse(
+                "get-session-update-time",
+                "Session update time is missing or invalid",
             );
         }
-        return (await response.json()) as OpencodeSession;
+        return updated;
+    }
+
+    async getExactSessionMessage(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+            messageId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSessionMessage | null> {
+        const operation = "get-exact-session-message";
+        const normalized = this.normalizeConfig(params.config);
+        const response = await this.requestWithDeadline(
+            normalized,
+            `/session/${encodeURIComponent(params.sessionId)}/message/${encodeURIComponent(params.messageId)}`,
+            { method: "GET" },
+            {
+                operation,
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            },
+        );
+        if (response.status === 404) return null;
+        await this.assertOperationResponse(response, operation);
+        const body = await this.parseJson(response, operation);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+            throw this.invalidResponse(operation, "Exact message response is not an object");
+        }
+        const message = body as OpencodeSessionMessage;
+        if (message.info?.id !== params.messageId) {
+            throw this.invalidResponse(operation, "Exact message response has the wrong identifier");
+        }
+        return message;
     }
 
     async promptAsync(params: {
         config?: ThirdPartyIntegrationConfig | null;
         sessionId: string;
+        messageId?: string;
         /** @deprecated Prefer `parts` when attachments are present */
         text?: string;
         /** OpenCode prompt parts (text + optional FilePartInput for images) */
         parts?: Array<Record<string, unknown>>;
         system?: string;
         model?: { providerID: string; modelID: string };
-    }): Promise<void> {
+    } & OpencodeOperationOptions): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
         const parts =
             params.parts && params.parts.length > 0
                 ? params.parts
                 : [{ type: "text", text: params.text ?? "" }];
         const body: Record<string, unknown> = { parts };
+        if (params.messageId?.trim()) {
+            body.messageID = params.messageId.trim();
+        }
         if (params.system?.trim()) {
             body.system = params.system.trim();
         }
@@ -160,20 +314,21 @@ export class OpencodeApiService {
             body.model = model;
         }
 
-        const response = await this.request(
+        const operation = "prompt-async";
+        const response = await this.requestWithDeadline(
             normalized,
             `/session/${encodeURIComponent(params.sessionId)}/prompt_async`,
             {
                 method: "POST",
                 body: JSON.stringify(body),
             },
+            {
+                operation,
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            },
         );
-        if (!response.ok && response.status !== 204) {
-            const text = await response.text();
-            throw HttpErrorFactory.badRequest(
-                `OpenCode prompt_async failed: ${response.status} ${text}`,
-            );
-        }
+        await this.assertOperationResponse(response, operation);
     }
 
     /**
@@ -183,16 +338,18 @@ export class OpencodeApiService {
     async listPendingPermissions(params: {
         config?: ThirdPartyIntegrationConfig | null;
         sessionId?: string;
-    }): Promise<Array<{ id: string; sessionID: string }>> {
-        const normalized = this.normalizeConfig(params.config);
-        const response = await this.request(normalized, "/permission", { method: "GET" });
-        if (!response.ok) {
-            const text = await response.text();
-            this.logger.warn(`OpenCode list permissions failed: ${response.status} ${text}`);
-            return [];
+    } & OpencodeOperationOptions): Promise<Array<{ id: string; sessionID: string }>> {
+        const operation = "list-pending-permissions";
+        const body = await this.requestJson<unknown>({
+            operation,
+            config: params.config,
+            path: "/permission",
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
+        });
+        if (!Array.isArray(body)) {
+            throw this.invalidResponse(operation, "Pending permission response is not an array");
         }
-        const body = (await response.json()) as unknown;
-        if (!Array.isArray(body)) return [];
         return body
             .map((item) => {
                 const row = (item && typeof item === "object" ? item : {}) as Record<
@@ -215,21 +372,24 @@ export class OpencodeApiService {
         config?: ThirdPartyIntegrationConfig | null;
         requestId: string;
         reply?: "once" | "always" | "reject";
-    }): Promise<void> {
+    } & OpencodeOperationOptions): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
         const reply = params.reply ?? "always";
-        const response = await this.request(
+        const operation = "reply-permission";
+        const response = await this.requestWithDeadline(
             normalized,
             `/permission/${encodeURIComponent(params.requestId)}/reply`,
             {
                 method: "POST",
                 body: JSON.stringify({ reply }),
             },
+            {
+                operation,
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            },
         );
-        if (!response.ok && response.status !== 204) {
-            const text = await response.text();
-            this.logger.warn(`OpenCode permission reply failed: ${response.status} ${text}`);
-        }
+        await this.assertOperationResponse(response, operation);
     }
 
     /**
@@ -238,16 +398,20 @@ export class OpencodeApiService {
     async approvePendingPermissions(params: {
         config?: ThirdPartyIntegrationConfig | null;
         sessionId: string;
-    }): Promise<number> {
+    } & OpencodeOperationOptions): Promise<number> {
         const pending = await this.listPendingPermissions({
             config: params.config,
             sessionId: params.sessionId,
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
         });
         for (const item of pending) {
             await this.replyPermission({
                 config: params.config,
                 requestId: item.id,
                 reply: "always",
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
             });
         }
         return pending.length;
@@ -256,17 +420,74 @@ export class OpencodeApiService {
     async abortSession(params: {
         config?: ThirdPartyIntegrationConfig | null;
         sessionId: string;
-    }): Promise<void> {
+    } & OpencodeOperationOptions): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
-        const response = await this.request(
+        const operation = "abort-session";
+        const response = await this.requestWithDeadline(
             normalized,
             `/session/${encodeURIComponent(params.sessionId)}/abort`,
             { method: "POST" },
+            {
+                operation,
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            },
         );
-        if (!response.ok && response.status !== 204) {
-            const text = await response.text();
-            this.logger.warn(`OpenCode abort failed: ${response.status} ${text}`);
+        await this.assertOperationResponse(response, operation);
+    }
+
+    async listPendingQuestions(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        sessionId?: string;
+    } & OpencodeOperationOptions): Promise<
+        Array<{ id: string; sessionID: string; questions: Array<Record<string, unknown>> }>
+    > {
+        const operation = "list-pending-questions";
+        const body = await this.requestJson<unknown>({
+            operation,
+            config: params.config,
+            path: "/question",
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
+        });
+        if (!Array.isArray(body)) {
+            throw this.invalidResponse(operation, "Pending question response is not an array");
         }
+        return body
+            .map((item) => {
+                const row = (item && typeof item === "object" ? item : {}) as Record<
+                    string,
+                    unknown
+                >;
+                return {
+                    id: String(row.id ?? ""),
+                    sessionID: String(row.sessionID ?? ""),
+                    questions: Array.isArray(row.questions)
+                        ? (row.questions as Array<Record<string, unknown>>)
+                        : [],
+                };
+            })
+            .filter((item) => item.id && item.sessionID)
+            .filter((item) => !params.sessionId || item.sessionID === params.sessionId);
+    }
+
+    async rejectQuestion(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        requestId: string;
+    } & OpencodeOperationOptions): Promise<void> {
+        const normalized = this.normalizeConfig(params.config);
+        const operation = "reject-question";
+        const response = await this.requestWithDeadline(
+            normalized,
+            `/question/${encodeURIComponent(params.requestId)}/reject`,
+            { method: "POST" },
+            {
+                operation,
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            },
+        );
+        await this.assertOperationResponse(response, operation);
     }
 
     /**
@@ -474,6 +695,118 @@ export class OpencodeApiService {
     private normalizeBaseUrl(baseURL?: string): string {
         const raw = baseURL?.trim() || this.defaultBaseUrl;
         return raw.replace(/\/+$/, "");
+    }
+
+    private async requestJson<T>(params: {
+        operation: string;
+        config?: ThirdPartyIntegrationConfig | null;
+        path: string;
+        signal?: AbortSignal;
+        timeoutMs?: number;
+    }): Promise<T> {
+        const normalized = this.normalizeConfig(params.config);
+        const response = await this.requestWithDeadline(
+            normalized,
+            params.path,
+            { method: "GET" },
+            params,
+        );
+        await this.assertOperationResponse(response, params.operation);
+        return (await this.parseJson(response, params.operation)) as T;
+    }
+
+    private async requestWithDeadline(
+        config: OpencodeNormalizedConfig,
+        path: string,
+        init: RequestInit,
+        options: { operation: string; signal?: AbortSignal; timeoutMs?: number },
+    ): Promise<Response> {
+        const timeoutMs = options.timeoutMs ?? DEFAULT_OPENCODE_READ_TIMEOUT_MS;
+        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+            throw new RangeError("OpenCode operation timeoutMs must be a positive finite number");
+        }
+        if (options.signal?.aborted) {
+            throw new OpencodeApiError(
+                "cancelled",
+                options.operation,
+                `OpenCode ${options.operation} was cancelled`,
+            );
+        }
+
+        const controller = new AbortController();
+        let deadlineReached = false;
+        const cancelFromCaller = () => controller.abort(options.signal?.reason);
+        options.signal?.addEventListener("abort", cancelFromCaller, { once: true });
+        const deadline = setTimeout(() => {
+            deadlineReached = true;
+            controller.abort(new DOMException("OpenCode operation deadline exceeded", "TimeoutError"));
+        }, timeoutMs);
+
+        try {
+            return await this.request(config, path, { ...init, signal: controller.signal });
+        } catch (error) {
+            if (deadlineReached) {
+                throw new OpencodeApiError(
+                    "deadline",
+                    options.operation,
+                    `OpenCode ${options.operation} exceeded its ${timeoutMs}ms deadline`,
+                    undefined,
+                    { cause: error },
+                );
+            }
+            if (options.signal?.aborted) {
+                throw new OpencodeApiError(
+                    "cancelled",
+                    options.operation,
+                    `OpenCode ${options.operation} was cancelled`,
+                    undefined,
+                    { cause: error },
+                );
+            }
+            if (error instanceof OpencodeApiError) throw error;
+            throw new OpencodeApiError(
+                "unreachable",
+                options.operation,
+                `OpenCode ${options.operation} could not reach ${config.baseURL}`,
+                undefined,
+                { cause: error },
+            );
+        } finally {
+            clearTimeout(deadline);
+            options.signal?.removeEventListener("abort", cancelFromCaller);
+        }
+    }
+
+    private async assertOperationResponse(response: Response, operation: string): Promise<void> {
+        if (response.ok) return;
+        const status = response.status;
+        const kind: OpencodeApiErrorKind =
+            status === 404
+                ? "not_found"
+                : status === 409
+                  ? "conflict"
+                  : status === 408 || status === 425 || status === 429 || status >= 500
+                    ? "retryable"
+                    : "remote";
+        const detail = (await response.text().catch(() => "")).slice(0, 500);
+        throw new OpencodeApiError(
+            kind,
+            operation,
+            `OpenCode ${operation} failed with HTTP ${status}${detail ? `: ${detail}` : ""}`,
+            status,
+        );
+    }
+
+    private async parseJson(response: Response, operation: string): Promise<unknown> {
+        try {
+            return await response.json();
+        } catch (error) {
+            throw this.invalidResponse(operation, "OpenCode returned invalid JSON", error);
+        }
+    }
+
+    private invalidResponse(operation: string, message: string, cause?: unknown): OpencodeApiError {
+        return new OpencodeApiError("invalid_response", operation, message, undefined, { cause });
     }
 
     private async request(
