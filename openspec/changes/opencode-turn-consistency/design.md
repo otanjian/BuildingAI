@@ -125,7 +125,7 @@ Recovery matrix:
 
 | Local evidence | OpenCode evidence | Action |
 |---|---|---|
-| accepted, no session | matching runtime binding | create/map session, then correlation-check and dispatch from the persisted snapshot |
+| accepted, no session | matching runtime binding | recover an unprompted session by the turn receipt or create/map one, then correlation-check and dispatch from the persisted snapshot |
 | accepted/active | runtime binding mismatch | perform no remote action; commit an explicit configuration-change failure |
 | active with missing mapped session | prior local turns exist | do not rebuild context; commit an explicit session-lost failure requiring a new conversation |
 | active with session | busy/retry | keep bounded status polling; never abort because the prior process disappeared |
@@ -136,6 +136,29 @@ Recovery matrix:
 | committing | exact descendants not yet readable | keep active and retry within the bounded settle/recovery policy |
 | ambiguous dispatch | exact user ID exists | observe without redispatch |
 | ambiguous dispatch | exact user ID absent after grace period | dispatch once with stored ID |
+
+Both `accepted` and `running` recovery claims pass through the same stable-user-message
+correlation before status observation. This is required because the first dispatch persists
+`running` before `prompt_async`; process loss or an ambiguous response in that interval must
+not bypass correlation on restart. A correlated remote user message continues into normal
+observation in the same bounded step, while an absent message waits through the ambiguity
+window and then reuses the stored ID.
+
+The first remote session is created with the accepted `turnId` as a non-secret OpenCode
+metadata receipt. Before creating it, recovery searches for the exact receipt, reuses one
+matching unprompted session, and removes duplicate unmapped matches. This closes the
+create-response/persist-mapping crash window without adding a local outbox, another table, or
+a provider-specific session ledger. Stable prompt `messageID` is the provider idempotency key;
+the deployed OpenCode 1.17.13 contract was fault-probed with duplicate asynchronous submissions
+and produced one user message plus one assistant descendant.
+
+Deterministic recovery failures are not left active for endless retries. A changed runtime
+binding, a lost mapped session, or an invalid/missing frozen snapshot commits one non-blank,
+zero-usage `failed` projection with the current lease through the existing atomic terminal
+transaction. Transient transport/deadline failures and lease loss remain retryable. This uses
+the already allowed `accepted/running -> failed` state-machine edges and does not add another
+recovery state or error queue. A pre-dispatch cancellation is also inherently zero-usage and
+can commit without reading billing fields from a damaged snapshot.
 
 History endpoints never invoke this matrix. Stop locks the exact turn and sets `cancel_requested_at` only in `accepted` or `running`; in `committing` or a terminal state it returns the current result without remote action. The lease owner performs the remote abort, observes remote settlement, and only then commits one local cancellation outcome. A retry after an ambiguous abort response may repeat the remote abort call, but the turn remains active and cannot target a newer turn or duplicate local effects. The same settlement rule applies to timeout and unsupported-question aborts.
 

@@ -24,6 +24,7 @@ export interface OpencodeSession {
     directory?: string;
     title?: string;
     time?: { created?: number; updated?: number };
+    metadata?: Record<string, unknown>;
 }
 
 export type OpencodeSessionStatus =
@@ -170,21 +171,79 @@ export class OpencodeApiService {
     async createSession(
         config: ThirdPartyIntegrationConfig | null | undefined,
         title?: string,
-        options: OpencodeOperationOptions = {},
+        options: OpencodeOperationOptions & { turnReceipt?: string } = {},
     ): Promise<OpencodeSession> {
         const normalized = this.normalizeConfig(config);
         const operation = "create-session";
+        const receipt = options.turnReceipt?.trim();
+        const receiptSuffix = receipt ? ` [${receipt}]` : "";
+        const baseTitle = title?.trim() || "Bowi AI conversation";
+        const sessionTitle = `${baseTitle.slice(0, Math.max(0, 120 - receiptSuffix.length))}${receiptSuffix}`;
         const response = await this.requestWithDeadline(
             normalized,
             "/session",
             {
                 method: "POST",
-                body: JSON.stringify({ title: title?.slice(0, 120) || "Bowi AI conversation" }),
+                body: JSON.stringify({
+                    title: sessionTitle,
+                    ...(receipt
+                        ? { metadata: { buildingaiTurnReceipt: receipt } }
+                        : {}),
+                }),
             },
             { operation, ...options },
         );
         await this.assertOperationResponse(response, operation);
         return (await this.parseJson(response, operation)) as OpencodeSession;
+    }
+
+    async findSessionsByTurnReceipt(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            turnId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSession[]> {
+        const sessions = await this.requestJson<unknown>({
+            operation: "find-session-by-turn-receipt",
+            config: params.config,
+            path: `/session?search=${encodeURIComponent(params.turnId)}&limit=100`,
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
+        });
+        if (!Array.isArray(sessions)) {
+            throw this.invalidResponse(
+                "find-session-by-turn-receipt",
+                "Session list response is not an array",
+            );
+        }
+        return (sessions as OpencodeSession[])
+            .filter((session) => session.metadata?.buildingaiTurnReceipt === params.turnId)
+            .sort(
+                (left, right) =>
+                    Number(left.time?.created ?? 0) - Number(right.time?.created ?? 0) ||
+                    left.id.localeCompare(right.id),
+            );
+    }
+
+    async deleteSession(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<void> {
+        const operation = "delete-session";
+        const normalized = this.normalizeConfig(params.config);
+        const response = await this.requestWithDeadline(
+            normalized,
+            `/session/${encodeURIComponent(params.sessionId)}`,
+            { method: "DELETE" },
+            {
+                operation,
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            },
+        );
+        await this.assertOperationResponse(response, operation);
     }
 
     async getSessionStatus(

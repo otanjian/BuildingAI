@@ -35,6 +35,19 @@ export type OpencodeTurnTerminalCommitResult = {
     duplicate: boolean;
 };
 
+export type OpencodeTurnRecoveryFailureInput = Pick<
+    OpencodeTurnTerminalCommitInput,
+    "turnId" | "leaseToken" | "assistantMessageId"
+> & {
+    errorCode: string;
+    errorMessage: string;
+};
+
+export type OpencodeTurnPreDispatchCancellationInput = Pick<
+    OpencodeTurnTerminalCommitInput,
+    "turnId" | "leaseToken" | "assistantMessageId" | "errorMessage"
+>;
+
 @Injectable()
 export class OpencodeTurnTerminalCommitService {
     constructor(
@@ -73,8 +86,40 @@ export class OpencodeTurnTerminalCommitService {
         }
     }
 
+    async commitRecoveryFailure(
+        input: OpencodeTurnRecoveryFailureInput,
+    ): Promise<OpencodeTurnTerminalCommitResult> {
+        return this.commitTransaction({
+            ...input,
+            outcome: "failed",
+            parts: [{ type: "text", text: input.errorMessage }],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            artifacts: [],
+            forceFree: true,
+            allowedSourceStatuses: ["accepted", "running", "committing"],
+        });
+    }
+
+    async commitCancellation(
+        input: OpencodeTurnPreDispatchCancellationInput,
+    ): Promise<OpencodeTurnTerminalCommitResult> {
+        return this.commitTransaction({
+            ...input,
+            outcome: "cancelled",
+            parts: [{ type: "text", text: input.errorMessage ?? "Turn cancelled before dispatch" }],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            artifacts: [],
+            errorCode: "OPENCODE_CANCELLED",
+            forceFree: true,
+            allowedSourceStatuses: ["committing"],
+        });
+    }
+
     private async commitTransaction(
-        input: OpencodeTurnTerminalCommitInput & { forceFree?: boolean },
+        input: OpencodeTurnTerminalCommitInput & {
+            forceFree?: boolean;
+            allowedSourceStatuses?: OpencodeTurnStatus[];
+        },
     ): Promise<OpencodeTurnTerminalCommitResult> {
         return this.dataSource.transaction(async (manager) => {
             const turn = await this.turnRepository.findLocked(manager, input.turnId);
@@ -90,18 +135,24 @@ export class OpencodeTurnTerminalCommitService {
                     duplicate: true,
                 };
             }
-            if (turn.status !== "committing" || turn.leaseToken !== input.leaseToken) {
+            const allowedSourceStatuses = input.allowedSourceStatuses ?? ["committing"];
+            if (
+                !allowedSourceStatuses.includes(turn.status) ||
+                turn.leaseToken !== input.leaseToken
+            ) {
                 throw new Error("OpenCode terminal commit requires the current committing lease");
             }
 
             const snapshot = turn.dispatchSnapshot as {
                 billing?: { enabled?: boolean; power?: number; tokens?: number };
             } | null;
-            if (!snapshot) throw new Error("OpenCode terminal commit snapshot is missing");
+            if (!snapshot && !input.forceFree) {
+                throw new Error("OpenCode terminal commit snapshot is missing");
+            }
 
             const parts = this.visibleParts(input);
             let userConsumedPower = 0;
-            if (!input.forceFree && snapshot.billing?.enabled && turn.conversation.userId) {
+            if (!input.forceFree && snapshot?.billing?.enabled && turn.conversation.userId) {
                 userConsumedPower = await this.billingHandler.deduct(
                     {
                         userId: turn.conversation.userId,

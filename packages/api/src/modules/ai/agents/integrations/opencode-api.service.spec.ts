@@ -84,6 +84,54 @@ describe("OpencodeApiService durable read adapter", () => {
         );
     });
 
+    it("finds session-creation receipts exactly and deletes duplicate unmapped sessions", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce(
+                response([
+                    {
+                        id: "ses_match_old",
+                        title: "old",
+                        metadata: { buildingaiTurnReceipt: "turn-1" },
+                        time: { created: 100, updated: 100 },
+                    },
+                    {
+                        id: "ses_other",
+                        title: "other",
+                        metadata: { buildingaiTurnReceipt: "turn-other" },
+                        time: { created: 50, updated: 50 },
+                    },
+                    {
+                        id: "ses_match_new",
+                        title: "new",
+                        metadata: { buildingaiTurnReceipt: "turn-1" },
+                        time: { created: 200, updated: 200 },
+                    },
+                ]),
+            )
+            .mockResolvedValueOnce(response(true));
+
+        await expect(
+            service.findSessionsByTurnReceipt({ config: CONFIG, turnId: "turn-1" }),
+        ).resolves.toEqual([
+            expect.objectContaining({ id: "ses_match_old" }),
+            expect.objectContaining({ id: "ses_match_new" }),
+        ]);
+        await expect(
+            service.deleteSession({ config: CONFIG, sessionId: "ses_match_new" }),
+        ).resolves.toBeUndefined();
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            1,
+            "http://opencode.test/session?search=turn-1&limit=100",
+            expect.objectContaining({ method: "GET" }),
+        );
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            "http://opencode.test/session/ses_match_new",
+            expect.objectContaining({ method: "DELETE" }),
+        );
+    });
+
     it("uses one exact-message request and maps 404 to absent", async () => {
         global.fetch = jest
             .fn()
@@ -256,6 +304,25 @@ describe("OpencodeApiService durable read adapter", () => {
             system: "system",
         });
         expect(init.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it("creates a first session with an exact turn receipt", async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+            response({
+                id: "ses_1",
+                title: "conversation",
+                metadata: { buildingaiTurnReceipt: "turn-1" },
+                time: { created: 100, updated: 100 },
+            }),
+        );
+
+        await service.createSession(CONFIG, "conversation", { turnReceipt: "turn-1" });
+
+        const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+        expect(JSON.parse(String(init.body))).toMatchObject({
+            title: expect.stringContaining("turn-1"),
+            metadata: { buildingaiTurnReceipt: "turn-1" },
+        });
     });
 
     it("lists only exact-session permissions and replies to the exact request", async () => {

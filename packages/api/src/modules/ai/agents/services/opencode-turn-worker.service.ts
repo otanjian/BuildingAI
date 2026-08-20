@@ -16,7 +16,10 @@ import {
     type OpencodeTurnEvidence,
 } from "./opencode-turn-observer";
 import { buildOpencodeTurnProjection } from "./opencode-turn-projection";
-import { OpencodeTurnMutationCoordinator } from "./opencode-turn-mutation-coordinator";
+import {
+    OpencodeTurnMutationCoordinator,
+    OpencodeTurnMutationError,
+} from "./opencode-turn-mutation-coordinator";
 import { OpencodeTurnRepository } from "./opencode-turn.repository";
 import { OpencodeTurnTerminalCommitService } from "./opencode-turn-terminal-commit";
 import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
@@ -58,13 +61,25 @@ export class OpencodeTurnWorkerService {
             );
             return this.commitCancellation(turn, input, "Turn cancelled before dispatch");
         }
-        if (turn.status === "accepted") {
-            const dispatched = await this.mutationCoordinator.dispatch({
-                turnId: turn.id,
-                leaseToken: input.leaseToken,
-                signal: input.signal,
-            });
-            return { action: dispatched.kind, ...dispatched };
+        if (
+            turn.status === "committing" &&
+            turn.cancelRequestedAt &&
+            !turn.startedAt &&
+            turn.artifactBaseline === null
+        ) {
+            return this.commitCancellation(turn, input, "Turn cancelled before dispatch");
+        }
+        if (
+            turn.status === "accepted" ||
+            (turn.status === "running" && !turn.cancelRequestedAt && !turn.errorCode)
+        ) {
+            const correlation = await this.prepareCorrelation(turn, input);
+            if (correlation.kind !== "observing") {
+                return { action: correlation.kind, ...correlation };
+            }
+        } else {
+            const failure = await this.prepareObservation(turn, input);
+            if (failure) return failure;
         }
 
         const sessionId = turn.conversation.opencodeSessionId;
@@ -331,14 +346,10 @@ export class OpencodeTurnWorkerService {
         input: { leaseToken: string },
         message: string,
     ) {
-        const result = await this.terminalCommitService.commit({
+        const result = await this.terminalCommitService.commitCancellation({
             turnId: turn.id,
             leaseToken: input.leaseToken,
             assistantMessageId: randomUUID(),
-            outcome: "cancelled",
-            parts: [{ type: "text", text: message }],
-            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-            errorCode: "OPENCODE_CANCELLED",
             errorMessage: message,
         });
         return { action: "settled", ...result };
@@ -374,6 +385,71 @@ export class OpencodeTurnWorkerService {
             throw new Error("OpenCode worker lost its turn lease");
         }
         return turn;
+    }
+
+    private async prepareCorrelation(
+        turn: AgentOpencodeTurn,
+        input: { leaseToken: string; signal?: AbortSignal },
+    ) {
+        try {
+            return await this.mutationCoordinator.dispatch({
+                turnId: turn.id,
+                leaseToken: input.leaseToken,
+                signal: input.signal,
+            });
+        } catch (error) {
+            const failure = await this.commitDeterministicRecoveryFailure(turn, input, error);
+            if (failure) return { kind: "failed" as const, ...failure };
+            throw error;
+        }
+    }
+
+    private async prepareObservation(
+        turn: AgentOpencodeTurn,
+        input: { leaseToken: string; signal?: AbortSignal },
+    ) {
+        try {
+            await this.mutationCoordinator.assertObservationReady({
+                turnId: turn.id,
+                leaseToken: input.leaseToken,
+                signal: input.signal,
+            });
+            return null;
+        } catch (error) {
+            const failure = await this.commitDeterministicRecoveryFailure(turn, input, error);
+            if (failure) return failure;
+            throw error;
+        }
+    }
+
+    private async commitDeterministicRecoveryFailure(
+        turn: AgentOpencodeTurn,
+        input: { leaseToken: string },
+        error: unknown,
+    ) {
+        if (!(error instanceof OpencodeTurnMutationError) || error.retryable) return null;
+        const errorMessage = this.recoveryFailureMessage(error.code);
+        const result = await this.terminalCommitService.commitRecoveryFailure({
+            turnId: turn.id,
+            leaseToken: input.leaseToken,
+            assistantMessageId: randomUUID(),
+            errorCode: error.code,
+            errorMessage,
+        });
+        return { action: "settled", ...result };
+    }
+
+    private recoveryFailureMessage(code: string): string {
+        switch (code) {
+            case "OPENCODE_RUNTIME_CONFIG_CHANGED":
+                return "OpenCode runtime configuration changed. Start a new conversation.";
+            case "OPENCODE_SESSION_LOST":
+                return "OpenCode session is unavailable. Start a new conversation.";
+            case "OPENCODE_SNAPSHOT_INVALID":
+                return "OpenCode recovery data is invalid. Start a new conversation.";
+            default:
+                return "OpenCode turn recovery failed. Start a new conversation.";
+        }
     }
 
     private async recordEvidence(

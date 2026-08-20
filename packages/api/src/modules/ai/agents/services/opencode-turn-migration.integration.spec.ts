@@ -179,7 +179,7 @@ describePostgres("OpenCode turn installed-version migration", () => {
             );
             expect(legacy).toEqual([{ session_id: "ses_legacy" }]);
             const schema = await runner.query(
-                `SELECT to_regclass('ai_agent_opencode_turn') AS turn_table,
+                `SELECT to_regclass(current_schema() || '.ai_agent_opencode_turn') AS turn_table,
                         EXISTS (
                             SELECT 1 FROM information_schema.columns
                             WHERE table_schema = $1

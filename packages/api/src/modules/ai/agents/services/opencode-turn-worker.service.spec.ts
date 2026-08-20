@@ -11,6 +11,15 @@ jest.mock("../integrations/opencode-api.service", () => ({
 }));
 jest.mock("./opencode-turn-mutation-coordinator", () => ({
     OpencodeTurnMutationCoordinator: class OpencodeTurnMutationCoordinator {},
+    OpencodeTurnMutationError: class OpencodeTurnMutationError extends Error {
+        constructor(
+            message: string,
+            readonly code = "OPENCODE_MUTATION_RETRYABLE",
+            readonly retryable = true,
+        ) {
+            super(message);
+        }
+    },
 }));
 jest.mock("./opencode-artifact-baseline.service", () => ({
     OpencodeArtifactBaselineService: class OpencodeArtifactBaselineService {},
@@ -87,7 +96,16 @@ function makeHarness(options: {
         listPendingQuestions: jest.fn(async () => options.questions ?? []),
     };
     const mutations = {
-        dispatch: jest.fn(async () => ({ kind: "dispatched", sessionId: "ses_1" })),
+        dispatch: jest.fn<any, any>(async () =>
+            currentTurn.status === "accepted"
+                ? { kind: "dispatched", sessionId: "ses_1" }
+                : {
+                      kind: "observing",
+                      sessionId: "ses_1",
+                      message: { info: { id: "msg_user", role: "user" }, parts: [] },
+                  },
+        ),
+        assertObservationReady: jest.fn(async () => undefined),
         replyPermission: jest.fn(async () => true),
         rejectQuestion: jest.fn(async () => true),
         abort: jest.fn(async () => undefined),
@@ -95,7 +113,19 @@ function makeHarness(options: {
     const baselines = {
         changedHtmlFiles: jest.fn(async () => []),
     };
-    const commits = { commit: jest.fn(async (input: any) => input) };
+    const commits = {
+        commit: jest.fn(async (input: any) => input),
+        commitCancellation: jest.fn(async (input: any) => ({
+            action: "settled",
+            status: "cancelled",
+            ...input,
+        })),
+        commitRecoveryFailure: jest.fn(async (input: any) => ({
+            action: "settled",
+            status: "failed",
+            ...input,
+        })),
+    };
     const turns = {
         transition: jest.fn(async (_manager: any, input: any) => {
             currentTurn.status = input.to;
@@ -141,6 +171,110 @@ describe("OpencodeTurnWorkerService", () => {
         );
     });
 
+    it("correlates a recovered running turn before any status observation", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ turn: turn({ status: "running" }) });
+        harness.mutations.dispatch.mockResolvedValue({
+            kind: "waiting",
+            sessionId: "ses_1",
+            retryAfterMs: 1_000,
+        });
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).resolves.toMatchObject({ action: "waiting" });
+        expect(harness.mutations.dispatch).toHaveBeenCalledWith(
+            expect.objectContaining({ turnId: TURN_ID, leaseToken: LEASE_TOKEN }),
+        );
+        expect(harness.api.getSessionStatus).not.toHaveBeenCalled();
+    });
+
+    it("continues observation only after the recovered running message is correlated", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ turn: turn({ status: "running" }) });
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).resolves.toMatchObject({ action: "continue" });
+        expect(harness.mutations.dispatch.mock.invocationCallOrder[0]).toBeLessThan(
+            harness.api.getSessionStatus.mock.invocationCallOrder[0],
+        );
+    });
+
+    it.each([
+        ["OPENCODE_RUNTIME_CONFIG_CHANGED", "runtime configuration changed"],
+        ["OPENCODE_SESSION_LOST", "session is unavailable"],
+        ["OPENCODE_SNAPSHOT_INVALID", "recovery data is invalid"],
+    ])("atomically exposes deterministic recovery failure %s", async (code, message) => {
+        const module = loadModule();
+        if (!module) return;
+        const coordinatorModule = require("./opencode-turn-mutation-coordinator") as Record<
+            string,
+            any
+        >;
+        const harness = makeHarness({ turn: turn({ status: "running" }) });
+        harness.mutations.dispatch.mockRejectedValue(
+            new coordinatorModule.OpencodeTurnMutationError(message, code, false),
+        );
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).resolves.toMatchObject({ status: "failed" });
+        expect(harness.commits.commitRecoveryFailure).toHaveBeenCalledWith(
+            expect.objectContaining({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+                errorCode: code,
+                errorMessage: expect.any(String),
+            }),
+        );
+        expect(harness.api.getSessionStatus).not.toHaveBeenCalled();
+    });
+
+    it("keeps transient dispatch failures active for a later lease", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ turn: turn({ status: "running" }) });
+        harness.mutations.dispatch.mockRejectedValue(new Error("OpenCode temporarily offline"));
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).rejects.toThrow("temporarily offline");
+        expect(harness.commits.commitRecoveryFailure).not.toHaveBeenCalled();
+    });
+
+    it("does not observe or settle after a transient committing validation failure", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ turn: turn({ status: "committing" }) });
+        harness.mutations.assertObservationReady.mockRejectedValue(
+            new Error("OpenCode status endpoint temporarily offline"),
+        );
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).rejects.toThrow("temporarily offline");
+        expect(harness.api.getSessionStatus).not.toHaveBeenCalled();
+        expect(harness.commits.commitRecoveryFailure).not.toHaveBeenCalled();
+    });
+
     it("settles an accepted pre-dispatch cancellation without creating a session or prompt", async () => {
         const module = loadModule();
         if (!module) return;
@@ -158,9 +292,39 @@ describe("OpencodeTurnWorkerService", () => {
         ).resolves.toMatchObject({ action: "settled" });
         expect(harness.mutations.dispatch).not.toHaveBeenCalled();
         expect(harness.mutations.abort).not.toHaveBeenCalled();
-        expect(harness.commits.commit).toHaveBeenCalledWith(
-            expect.objectContaining({ outcome: "cancelled" }),
+        expect(harness.commits.commitCancellation).toHaveBeenCalledWith(
+            expect.objectContaining({ errorMessage: expect.stringMatching(/cancelled/i) }),
         );
+    });
+
+    it("recovers a committing pre-dispatch cancellation without requiring a session", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({
+            turn: turn({
+                status: "committing",
+                startedAt: null,
+                artifactBaseline: null,
+                dispatchSnapshot: null,
+                conversation: {
+                    ...turn().conversation,
+                    opencodeSessionId: null,
+                },
+                cancelRequestedAt: new Date(),
+            }),
+        });
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).resolves.toMatchObject({ action: "settled" });
+        expect(harness.mutations.assertObservationReady).not.toHaveBeenCalled();
+        expect(harness.commits.commitCancellation).toHaveBeenCalledWith(
+            expect.objectContaining({ errorMessage: expect.stringMatching(/cancelled/i) }),
+        );
+        expect(harness.commits.commitRecoveryFailure).not.toHaveBeenCalled();
     });
 
     it("keeps a running cancellation active when the remote abort is ambiguous", async () => {

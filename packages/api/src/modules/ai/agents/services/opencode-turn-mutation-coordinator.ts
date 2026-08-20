@@ -11,7 +11,11 @@ import {
     OpencodeApiService,
     type OpencodeSessionMessage,
 } from "../integrations/opencode-api.service";
-import { hashOpencodeRuntime } from "../utils/opencode-turn-command";
+import {
+    hashOpencodeRuntime,
+    type OpencodeDispatchSnapshot,
+    validateOpencodeDispatchSnapshot,
+} from "../utils/opencode-turn-command";
 import { AgentsService } from "./agents.service";
 import { OpencodeArtifactBaselineService } from "./opencode-artifact-baseline.service";
 import {
@@ -23,17 +27,14 @@ import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service"
 const DEFAULT_MUTATION_TIMEOUT_MS = 5_000;
 const DEFAULT_AMBIGUITY_WINDOW_MS = 5_000;
 
-type FrozenDispatchSnapshot = {
-    promptParts: Array<Record<string, unknown>>;
-    system: string;
-    model?: { providerID: string; modelID: string };
-    artifactRoot: string;
-};
-
 type ClaimedTurn = AgentOpencodeTurn & { conversation: AgentChatRecord };
 
 export class OpencodeTurnMutationError extends Error {
-    constructor(message: string) {
+    constructor(
+        message: string,
+        readonly code = "OPENCODE_MUTATION_RETRYABLE",
+        readonly retryable = true,
+    ) {
         super(message);
         this.name = "OpencodeTurnMutationError";
     }
@@ -69,11 +70,17 @@ export class OpencodeTurnMutationCoordinator {
         return this.withConversationMutationLock(input.turnId, async (queryRunner, initial) => {
             let turn = await this.revalidate(queryRunner.manager, input, initial.conversationId);
             const runtime = await this.resolveRuntime(turn);
-            const snapshot = this.snapshot(turn);
+            const snapshot = this.snapshot(turn, runtime.workspace);
             let sessionId = turn.conversation.opencodeSessionId;
             this.assertDeadlineFitsLease(turn, input.mutationTimeoutMs);
 
             if (!sessionId) {
+                if (turn.status !== "accepted") {
+                    throw this.permanentFailure(
+                        "OPENCODE_SESSION_LOST",
+                        "OpenCode session mapping is lost for an active turn",
+                    );
+                }
                 const priorTurns = await queryRunner.manager.count(AgentOpencodeTurn, {
                     where: {
                         conversationId: turn.conversationId,
@@ -81,19 +88,42 @@ export class OpencodeTurnMutationCoordinator {
                     },
                 });
                 if (priorTurns > 0) {
-                    throw new OpencodeTurnMutationError(
+                    throw this.permanentFailure(
+                        "OPENCODE_SESSION_LOST",
                         "OpenCode session is lost for a conversation with prior turns",
                     );
                 }
-                const session = await this.opencodeApiService.createSession(
-                    turn.conversation.agent?.thirdPartyIntegration,
-                    turn.conversation.title,
-                    {
-                        signal: input.signal,
-                        timeoutMs: input.mutationTimeoutMs ?? DEFAULT_MUTATION_TIMEOUT_MS,
-                    },
-                );
-                sessionId = session.id;
+                const operationOptions = {
+                    signal: input.signal,
+                    timeoutMs: input.mutationTimeoutMs ?? DEFAULT_MUTATION_TIMEOUT_MS,
+                };
+                const recoveredSessions = await this.opencodeApiService.findSessionsByTurnReceipt({
+                    config: turn.conversation.agent?.thirdPartyIntegration,
+                    turnId: turn.id,
+                    ...operationOptions,
+                });
+                turn = await this.revalidate(queryRunner.manager, input, turn.conversationId);
+                if (turn.conversation.opencodeSessionId) {
+                    throw new OpencodeTurnMutationError(
+                        "OpenCode session mapping changed during session recovery",
+                    );
+                }
+                const [session, ...duplicateSessions] = recoveredSessions;
+                for (const duplicate of duplicateSessions) {
+                    await this.opencodeApiService.deleteSession({
+                        config: turn.conversation.agent?.thirdPartyIntegration,
+                        sessionId: duplicate.id,
+                        ...operationOptions,
+                    });
+                }
+                const mappedSession =
+                    session ??
+                    (await this.opencodeApiService.createSession(
+                        turn.conversation.agent?.thirdPartyIntegration,
+                        turn.conversation.title,
+                        { ...operationOptions, turnReceipt: turn.id },
+                    ));
+                sessionId = mappedSession.id;
                 await queryRunner.startTransaction("READ COMMITTED");
                 try {
                     turn = await this.revalidate(queryRunner.manager, input, turn.conversationId);
@@ -263,6 +293,33 @@ export class OpencodeTurnMutationCoordinator {
         });
     }
 
+    async assertObservationReady(input: {
+        turnId: string;
+        leaseToken: string;
+        signal?: AbortSignal;
+        mutationTimeoutMs?: number;
+    }): Promise<void> {
+        await this.withConversationMutationLock(input.turnId, async (queryRunner, initial) => {
+            const turn = await this.revalidate(
+                queryRunner.manager,
+                input,
+                initial.conversationId,
+            );
+            const runtime = await this.resolveRuntime(turn);
+            this.snapshot(turn, runtime.workspace);
+            const sessionId = turn.conversation.opencodeSessionId;
+            if (!sessionId) {
+                throw this.permanentFailure(
+                    "OPENCODE_SESSION_LOST",
+                    "OpenCode session mapping is lost for an active turn",
+                );
+            }
+            this.assertDeadlineFitsLease(turn, input.mutationTimeoutMs);
+            await this.assertMappedSessionExists(turn, sessionId, input);
+            await this.revalidateActiveClaim(queryRunner.manager, turn, input);
+        });
+    }
+
     private async withExactSessionMutation<T>(
         input: {
             turnId: string;
@@ -363,7 +420,10 @@ export class OpencodeTurnMutationCoordinator {
             });
         } catch (error) {
             if ((error as { kind?: string }).kind === "not_found") {
-                throw new OpencodeTurnMutationError("OpenCode mapped session is lost");
+                throw this.permanentFailure(
+                    "OPENCODE_SESSION_LOST",
+                    "OpenCode mapped session is lost",
+                );
             }
             throw error;
         }
@@ -386,24 +446,34 @@ export class OpencodeTurnMutationCoordinator {
         const runtime = this.opencodeApiService.normalizeConfig(agent.thirdPartyIntegration);
         const runtimeHash = hashOpencodeRuntime(runtime);
         if (runtimeHash !== turn.runtimeConfigHash) {
-            throw new OpencodeTurnMutationError("OpenCode runtime binding changed after acceptance");
+            throw this.permanentFailure(
+                "OPENCODE_RUNTIME_CONFIG_CHANGED",
+                "OpenCode runtime binding changed after acceptance",
+            );
         }
         const conversationHash = turn.conversation.opencodeRuntimeHash;
         if (conversationHash && conversationHash !== runtimeHash) {
-            throw new OpencodeTurnMutationError("OpenCode conversation runtime binding mismatches turn");
+            throw this.permanentFailure(
+                "OPENCODE_RUNTIME_CONFIG_CHANGED",
+                "OpenCode conversation runtime binding mismatches turn",
+            );
         }
         turn.conversation.agent = agent;
         return runtime;
     }
 
-    private snapshot(turn: AgentOpencodeTurn): FrozenDispatchSnapshot {
-        const snapshot = turn.dispatchSnapshot;
-        if (!snapshot || !Array.isArray(snapshot.promptParts)) {
-            throw new OpencodeTurnMutationError("OpenCode dispatch snapshot is missing or invalid");
+    private snapshot(turn: AgentOpencodeTurn, workspace: string): OpencodeDispatchSnapshot {
+        try {
+            return validateOpencodeDispatchSnapshot(turn.dispatchSnapshot, workspace);
+        } catch {
+            throw this.permanentFailure(
+                "OPENCODE_SNAPSHOT_INVALID",
+                "OpenCode dispatch snapshot is missing or invalid",
+            );
         }
-        if (typeof snapshot.system !== "string" || typeof snapshot.artifactRoot !== "string") {
-            throw new OpencodeTurnMutationError("OpenCode dispatch snapshot fields are invalid");
-        }
-        return snapshot as FrozenDispatchSnapshot;
+    }
+
+    private permanentFailure(code: string, message: string): OpencodeTurnMutationError {
+        return new OpencodeTurnMutationError(message, code, false);
     }
 }

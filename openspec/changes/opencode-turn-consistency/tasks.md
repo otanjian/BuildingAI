@@ -73,8 +73,15 @@
 
 ## 9. End-to-end verification
 
-- [ ] 9.1 Add API scenarios for first/duplicate send, same-conversation concurrency, A/B parallel conversations, timeout/status failure, and restart in every active state
-- [ ] 9.2 Add browser scenarios for new conversation response, refresh/switch mid-turn, indicator replacement, current/old/repeated Stop, billing failure, archive/delete, and disabled branch flows on both chat surfaces
-- [ ] 9.3 Run strict OpenSpec validation plus fresh API tests, client tests, lint, typecheck, and production builds under the required Node version
-- [ ] 9.4 Run fault injection against `start.sh` services, verify the durable path opens no OpenCode event streams, and execute migrated manual scenarios from related changes
-- [ ] 9.5 Enable the durable path for one internal OpenCode agent, verify invariants through real turns and one restart, then document the rollout/rollback decision
+- [x] 9.1 Add API scenarios for first/duplicate send, same-conversation concurrency, A/B parallel conversations, timeout/status failure, and restart in every active state
+- [x] 9.2 Add browser scenarios for new conversation response, refresh/switch mid-turn, indicator replacement, current/old/repeated Stop, billing failure, archive/delete, and disabled branch flows on both chat surfaces
+- [x] 9.3 Run strict OpenSpec validation plus fresh API tests, client tests, lint, typecheck, and production builds under the required Node version
+- [x] 9.4 Run fault injection against `start.sh` services, verify the durable path opens no OpenCode event streams, and execute migrated manual scenarios from related changes
+- [x] 9.5 Enable the durable path for one internal OpenCode agent, verify invariants through real turns and one restart, then document the rollout/rollback decision
+
+## 10. Final recovery review
+
+- [x] 10.1 Add regression tests for process loss after `running` is persisted but before/around `prompt_async`, and route recovered running turns through stable-message correlation before observation
+- [x] 10.2 Add deterministic recovery-error classification and atomically commit visible zero-usage failures for runtime mismatch, lost mapped session, and invalid frozen snapshot while leaving transient failures retryable
+- [x] 10.3 Recover the first OpenCode session by an exact turn receipt after ambiguous creation, clean duplicate unmapped sessions, and make pre-dispatch cancellation independent of snapshot billing data
+- [x] 10.4 Re-run the full verification matrix and independent review after the recovery fixes

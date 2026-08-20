@@ -42,6 +42,10 @@ export type OpencodeDispatchSnapshot = {
     formFieldsInputs: Record<string, unknown>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 const REDACTED = "[REDACTED]";
 const REDACTED_KEY_PATTERN =
     /(?:artifactbaseline|authorization|cookie|credential|instruction|password|prompt|secret|snapshot|system|token)/i;
@@ -140,6 +144,31 @@ function canonicalObject(
     return stableJsonValue(value) as Record<string, unknown>;
 }
 
+function canonicalStringObject(value: unknown, field: string): Record<string, string> {
+    const output = canonicalObject(value, field);
+    if (Object.values(output).some((item) => typeof item !== "string")) {
+        throw new OpencodeTurnCommandError(`${field} values must be strings`);
+    }
+    return output as Record<string, string>;
+}
+
+function canonicalArtifactRoot(workspaceValue: unknown, artifactRootValue: unknown): string {
+    const workspace = path.resolve(nonEmpty(workspaceValue, "OpenCode workspace"));
+    const artifactRoot = path.resolve(nonEmpty(artifactRootValue, "OpenCode artifact root"));
+    const relativeArtifactRoot = path.relative(workspace, artifactRoot);
+    if (
+        relativeArtifactRoot === "" ||
+        relativeArtifactRoot === ".." ||
+        relativeArtifactRoot.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativeArtifactRoot)
+    ) {
+        throw new OpencodeTurnCommandError(
+            "OpenCode artifact root must be a conversation directory inside the workspace",
+        );
+    }
+    return artifactRoot;
+}
+
 export function canonicalizeOpencodeTurnCommand(input: unknown): OpencodeTurnCommand {
     if (!input || typeof input !== "object") {
         throw new OpencodeTurnCommandError("OpenCode turn command is required");
@@ -192,10 +221,7 @@ export function canonicalizeOpencodeTurnCommand(input: unknown): OpencodeTurnCom
         conversationId: nonEmpty(raw.conversationId, "conversationId"),
         owner: { type: ownerType, id: nonEmpty(raw.owner.id, "owner.id") },
         message: { role: "user", parts },
-        formVariables: canonicalObject(raw.formVariables, "formVariables") as Record<
-            string,
-            string
-        >,
+        formVariables: canonicalStringObject(raw.formVariables, "formVariables"),
         formFieldsInputs: canonicalObject(raw.formFieldsInputs, "formFieldsInputs"),
         isDebug: raw.isDebug === true,
     };
@@ -252,9 +278,18 @@ function canonicalPromptParts(
                     "OpenCode snapshot requires a persisted, authorized attachment reference",
                 );
             }
+            const mime = nonEmpty(part.mime, "Attachment MIME type");
+            if (!mime.startsWith("image/")) {
+                throw new OpencodeTurnCommandError(
+                    `Unsupported OpenCode attachment MIME type: ${mime}`,
+                );
+            }
+            if (mime !== part.mime) {
+                throw new OpencodeTurnCommandError("Attachment MIME type is not canonical");
+            }
             const file: OpencodeDispatchPromptPart = {
                 type: "file",
-                mime: nonEmpty(part.mime, "Attachment MIME type"),
+                mime,
                 url,
             };
             if (typeof part.filename === "string" && part.filename.trim()) {
@@ -268,21 +303,8 @@ function canonicalPromptParts(
 
 export function buildOpencodeDispatchSnapshot(input: Record<string, any>): OpencodeDispatchSnapshot {
     const command = canonicalizeOpencodeTurnCommand(input.command);
-    const workspace = path.resolve(
-        nonEmpty(input.workspace ?? input.runtime?.workspace, "OpenCode workspace"),
-    );
-    const artifactRoot = path.resolve(nonEmpty(input.artifactRoot, "OpenCode artifact root"));
-    const relativeArtifactRoot = path.relative(workspace, artifactRoot);
-    if (
-        relativeArtifactRoot === "" ||
-        relativeArtifactRoot === ".." ||
-        relativeArtifactRoot.startsWith(`..${path.sep}`) ||
-        path.isAbsolute(relativeArtifactRoot)
-    ) {
-        throw new OpencodeTurnCommandError(
-            "OpenCode artifact root must be a conversation directory inside the workspace",
-        );
-    }
+    const workspace = input.workspace ?? input.runtime?.workspace;
+    const artifactRoot = canonicalArtifactRoot(workspace, input.artifactRoot);
 
     const billing = input.billing ?? {};
     const power = Number(billing.power ?? 0);
@@ -312,6 +334,118 @@ export function buildOpencodeDispatchSnapshot(input: Record<string, any>): Openc
         };
     }
     return snapshot;
+}
+
+export function validateOpencodeDispatchSnapshot(
+    input: unknown,
+    workspace: unknown,
+): OpencodeDispatchSnapshot {
+    if (!isRecord(input)) {
+        throw new OpencodeTurnCommandError("OpenCode dispatch snapshot is required");
+    }
+
+    const rawParts = input.promptParts;
+    if (!Array.isArray(rawParts) || rawParts.length === 0) {
+        throw new OpencodeTurnCommandError("OpenCode dispatch prompt cannot be empty");
+    }
+    const promptParts: OpencodeDispatchPromptPart[] = [];
+    for (const part of rawParts) {
+        if (!isRecord(part)) {
+            throw new OpencodeTurnCommandError("Unsupported OpenCode dispatch prompt part");
+        }
+        if (part.type === "text") {
+            nonEmpty(part.text, "OpenCode dispatch prompt text");
+            promptParts.push({ type: "text", text: part.text as string });
+            continue;
+        }
+        if (part.type === "file") {
+            const mime = nonEmpty(part.mime, "Attachment MIME type");
+            if (!mime.startsWith("image/")) {
+                throw new OpencodeTurnCommandError(
+                    `Unsupported OpenCode attachment MIME type: ${mime}`,
+                );
+            }
+            const url = nonEmpty(part.url, "Attachment URL");
+            if (canonicalAttachmentUrl(url) !== url) {
+                throw new OpencodeTurnCommandError("Attachment URL is not canonical");
+            }
+            if (
+                part.filename !== undefined &&
+                (typeof part.filename !== "string" ||
+                    !part.filename.trim() ||
+                    part.filename !== part.filename.trim())
+            ) {
+                throw new OpencodeTurnCommandError("Attachment filename is invalid");
+            }
+            promptParts.push({
+                type: "file",
+                mime,
+                url,
+                ...(part.filename === undefined ? {} : { filename: part.filename as string }),
+            });
+            continue;
+        }
+        throw new OpencodeTurnCommandError("Unsupported OpenCode dispatch prompt part");
+    }
+    if (typeof input.system !== "string") {
+        throw new OpencodeTurnCommandError("OpenCode dispatch system prompt is invalid");
+    }
+
+    if (!isRecord(input.billing)) {
+        throw new OpencodeTurnCommandError("OpenCode billing snapshot is invalid");
+    }
+    const power = input.billing.power;
+    const tokens = input.billing.tokens;
+    if (
+        typeof input.billing.enabled !== "boolean" ||
+        typeof power !== "number" ||
+        !Number.isFinite(power) ||
+        power < 0 ||
+        typeof tokens !== "number" ||
+        !Number.isFinite(tokens) ||
+        tokens <= 0
+    ) {
+        throw new OpencodeTurnCommandError("OpenCode billing snapshot is invalid");
+    }
+    if (typeof input.isDebug !== "boolean") {
+        throw new OpencodeTurnCommandError("OpenCode debug snapshot is invalid");
+    }
+
+    const artifactRoot = nonEmpty(input.artifactRoot, "OpenCode artifact root");
+    if (canonicalArtifactRoot(workspace, artifactRoot) !== artifactRoot) {
+        throw new OpencodeTurnCommandError("OpenCode artifact root is not canonical");
+    }
+    if (!isRecord(input.formVariables) || !isRecord(input.formFieldsInputs)) {
+        throw new OpencodeTurnCommandError("OpenCode form snapshot is invalid");
+    }
+    const formVariables = canonicalStringObject(input.formVariables, "formVariables");
+    const formFieldsInputs = canonicalObject(input.formFieldsInputs, "formFieldsInputs");
+    let model: OpencodeDispatchSnapshot["model"];
+    if (input.model !== undefined) {
+        if (!isRecord(input.model)) {
+            throw new OpencodeTurnCommandError("OpenCode model snapshot is invalid");
+        }
+        const providerID = nonEmpty(input.model.providerID, "OpenCode model provider");
+        const modelID = nonEmpty(input.model.modelID, "OpenCode model ID");
+        if (providerID !== input.model.providerID || modelID !== input.model.modelID) {
+            throw new OpencodeTurnCommandError("OpenCode model snapshot is not canonical");
+        }
+        model = { providerID, modelID };
+    }
+    const canonical: OpencodeDispatchSnapshot = {
+        promptParts,
+        system: input.system,
+        artifactRoot,
+        billing: { enabled: input.billing.enabled, power, tokens },
+        isDebug: input.isDebug,
+        formVariables,
+        formFieldsInputs,
+        ...(model ? { model } : {}),
+    };
+    if (stableJsonStringify(canonical) !== stableJsonStringify(input)) {
+        throw new OpencodeTurnCommandError("OpenCode dispatch snapshot is not canonical");
+    }
+    return canonical;
 }
 
 export function redactOpencodeTurnLogData(value: unknown): unknown {

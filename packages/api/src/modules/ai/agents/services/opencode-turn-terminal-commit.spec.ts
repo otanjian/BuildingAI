@@ -34,9 +34,11 @@ function loadModule(): Record<string, any> | undefined {
 
 function makeHarness(options: {
     terminal?: boolean;
+    status?: "accepted" | "running" | "committing";
     billingEnabled?: boolean;
     billingFailure?: Error;
     saveFailure?: Error;
+    missingSnapshot?: boolean;
 } = {}) {
     const conversation = {
         id: CONVERSATION_ID,
@@ -48,11 +50,11 @@ function makeHarness(options: {
         id: TURN_ID,
         conversationId: CONVERSATION_ID,
         conversation,
-        status: options.terminal ? "completed" : "committing",
+        status: options.terminal ? "completed" : options.status ?? "committing",
         leaseToken: options.terminal ? null : LEASE_TOKEN,
         assistantMessageId: options.terminal ? ASSISTANT_MESSAGE_ID : null,
         inputMessageId: INPUT_MESSAGE_ID,
-        dispatchSnapshot: options.terminal
+        dispatchSnapshot: options.terminal || options.missingSnapshot
             ? null
             : {
                   billing: {
@@ -170,6 +172,78 @@ describe("OpencodeTurnTerminalCommitService", () => {
             usage: { totalTokens: 15 },
             userConsumedPower: 0,
         });
+    });
+
+    it.each(["accepted", "running", "committing"] as const)(
+        "atomically commits a visible zero-usage recovery failure from %s",
+        async (status) => {
+            const module = loadModule();
+            if (!module) return;
+            const harness = makeHarness({ status });
+
+            await expect(
+                createService(module, harness).commitRecoveryFailure({
+                    turnId: TURN_ID,
+                    leaseToken: LEASE_TOKEN,
+                    assistantMessageId: ASSISTANT_MESSAGE_ID,
+                    errorCode: "OPENCODE_SESSION_LOST",
+                    errorMessage: "OpenCode session is unavailable. Start a new conversation.",
+                }),
+            ).resolves.toMatchObject({ status: "failed", duplicate: false });
+            expect(harness.billing.deduct).not.toHaveBeenCalled();
+            expect(harness.saved[0]?.entity).toMatchObject({
+                status: "failed",
+                message: {
+                    parts: [{ type: "text", text: expect.stringMatching(/session/i) }],
+                    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                    userConsumedPower: 0,
+                },
+            });
+            expect(harness.turns.transition).toHaveBeenCalledWith(
+                harness.manager,
+                expect.objectContaining({ to: "failed", leaseToken: LEASE_TOKEN }),
+            );
+        },
+    );
+
+    it("commits a free visible recovery failure when the frozen snapshot is missing", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ status: "accepted", missingSnapshot: true });
+
+        await expect(
+            createService(module, harness).commitRecoveryFailure({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+                assistantMessageId: ASSISTANT_MESSAGE_ID,
+                errorCode: "OPENCODE_SNAPSHOT_INVALID",
+                errorMessage: "OpenCode dispatch snapshot is invalid. Start a new conversation.",
+            }),
+        ).resolves.toMatchObject({ status: "failed", duplicate: false });
+        expect(harness.billing.deduct).not.toHaveBeenCalled();
+        expect(harness.saved[0]?.entity).toMatchObject({
+            status: "failed",
+            message: {
+                parts: [{ type: "text", text: expect.stringMatching(/snapshot/i) }],
+                userConsumedPower: 0,
+            },
+        });
+    });
+
+    it("commits a zero-usage cancellation when the frozen snapshot is missing", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ status: "committing", missingSnapshot: true });
+
+        await expect(
+            createService(module, harness).commitCancellation({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+                assistantMessageId: ASSISTANT_MESSAGE_ID,
+                errorMessage: "Turn cancelled before dispatch",
+            }),
+        ).resolves.toMatchObject({ status: "cancelled", duplicate: false });
+        expect(harness.billing.deduct).not.toHaveBeenCalled();
     });
 
     it("requires one visible non-blank terminal projection", async () => {

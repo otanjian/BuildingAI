@@ -128,6 +128,11 @@ describe("OpenCode turn command canonicalization", () => {
         expect(() => module.canonicalizeOpencodeTurnCommand(command({ message: { role: "user", parts: [{ type: "file", mediaType: "image/png", url: "data:image/png;base64,AAAA" }] } }))).toThrow(/persisted attachment reference/i);
         expect(() => module.canonicalizeOpencodeTurnCommand(command({ message: { role: "user", parts: [{ type: "file", mediaType: "image/png", url: "https://user:password@app.example/uploads/a.png" }] } }))).toThrow(/credentials/i);
         expect(() => module.canonicalizeOpencodeTurnCommand(command({ message: { role: "user", parts: [{ type: "file", mediaType: "image/png", url: "https://app.example/uploads/a.png?X-Amz-Signature=secret" }] } }))).toThrow(/credential query/i);
+        expect(() =>
+            module.canonicalizeOpencodeTurnCommand(
+                command({ formVariables: { company: 42 } }),
+            ),
+        ).toThrow(/formVariables.*string/i);
     });
 });
 

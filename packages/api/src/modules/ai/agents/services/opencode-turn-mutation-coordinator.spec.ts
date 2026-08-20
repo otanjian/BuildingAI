@@ -12,6 +12,7 @@ jest.mock("../integrations/opencode-api.service", () => ({
     OpencodeApiService: class OpencodeApiService {},
 }));
 jest.mock("../utils/opencode-turn-command", () => ({
+    ...jest.requireActual("../utils/opencode-turn-command"),
     hashOpencodeRuntime: () => "runtime-hash",
 }));
 
@@ -23,6 +24,15 @@ const TURN_ID = "11111111-1111-4111-8111-111111111111";
 const CONVERSATION_ID = "22222222-2222-4222-8222-222222222222";
 const LEASE_TOKEN = "33333333-3333-4333-8333-333333333333";
 const REMOTE_MESSAGE_ID = "msg_stable_123";
+const VALID_DISPATCH_SNAPSHOT = {
+    promptParts: [{ type: "text", text: "hello" }],
+    system: "system",
+    artifactRoot: "/workspace/artifacts/conversation",
+    billing: { enabled: false, power: 0, tokens: 1000 },
+    isDebug: false,
+    formVariables: {},
+    formFieldsInputs: {},
+};
 
 function loadModule(): Record<string, any> | undefined {
     expect(existsSync(SERVICE_PATH)).toBe(true);
@@ -42,6 +52,9 @@ function makeHarness(
         pendingPermissions?: Array<{ id: string; sessionID: string }>;
         pendingQuestions?: Array<{ id: string; sessionID: string; questions: [] }>;
         leaseExpiresAt?: Date;
+        dispatchSnapshot?: unknown;
+        mappedSessionIdDuringReceiptLookup?: string | null;
+        changeMappingDuringDuplicateCleanup?: boolean;
     } = {},
 ) {
     const runtimeHash = overrides.runtimeHash === undefined ? "runtime-hash" : overrides.runtimeHash;
@@ -60,15 +73,10 @@ function makeHarness(
         leaseExpiresAt: overrides.leaseExpiresAt ?? new Date(Date.now() + 60_000),
         runtimeConfigHash: overrides.turnRuntimeHash ?? "runtime-hash",
         artifactBaseline: overrides.status === "accepted" || !overrides.status ? null : { files: [] },
-        dispatchSnapshot: {
-            promptParts: [{ type: "text", text: "hello" }],
-            system: "system",
-            artifactRoot: "/workspace/artifacts/conversation",
-            billing: { enabled: false, power: 0, tokens: 1000 },
-            isDebug: false,
-            formVariables: {},
-            formFieldsInputs: {},
-        },
+        dispatchSnapshot:
+            overrides.dispatchSnapshot === undefined
+                ? VALID_DISPATCH_SNAPSHOT
+                : overrides.dispatchSnapshot,
         opencodeUserMessageId: REMOTE_MESSAGE_ID,
         startedAt: overrides.startedAt ?? null,
         cancelRequestedAt: null,
@@ -110,6 +118,17 @@ function makeHarness(
             workspace: "/workspace",
         })),
         createSession: jest.fn(async () => ({ id: "ses_created" })),
+        findSessionsByTurnReceipt: jest.fn(async () => {
+            if (overrides.mappedSessionIdDuringReceiptLookup !== undefined) {
+                conversation.opencodeSessionId = overrides.mappedSessionIdDuringReceiptLookup;
+            }
+            return [];
+        }),
+        deleteSession: jest.fn(async () => {
+            if (overrides.changeMappingDuringDuplicateCleanup) {
+                conversation.opencodeSessionId = "ses_newer_mapping";
+            }
+        }),
         getSessionUpdatedAt: jest.fn(async () => 100),
         getExactSessionMessage: jest.fn(async () => overrides.remoteMessage ?? null),
         promptAsync: jest.fn(async () => undefined),
@@ -202,6 +221,74 @@ describe("OpencodeTurnMutationCoordinator", () => {
             opencodeRuntimeHash: "runtime-hash",
         });
         expect(harness.api.promptAsync).not.toHaveBeenCalled();
+        expect(harness.api.createSession).toHaveBeenCalledWith(
+            expect.anything(),
+            undefined,
+            expect.objectContaining({ turnReceipt: TURN_ID }),
+        );
+    });
+
+    it("recovers one receipt-matched session and deletes duplicate unmapped sessions", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness();
+        harness.api.findSessionsByTurnReceipt.mockResolvedValue([
+            { id: "ses_recovered", time: { created: 100, updated: 100 } },
+            { id: "ses_duplicate", time: { created: 200, updated: 200 } },
+        ]);
+
+        await expect(
+            createService(module, harness).dispatch({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).resolves.toEqual({ kind: "session-created", sessionId: "ses_recovered" });
+        expect(harness.api.createSession).not.toHaveBeenCalled();
+        expect(harness.api.deleteSession).toHaveBeenCalledWith(
+            expect.objectContaining({ sessionId: "ses_duplicate" }),
+        );
+        expect(harness.conversation.opencodeSessionId).toBe("ses_recovered");
+    });
+
+    it("does not create or delete sessions when the mapping appears during receipt lookup", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ mappedSessionIdDuringReceiptLookup: "ses_newer_mapping" });
+        harness.api.findSessionsByTurnReceipt.mockImplementation(async () => {
+            harness.conversation.opencodeSessionId = "ses_newer_mapping";
+            return [
+                { id: "ses_stale_receipt", time: { created: 100, updated: 100 } },
+                { id: "ses_stale_duplicate", time: { created: 200, updated: 200 } },
+            ];
+        });
+
+        await expect(
+            createService(module, harness).dispatch({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).rejects.toThrow(/mapping changed/i);
+        expect(harness.api.createSession).not.toHaveBeenCalled();
+        expect(harness.api.deleteSession).not.toHaveBeenCalled();
+    });
+
+    it("does not map a recovered session when the mapping appears during duplicate cleanup", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ changeMappingDuringDuplicateCleanup: true });
+        harness.api.findSessionsByTurnReceipt.mockResolvedValue([
+            { id: "ses_recovered", time: { created: 100, updated: 100 } },
+            { id: "ses_duplicate", time: { created: 200, updated: 200 } },
+        ]);
+
+        await expect(
+            createService(module, harness).dispatch({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).rejects.toThrow(/mapping changed/i);
+        expect(harness.api.createSession).not.toHaveBeenCalled();
+        expect(harness.conversation.opencodeSessionId).toBe("ses_newer_mapping");
     });
 
     it("observes an existing stable remote message without redispatch", async () => {
@@ -319,6 +406,117 @@ describe("OpencodeTurnMutationCoordinator", () => {
             }),
         ).rejects.toThrow(/session.*lost/i);
         expect(harness.api.createSession).not.toHaveBeenCalled();
+    });
+
+    it("classifies a running turn without a session mapping as a permanent recovery failure", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ status: "running", sessionId: null });
+
+        await expect(
+            createService(module, harness).dispatch({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).rejects.toMatchObject({
+            code: "OPENCODE_SESSION_LOST",
+            retryable: false,
+        });
+        expect(harness.api.createSession).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["missing snapshot", null],
+        ["empty prompt part", { ...VALID_DISPATCH_SNAPSHOT, promptParts: [{}] }],
+        [
+            "blank text part",
+            { ...VALID_DISPATCH_SNAPSHOT, promptParts: [{ type: "text", text: "   " }] },
+        ],
+        [
+            "unsupported prompt part",
+            { ...VALID_DISPATCH_SNAPSHOT, promptParts: [{ type: "tool", name: "shell" }] },
+        ],
+        [
+            "unexpected prompt field",
+            {
+                ...VALID_DISPATCH_SNAPSHOT,
+                promptParts: [{ type: "text", text: "hello", command: "rm -rf /" }],
+            },
+        ],
+        [
+            "incomplete file part",
+            {
+                ...VALID_DISPATCH_SNAPSHOT,
+                promptParts: [{ type: "file", mime: "image/png" }],
+            },
+        ],
+        [
+            "unsupported file MIME type",
+            {
+                ...VALID_DISPATCH_SNAPSHOT,
+                promptParts: [
+                    {
+                        type: "file",
+                        mime: "application/pdf",
+                        url: "https://app.example/uploads/report.pdf",
+                    },
+                ],
+            },
+        ],
+        [
+            "blank artifact root",
+            { ...VALID_DISPATCH_SNAPSHOT, artifactRoot: "   " },
+        ],
+        [
+            "missing billing snapshot",
+            { ...VALID_DISPATCH_SNAPSHOT, billing: undefined },
+        ],
+        [
+            "malformed billing snapshot",
+            {
+                ...VALID_DISPATCH_SNAPSHOT,
+                billing: { enabled: false, power: 0, tokens: 0 },
+            },
+        ],
+        [
+            "missing debug flag",
+            { ...VALID_DISPATCH_SNAPSHOT, isDebug: undefined },
+        ],
+        [
+            "malformed form variables",
+            { ...VALID_DISPATCH_SNAPSHOT, formVariables: { company: 42 } },
+        ],
+        [
+            "malformed form field inputs",
+            { ...VALID_DISPATCH_SNAPSHOT, formFieldsInputs: [] },
+        ],
+        [
+            "malformed model",
+            {
+                ...VALID_DISPATCH_SNAPSHOT,
+                model: { providerID: "", modelID: "model" },
+            },
+        ],
+        [
+            "unexpected top-level field",
+            { ...VALID_DISPATCH_SNAPSHOT, runtimeToken: "must-not-be-forwarded" },
+        ],
+    ])("classifies %s as a permanent snapshot failure", async (_caseName, dispatchSnapshot) => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({ sessionId: "ses_existing", dispatchSnapshot });
+
+        await expect(
+            createService(module, harness).dispatch({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).rejects.toMatchObject({
+            code: "OPENCODE_SNAPSHOT_INVALID",
+            retryable: false,
+        });
+        expect(harness.api.getSessionUpdatedAt).not.toHaveBeenCalled();
+        expect(harness.api.promptAsync).not.toHaveBeenCalled();
     });
 
     it("fails a missing mapped remote session without redispatching into it", async () => {
