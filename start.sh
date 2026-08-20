@@ -676,8 +676,7 @@ db_need_prebuild() {
   local db_pkg="${ROOT_DIR}/packages/@buildingai/db"
   local marker="${db_pkg}/dist/utils/file-url.service.js"
   [[ ! -f "$marker" ]] && return 0
-  if find "${db_pkg}/src/utils/file-url.service.ts" "${db_pkg}/src/entities" -type f \
-    -newer "$marker" 2>/dev/null | grep -q .; then
+  if find "${db_pkg}/src" -type f -newer "$marker" 2>/dev/null | grep -q .; then
     return 0
   fi
   return 1
@@ -688,6 +687,46 @@ prebuild_db() {
     echo "Prebuilding @buildingai/db (API loads compiled dist)..."
     pnpm --filter @buildingai/db build >/dev/null 2>&1 || pnpm --filter @buildingai/db build
   fi
+}
+
+ensure_dev_launchers() {
+  cat >"${RUN_DIR}/start-api.js" <<'EOF'
+#!/usr/bin/env node
+const { spawn } = require("child_process");
+const path = require("path");
+const cwd = path.resolve(__dirname, "../packages/api");
+const env = { ...process.env };
+for (const key of ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]) {
+  delete env[key];
+}
+env.NO_PROXY = "localhost,127.0.0.1,::1";
+env.no_proxy = env.NO_PROXY;
+env.NODE_ENV = "development";
+env.SERVER_LISTEN_HOST = "127.0.0.1";
+const child = spawn("pnpm", ["exec", "nest", "start", "-b", "swc"], {
+  cwd,
+  env,
+  stdio: "inherit",
+});
+child.on("exit", (code) => process.exit(code ?? 0));
+EOF
+
+  cat >"${RUN_DIR}/start-web.js" <<'EOF'
+#!/usr/bin/env node
+const { spawn } = require("child_process");
+const path = require("path");
+const cwd = path.resolve(__dirname, "../packages/client");
+const env = { ...process.env };
+for (const key of ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]) {
+  delete env[key];
+}
+env.NO_PROXY = "localhost,127.0.0.1,::1";
+env.no_proxy = env.NO_PROXY;
+env.CLIENT_DEV_PORT = env.CLIENT_DEV_PORT || "4091";
+const child = spawn("pnpm", ["dev"], { cwd, env, stdio: "inherit" });
+child.on("exit", (code) => process.exit(code ?? 0));
+EOF
+  chmod +x "${RUN_DIR}/start-api.js" "${RUN_DIR}/start-web.js"
 }
 
 print_info() {
@@ -796,6 +835,7 @@ start_dev_detached() {
   echo "DEBUG start_dev_detached: SERVER_PORT=[${SERVER_PORT:-unset}] APP_DOMAIN=[${APP_DOMAIN:-unset}]"
   echo "Starting dev stack in background via PM2 (API + web)..."
   : >>"${RUN_DIR}/dev.log"
+  ensure_dev_launchers
 
   cd "${ROOT_DIR}"
   clear_broken_proxy

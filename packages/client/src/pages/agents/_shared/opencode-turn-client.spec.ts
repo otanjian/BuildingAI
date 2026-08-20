@@ -293,4 +293,92 @@ describe("DeterministicOpencodeTurnClient", () => {
     expect(client.getSnapshot().activities[0]).toMatchObject({ cancelRequested: true });
     client.dispose();
   });
+
+  it("isolates parallel conversations and replaces each indicator after its own terminal commit", async () => {
+    const conversationB = "33333333-3333-4333-8333-333333333333";
+    const turnB = "44444444-4444-4444-8444-444444444444";
+    const onTerminal = vi.fn(async () => undefined);
+    const api = transport({
+      getStatus: vi.fn(async (turnId: string) =>
+        activeStatus({
+          conversationId: turnId === TURN_ID ? CONVERSATION_ID : conversationB,
+          turnId,
+          status: "completed",
+          assistantMessageId:
+            turnId === TURN_ID
+              ? "55555555-5555-4555-8555-555555555555"
+              : "66666666-6666-4666-8666-666666666666",
+          completedAt: "2026-08-20T10:00:02.000Z",
+        }),
+      ),
+    });
+    const client = new DeterministicOpencodeTurnClient({ transport: api, onTerminal });
+    client.hydrate(activeStatus());
+    client.hydrate(activeStatus({ conversationId: conversationB, turnId: turnB }));
+    expect(client.getSnapshot().activities).toHaveLength(2);
+
+    await client.pollNow(TURN_ID);
+    expect(client.getSnapshot().activities).toEqual([
+      expect.objectContaining({ conversationId: conversationB, turnId: turnB }),
+    ]);
+    await client.pollNow(turnB);
+    expect(client.getSnapshot().activities).toEqual([]);
+    expect(onTerminal).toHaveBeenCalledTimes(2);
+    client.dispose();
+  });
+
+  it("keeps a cancel-requested turn active until settlement and makes old/repeated Stop harmless", async () => {
+    const api = transport({
+      stop: vi
+        .fn()
+        .mockResolvedValueOnce(activeStatus({ cancelRequested: true }))
+        .mockResolvedValueOnce(
+          activeStatus({
+            status: "cancelled",
+            cancelRequested: false,
+            assistantMessageId: "77777777-7777-4777-8777-777777777777",
+            completedAt: "2026-08-20T10:00:03.000Z",
+          }),
+        ),
+    });
+    const client = new DeterministicOpencodeTurnClient({ transport: api });
+    client.hydrate(activeStatus());
+
+    await client.stop(TURN_ID);
+    expect(client.getSnapshot().activities[0]).toMatchObject({ cancelRequested: true });
+    await client.stop(TURN_ID);
+    expect(client.getSnapshot().activities).toEqual([]);
+    await expect(client.stop(TURN_ID)).rejects.toThrow(/not active/i);
+    expect(api.stop).toHaveBeenCalledTimes(2);
+    client.dispose();
+  });
+
+  it("keeps a billing failure visible through one terminal history refresh", async () => {
+    const onTerminal = vi.fn(async () => undefined);
+    const api = transport({
+      getStatus: vi.fn(async () =>
+        activeStatus({
+          status: "failed",
+          assistantMessageId: "88888888-8888-4888-8888-888888888888",
+          error: {
+            code: "OPENCODE_BILLING_INSUFFICIENT",
+            message: "Insufficient balance",
+          },
+          completedAt: "2026-08-20T10:00:03.000Z",
+        }),
+      ),
+    });
+    const client = new DeterministicOpencodeTurnClient({ transport: api, onTerminal });
+    client.hydrate(activeStatus());
+
+    await client.pollNow(TURN_ID);
+    expect(onTerminal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        error: expect.objectContaining({ code: "OPENCODE_BILLING_INSUFFICIENT" }),
+      }),
+    );
+    expect(client.getSnapshot().activities).toEqual([]);
+    client.dispose();
+  });
 });
