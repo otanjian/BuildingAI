@@ -122,6 +122,26 @@ describe("OpencodeTurnReconcilerService", () => {
         await first;
     });
 
+    it("contains an initialization-time missing-table rejection from the fire-and-forget tick", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness([]);
+        harness.leaseRepository.claimAvailable.mockRejectedValue(
+            new Error('relation "ai_agent_opencode_turn" does not exist'),
+        );
+        const service = new module.OpencodeTurnReconcilerService(
+            harness.dataSource,
+            harness.leaseRepository,
+            harness.worker,
+            { capacity: 1, leaseDurationMs: 30_000, intervalMs: 60_000 },
+        );
+
+        expect(() => service.onModuleInit()).not.toThrow();
+        await new Promise((resolve) => setImmediate(resolve));
+        await service.onModuleDestroy();
+        expect(harness.worker.runStep).not.toHaveBeenCalled();
+    });
+
     it("renews an in-flight lease before half its duration elapses", async () => {
         jest.useFakeTimers();
         try {

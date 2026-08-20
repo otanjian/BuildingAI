@@ -48,9 +48,11 @@ export class OpencodeTurnReconcilerService implements OnModuleInit, OnModuleDest
     }
 
     onModuleInit(): void {
-        this.timer = setInterval(() => void this.tick(), this.options.intervalMs);
+        this.timer = setInterval(() => {
+            void this.tick().catch((error) => this.logTickFailure(error));
+        }, this.options.intervalMs);
         this.timer.unref?.();
-        void this.tick();
+        void this.tick().catch((error) => this.logTickFailure(error));
     }
 
     async onModuleDestroy(): Promise<void> {
@@ -184,5 +186,13 @@ export class OpencodeTurnReconcilerService implements OnModuleInit, OnModuleDest
                 throw new RangeError(`OpenCode turn worker ${name} must be a positive integer`);
             }
         }
+    }
+
+    private logTickFailure(error: unknown): void {
+        this.logger.warn(
+            `OpenCode turn reconciliation deferred: ${
+                error instanceof Error ? error.message : String(error)
+            }`,
+        );
     }
 }

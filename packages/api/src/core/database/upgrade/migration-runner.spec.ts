@@ -7,9 +7,20 @@ jest.mock("chalk", () => {
     return { __esModule: true, default: new Proxy(color, { get: () => color }) };
 });
 
-import { MigrationRunner } from "./migration-runner";
+import { MigrationRunner, parseMigrationFilename } from "./migration-runner";
 
 describe("MigrationRunner history compatibility", () => {
+    it("ignores legacy migration filenames that do not contain a semantic version", () => {
+        expect(parseMigrationFilename("1778600000000-add-agent-assignment.js")).toBeNull();
+        expect(
+            parseMigrationFilename("1787270400000-26.1.5-add-opencode-turn-consistency.js"),
+        ).toEqual({
+            name: "1787270400000-26.1.5-add-opencode-turn-consistency.js",
+            version: "26.1.5",
+            timestamp: 1787270400000,
+        });
+    });
+
     it("upgrades a legacy TypeORM migrations_history table before recording versioned migrations", async () => {
         const queryRunner = {
             connect: jest.fn(),
