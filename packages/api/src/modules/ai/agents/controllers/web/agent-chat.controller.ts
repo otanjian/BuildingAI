@@ -747,14 +747,20 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
-        const activeTurn = await this.agentChatRecordService.getActiveOpencodeTurnSummary(
+        const turnProjection = await this.agentChatRecordService.getOpencodeTurnConversationProjection(
             conversationId,
         );
         return {
             id: record.id,
             title: record.title,
             archivedAt: record.archivedAt ?? null,
-            activeTurn,
+            metadata: turnProjection.legacyStatus
+                ? {
+                      ...(record.metadata ?? {}),
+                      opencodeTurnStatus: turnProjection.legacyStatus,
+                  }
+                : record.metadata,
+            activeTurn: turnProjection.activeTurn,
         };
     }
 

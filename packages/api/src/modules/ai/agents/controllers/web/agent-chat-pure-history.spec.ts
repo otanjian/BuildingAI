@@ -67,7 +67,10 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             })),
             listUserConversations: jest.fn(async () => ({ items: [], total: 0 })),
             findActiveOpencodeTurn: jest.fn(async () => null),
-            getActiveOpencodeTurnSummary: jest.fn(async () => null),
+            getOpencodeTurnConversationProjection: jest.fn(async () => ({
+                activeTurn: null,
+                legacyStatus: null,
+            })),
         };
         const messages = {
             listConversationMessages: jest.fn(async () => ({
@@ -147,6 +150,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             id: CONVERSATION_ID,
             title: "Conversation",
             archivedAt: null,
+            metadata: undefined,
             activeTurn: null,
         });
         expect(test.opencodeApi.getSessionStatus).not.toHaveBeenCalled();
@@ -181,11 +185,14 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             title: "Archived conversation",
             archivedAt: new Date("2026-08-20T10:00:00.000Z"),
         });
-        test.records.getActiveOpencodeTurnSummary.mockResolvedValue({
-            turnId: "55555555-5555-4555-8555-555555555555",
-            status: "running",
-            lastActivityAt: new Date("2026-08-20T10:01:00.000Z"),
-            cancelRequested: false,
+        test.records.getOpencodeTurnConversationProjection.mockResolvedValue({
+            activeTurn: {
+                turnId: "55555555-5555-4555-8555-555555555555",
+                status: "running",
+                lastActivityAt: new Date("2026-08-20T10:01:00.000Z"),
+                cancelRequested: false,
+            },
+            legacyStatus: "running",
         });
 
         await expect(
@@ -223,7 +230,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
                 { headers: { "x-anonymous-identifier": "different-owner" } } as any,
             ),
         ).rejects.toThrow(/无权/);
-        expect(test.records.getActiveOpencodeTurnSummary).not.toHaveBeenCalled();
+        expect(test.records.getOpencodeTurnConversationProjection).not.toHaveBeenCalled();
     });
 
     it("returns an active-turn summary to the matching anonymous owner", async () => {
@@ -236,11 +243,14 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             title: "Anonymous conversation",
             archivedAt: null,
         });
-        test.records.getActiveOpencodeTurnSummary.mockResolvedValue({
-            turnId: "55555555-5555-4555-8555-555555555555",
-            status: "accepted",
-            lastActivityAt: new Date("2026-08-20T10:01:00.000Z"),
-            cancelRequested: false,
+        test.records.getOpencodeTurnConversationProjection.mockResolvedValue({
+            activeTurn: {
+                turnId: "55555555-5555-4555-8555-555555555555",
+                status: "accepted",
+                lastActivityAt: new Date("2026-08-20T10:01:00.000Z"),
+                cancelRequested: false,
+            },
+            legacyStatus: "running",
         });
 
         await expect(

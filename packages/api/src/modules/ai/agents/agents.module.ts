@@ -62,6 +62,7 @@ import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
 import { OpencodeArtifactBaselineService } from "./services/opencode-artifact-baseline.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
+import { OpencodeLegacyBindingMigrationService } from "./services/opencode-legacy-binding-migration";
 import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
 import { OpencodeTurnInvariantService } from "./services/opencode-turn-invariant.service";
@@ -139,6 +140,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeChatProvider,
         OpencodeArtifactBaselineService,
         OpencodeArtifactService,
+        OpencodeLegacyBindingMigrationService,
         OpencodeTurnAcceptanceService,
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,

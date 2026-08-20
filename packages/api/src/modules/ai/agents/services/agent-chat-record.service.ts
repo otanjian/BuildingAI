@@ -31,6 +31,11 @@ export type OpencodeActiveTurnSummary = {
     cancelRequested: boolean;
 };
 
+export type OpencodeTurnConversationProjection = {
+    activeTurn: OpencodeActiveTurnSummary | null;
+    legacyStatus: "running" | "completed" | "aborted" | "timed_out" | null;
+};
+
 export type AgentChatThreadSession = {
     conversationId: string;
     messages: AgentChatMessage[];
@@ -535,19 +540,24 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
     async getActiveOpencodeTurnSummary(
         conversationId: string,
     ): Promise<OpencodeActiveTurnSummary | null> {
+        return (await this.getOpencodeTurnConversationProjection(conversationId)).activeTurn;
+    }
+
+    async getOpencodeTurnConversationProjection(
+        conversationId: string,
+    ): Promise<OpencodeTurnConversationProjection> {
         const turn = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).findOne({
-            where: {
-                conversationId,
-                status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
-            },
+            where: { conversationId },
             select: {
                 id: true,
                 status: true,
                 lastActivityAt: true,
                 cancelRequestedAt: true,
+                errorCode: true,
             },
+            order: { createdAt: "DESC" },
         });
-        return turn ? this.toActiveOpencodeTurnSummary(turn) : null;
+        return this.toOpencodeTurnConversationProjection(turn);
     }
 
     async withActiveOpencodeTurnSummaries<T extends AgentChatRecord>(
@@ -557,7 +567,6 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         const turns = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).find({
             where: {
                 conversationId: In(records.map((record) => record.id)),
-                status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
             },
             select: {
                 id: true,
@@ -565,15 +574,57 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
                 status: true,
                 lastActivityAt: true,
                 cancelRequestedAt: true,
+                errorCode: true,
+                createdAt: true,
             },
+            order: { createdAt: "DESC" },
         });
-        const byConversation = new Map(
-            turns.map((turn) => [turn.conversationId, this.toActiveOpencodeTurnSummary(turn)]),
-        );
-        return records.map((record) => ({
-            ...record,
-            activeTurn: byConversation.get(record.id) ?? null,
-        }));
+        const byConversation = new Map<string, OpencodeTurnConversationProjection>();
+        for (const turn of turns) {
+            if (!byConversation.has(turn.conversationId)) {
+                byConversation.set(
+                    turn.conversationId,
+                    this.toOpencodeTurnConversationProjection(turn),
+                );
+            }
+        }
+        return records.map((record) => {
+            const projection = byConversation.get(record.id);
+            return {
+                ...record,
+                ...(projection?.legacyStatus
+                    ? {
+                          metadata: {
+                              ...(record.metadata ?? {}),
+                              opencodeTurnStatus: projection.legacyStatus,
+                          },
+                      }
+                    : {}),
+                activeTurn: projection?.activeTurn ?? null,
+            };
+        });
+    }
+
+    private toOpencodeTurnConversationProjection(
+        turn: AgentOpencodeTurn | null,
+    ): OpencodeTurnConversationProjection {
+        if (!turn) return { activeTurn: null, legacyStatus: null };
+        if (OPENCODE_TURN_ACTIVE_STATUSES.includes(turn.status as any)) {
+            return {
+                activeTurn: this.toActiveOpencodeTurnSummary(turn),
+                legacyStatus: "running",
+            };
+        }
+        if (turn.status === "completed") {
+            return { activeTurn: null, legacyStatus: "completed" };
+        }
+        if (turn.status === "cancelled") {
+            return { activeTurn: null, legacyStatus: "aborted" };
+        }
+        return {
+            activeTurn: null,
+            legacyStatus: turn.errorCode?.includes("TIMEOUT") ? "timed_out" : "completed",
+        };
     }
 
     private toActiveOpencodeTurnSummary(turn: AgentOpencodeTurn): OpencodeActiveTurnSummary {

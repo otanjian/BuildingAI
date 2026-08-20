@@ -19,6 +19,8 @@ describe("OpenCode active turn conversation summaries", () => {
             findOne: jest.fn(async () => turns[0] ?? null),
         };
         const chatRecords = {
+            save: jest.fn(),
+            update: jest.fn(),
             manager: {
                 getRepository: jest.fn((target: any) => {
                     if (target === AgentOpencodeTurn) return turnRepository;
@@ -27,6 +29,7 @@ describe("OpenCode active turn conversation summaries", () => {
             },
         };
         return {
+            chatRecords,
             turnRepository,
             service: new AgentChatRecordService(
                 chatRecords as any,
@@ -38,7 +41,7 @@ describe("OpenCode active turn conversation summaries", () => {
         };
     }
 
-    it("joins at most one active turn onto every BuildingAI conversation", async () => {
+    it("joins at most one active turn and computes legacy running status without metadata writes", async () => {
         const test = harness([
             {
                 id: "turn-a",
@@ -51,28 +54,47 @@ describe("OpenCode active turn conversation summaries", () => {
 
         await expect(
             test.service.withActiveOpencodeTurnSummaries([
-                { id: "conversation-a" } as any,
+                {
+                    id: "conversation-a",
+                    metadata: { provider: "opencode", opencodeTurnStatus: "completed" },
+                } as any,
                 { id: "conversation-b" } as any,
             ]),
         ).resolves.toEqual([
             expect.objectContaining({
                 id: "conversation-a",
                 activeTurn: expect.objectContaining({ turnId: "turn-a", status: "running" }),
+                metadata: expect.objectContaining({ opencodeTurnStatus: "running" }),
             }),
             expect.objectContaining({ id: "conversation-b", activeTurn: null }),
         ]);
+        expect(test.chatRecords.save).not.toHaveBeenCalled();
+        expect(test.chatRecords.update).not.toHaveBeenCalled();
     });
 
-    it("queries active lifecycle states only so terminal conversations expose no summary", async () => {
-        const test = harness([]);
+    it.each([
+        ["completed", null, "completed"],
+        ["cancelled", null, "aborted"],
+        ["failed", "OPENCODE_INACTIVITY_TIMEOUT", "timed_out"],
+        ["failed", "OPENCODE_REMOTE_ERROR", "completed"],
+    ])(
+        "projects terminal %s turns as legacy %s status with no active summary",
+        async (status, errorCode, legacyStatus) => {
+            const test = harness([
+                {
+                    id: "turn-terminal",
+                    conversationId: "conversation-terminal",
+                    status,
+                    errorCode,
+                    createdAt: new Date("2026-08-20T10:00:00.000Z"),
+                },
+            ]);
 
-        await expect(
-            test.service.getActiveOpencodeTurnSummary("conversation-terminal"),
-        ).resolves.toBeNull();
-        expect(test.turnRepository.findOne).toHaveBeenCalledWith(
-            expect.objectContaining({
-                where: expect.objectContaining({ conversationId: "conversation-terminal" }),
-            }),
-        );
-    });
+            await expect(
+                test.service.getOpencodeTurnConversationProjection("conversation-terminal"),
+            ).resolves.toEqual({ activeTurn: null, legacyStatus });
+            expect(test.chatRecords.save).not.toHaveBeenCalled();
+            expect(test.chatRecords.update).not.toHaveBeenCalled();
+        },
+    );
 });

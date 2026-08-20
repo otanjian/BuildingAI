@@ -65,10 +65,10 @@
 ## 8. Compatibility, rollout, and observability
 
 - [x] 8.1 Add an agent-scoped rollout flag and tests ensuring legacy and durable acceptance cannot both own one request or active conversation
-- [ ] 8.2 Add tested migration logic that backfills only verified linear session/runtime mappings and reports branched, duplicate, or unverifiable mappings without guessing
-- [ ] 8.3 Add tests and implementation for computed legacy response status from durable turns with no durable status metadata writes
+- [x] 8.2 Add tested migration logic that backfills only verified linear session/runtime mappings and reports branched, duplicate, or unverifiable mappings without guessing
+- [x] 8.3 Add tests and implementation for computed legacy response status from durable turns with no durable status metadata writes
 - [ ] 8.4 Add structured logs and metrics for conflicts, lease/activity age, worker capacity/queue depth, status latency, dispatch ambiguity, recovery, commit retry, and billing invariants
-- [ ] 8.5 Add migration and rollback tests on an installed-version database snapshot, including restart with active legacy and durable turns
+- [x] 8.5 Add migration and rollback tests on an installed-version database snapshot, including restart with active legacy and durable turns
 - [ ] 8.6 Reconcile overlapping OpenSpec task lists so OpenCode lifecycle/persistence/billing/rehydrate work is owned here while non-OpenCode/archive scope stays in its original change
 
 ## 9. End-to-end verification
