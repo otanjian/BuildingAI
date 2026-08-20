@@ -464,6 +464,7 @@ export interface PublishedAgentDetail extends Omit<
 > {
     conversationCount: number;
     messageCount: number;
+    durableOpencodeTurnsEnabled?: boolean;
     creator?: { nickname: string; avatar: string | null };
     estimatedUsage?: {
         tokensPerRound: number;

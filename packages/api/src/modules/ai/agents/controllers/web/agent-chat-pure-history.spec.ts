@@ -67,6 +67,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             })),
             listUserConversations: jest.fn(async () => ({ items: [], total: 0 })),
             findActiveOpencodeTurn: jest.fn(async () => null),
+            getActiveOpencodeTurnSummary: jest.fn(async () => null),
         };
         const messages = {
             listConversationMessages: jest.fn(async () => ({
@@ -83,19 +84,27 @@ describe("AgentChatWebController pure BuildingAI history", () => {
         const opencodeProvider = {
             stopTurn: jest.fn(() => new Promise(() => undefined)),
         };
+        const completion = { streamChat: jest.fn(async () => undefined) };
+        const agents = {
+            findOneById: jest.fn(async () => ({
+                id: AGENT_ID,
+                createMode: "opencode",
+                thirdPartyIntegration: { extendedConfig: { durableTurnsEnabled: false } },
+            })),
+        };
         const controller = new AgentChatWebController(
-            {} as any,
+            completion as any,
             {} as any,
             records as any,
             messages as any,
             {} as any,
-            {} as any,
+            agents as any,
             opencodeApi as any,
             {} as any,
             {} as any,
             opencodeProvider as any,
         );
-        return { controller, records, messages, opencodeApi, opencodeProvider };
+        return { controller, completion, records, messages, agents, opencodeApi, opencodeProvider };
     }
 
     it("returns persisted messages without any OpenCode status/recovery/control call", async () => {
@@ -138,6 +147,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             id: CONVERSATION_ID,
             title: "Conversation",
             archivedAt: null,
+            activeTurn: null,
         });
         expect(test.opencodeApi.getSessionStatus).not.toHaveBeenCalled();
         expect(test.opencodeApi.listSessionMessages).not.toHaveBeenCalled();
@@ -159,5 +169,175 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             ),
         ).rejects.toThrow(/turn 44444444-4444-4444-8444-444444444444/i);
         expect(test.opencodeProvider.stopTurn).not.toHaveBeenCalled();
+    });
+
+    it("returns the durable active-turn summary in an archived conversation detail", async () => {
+        const test = harness();
+        test.records.getConversation.mockResolvedValue({
+            id: CONVERSATION_ID,
+            agentId: AGENT_ID,
+            userId: USER_ID,
+            anonymousIdentifier: null,
+            title: "Archived conversation",
+            archivedAt: new Date("2026-08-20T10:00:00.000Z"),
+        });
+        test.records.getActiveOpencodeTurnSummary.mockResolvedValue({
+            turnId: "55555555-5555-4555-8555-555555555555",
+            status: "running",
+            lastActivityAt: new Date("2026-08-20T10:01:00.000Z"),
+            cancelRequested: false,
+        });
+
+        await expect(
+            test.controller.getConversationDetail(
+                AGENT_ID,
+                CONVERSATION_ID,
+                { id: USER_ID } as any,
+                { headers: {} } as any,
+            ),
+        ).resolves.toMatchObject({
+            id: CONVERSATION_ID,
+            activeTurn: {
+                turnId: "55555555-5555-4555-8555-555555555555",
+                status: "running",
+            },
+        });
+    });
+
+    it("does not expose a conversation to a different anonymous owner", async () => {
+        const test = harness();
+        test.records.getConversation.mockResolvedValue({
+            id: CONVERSATION_ID,
+            agentId: AGENT_ID,
+            userId: null,
+            anonymousIdentifier: "anonymous-owner",
+            title: "Anonymous conversation",
+            archivedAt: null,
+        });
+
+        await expect(
+            test.controller.getConversationDetail(
+                AGENT_ID,
+                CONVERSATION_ID,
+                { id: null } as any,
+                { headers: { "x-anonymous-identifier": "different-owner" } } as any,
+            ),
+        ).rejects.toThrow(/无权/);
+        expect(test.records.getActiveOpencodeTurnSummary).not.toHaveBeenCalled();
+    });
+
+    it("returns an active-turn summary to the matching anonymous owner", async () => {
+        const test = harness();
+        test.records.getConversation.mockResolvedValue({
+            id: CONVERSATION_ID,
+            agentId: AGENT_ID,
+            userId: USER_ID,
+            anonymousIdentifier: "anonymous-owner",
+            title: "Anonymous conversation",
+            archivedAt: null,
+        });
+        test.records.getActiveOpencodeTurnSummary.mockResolvedValue({
+            turnId: "55555555-5555-4555-8555-555555555555",
+            status: "accepted",
+            lastActivityAt: new Date("2026-08-20T10:01:00.000Z"),
+            cancelRequested: false,
+        });
+
+        await expect(
+            test.controller.getConversationDetail(
+                AGENT_ID,
+                CONVERSATION_ID,
+                { id: USER_ID } as any,
+                { headers: { "x-anonymous-identifier": "anonymous-owner" } } as any,
+            ),
+        ).resolves.toMatchObject({ activeTurn: { status: "accepted" } });
+    });
+
+    it("rejects the legacy stream when the durable agent path owns new requests", async () => {
+        const test = harness();
+        test.agents.findOneById.mockResolvedValue({
+            id: AGENT_ID,
+            createMode: "opencode",
+            thirdPartyIntegration: { extendedConfig: { durableTurnsEnabled: true } },
+        });
+        const response = {
+            writableEnded: false,
+            on: jest.fn(),
+        };
+        const request = {
+            headers: {},
+            on: jest.fn(),
+            aborted: false,
+            socket: { destroyed: false },
+        };
+
+        await expect(
+            test.controller.streamChat(
+                AGENT_ID,
+                { messages: [{ role: "user", parts: [{ type: "text", text: "hello" }] }] } as any,
+                { id: USER_ID } as any,
+                response as any,
+                request as any,
+            ),
+        ).rejects.toThrow(/durable.*turn/i);
+        expect(test.completion.streamChat).not.toHaveBeenCalled();
+    });
+
+    it("rejects legacy streaming for an active durable conversation after flag rollback", async () => {
+        const test = harness();
+        test.records.findActiveOpencodeTurn.mockResolvedValue({
+            id: "55555555-5555-4555-8555-555555555555",
+            status: "running",
+        });
+        const response = { writableEnded: false, on: jest.fn() };
+        const request = {
+            headers: {},
+            on: jest.fn(),
+            aborted: false,
+            socket: { destroyed: false },
+        };
+
+        await expect(
+            test.controller.streamChat(
+                AGENT_ID,
+                {
+                    conversationId: CONVERSATION_ID,
+                    messages: [{ role: "user", parts: [{ type: "text", text: "hello" }] }],
+                } as any,
+                { id: USER_ID } as any,
+                response as any,
+                request as any,
+            ),
+        ).rejects.toThrow(/active.*turn.*55555555/i);
+        expect(test.completion.streamChat).not.toHaveBeenCalled();
+    });
+
+    it("returns an explicit unsupported response for durable regeneration", async () => {
+        const test = harness();
+        test.agents.findOneById.mockResolvedValue({
+            id: AGENT_ID,
+            createMode: "opencode",
+            thirdPartyIntegration: { extendedConfig: { durableTurnsEnabled: true } },
+        });
+
+        await expect(
+            test.controller.streamChat(
+                AGENT_ID,
+                {
+                    trigger: "regenerate-message",
+                    messageId: "66666666-6666-4666-8666-666666666666",
+                    messages: [],
+                } as any,
+                { id: USER_ID } as any,
+                { writableEnded: false, on: jest.fn() } as any,
+                {
+                    headers: {},
+                    on: jest.fn(),
+                    aborted: false,
+                    socket: { destroyed: false },
+                } as any,
+            ),
+        ).rejects.toThrow(/regeneration.*unsupported/i);
+        expect(test.completion.streamChat).not.toHaveBeenCalled();
     });
 });

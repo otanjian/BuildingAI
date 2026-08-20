@@ -21,6 +21,14 @@ import { AgentChatMessageService } from "./agent-chat-message.service";
 export type AgentChatRecordWithUser = AgentChatRecord & {
     userName?: string;
     userAvatar?: string;
+    activeTurn: OpencodeActiveTurnSummary | null;
+};
+
+export type OpencodeActiveTurnSummary = {
+    turnId: string;
+    status: AgentOpencodeTurn["status"];
+    lastActivityAt: Date;
+    cancelRequested: boolean;
 };
 
 export type AgentChatThreadSession = {
@@ -460,15 +468,18 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         const orderBy = query.sortBy === "updatedAt" ? "r.updatedAt" : "r.createdAt";
         qb.orderBy(orderBy, "DESC");
         const result = await this.paginateQueryBuilder(qb, query);
+        const records = await this.withActiveOpencodeTurnSummaries(
+            result.items as AgentChatRecord[],
+        );
         const userIds = [
             ...new Set(
-                (result.items as AgentChatRecord[])
+                records
                     .map((r) => r.userId)
                     .filter(Boolean) as string[],
             ),
         ];
         if (userIds.length === 0) {
-            return result as PaginationResult<AgentChatRecordWithUser>;
+            return { ...result, items: records };
         }
         const users = await this.userRepository.find({
             where: { id: In(userIds) },
@@ -483,7 +494,7 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
                 },
             ]),
         );
-        const items: AgentChatRecordWithUser[] = (result.items as AgentChatRecord[]).map((r) => ({
+        const items: AgentChatRecordWithUser[] = records.map((r) => ({
             ...r,
             userName: r.userId ? userMap.get(r.userId)?.name : undefined,
             userAvatar: r.userId ? userMap.get(r.userId)?.avatar : undefined,
@@ -519,6 +530,59 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
             },
             select: { id: true, status: true },
         });
+    }
+
+    async getActiveOpencodeTurnSummary(
+        conversationId: string,
+    ): Promise<OpencodeActiveTurnSummary | null> {
+        const turn = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).findOne({
+            where: {
+                conversationId,
+                status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
+            },
+            select: {
+                id: true,
+                status: true,
+                lastActivityAt: true,
+                cancelRequestedAt: true,
+            },
+        });
+        return turn ? this.toActiveOpencodeTurnSummary(turn) : null;
+    }
+
+    async withActiveOpencodeTurnSummaries<T extends AgentChatRecord>(
+        records: T[],
+    ): Promise<Array<T & { activeTurn: OpencodeActiveTurnSummary | null }>> {
+        if (!records.length) return [];
+        const turns = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).find({
+            where: {
+                conversationId: In(records.map((record) => record.id)),
+                status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
+            },
+            select: {
+                id: true,
+                conversationId: true,
+                status: true,
+                lastActivityAt: true,
+                cancelRequestedAt: true,
+            },
+        });
+        const byConversation = new Map(
+            turns.map((turn) => [turn.conversationId, this.toActiveOpencodeTurnSummary(turn)]),
+        );
+        return records.map((record) => ({
+            ...record,
+            activeTurn: byConversation.get(record.id) ?? null,
+        }));
+    }
+
+    private toActiveOpencodeTurnSummary(turn: AgentOpencodeTurn): OpencodeActiveTurnSummary {
+        return {
+            turnId: turn.id,
+            status: turn.status,
+            lastActivityAt: turn.lastActivityAt,
+            cancelRequested: Boolean(turn.cancelRequestedAt),
+        };
     }
 
     /**

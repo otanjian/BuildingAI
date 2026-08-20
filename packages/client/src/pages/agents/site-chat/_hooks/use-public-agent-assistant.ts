@@ -4,6 +4,7 @@ import type { FormFieldConfig } from "@buildingai/types/ai/agent-config.interfac
 import type { UIMessage } from "ai";
 import { startTransition, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { validate as isUUID } from "uuid";
 
 import type {
@@ -13,6 +14,7 @@ import type {
 } from "@/components/ask-assistant-ui";
 import { useMessageRepository } from "@/components/ask-assistant-ui";
 
+import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { hasRenderableOpeningStatement } from "../../detail/_utils/opening-statement.ts";
 import {
   clearLastConversation,
@@ -21,14 +23,16 @@ import {
 } from "../lib/embed-conversation-storage";
 import { usePublicAgentDetail } from "../services/public-agent-detail";
 import { speakPublicAgentText, transcribePublicAgentAudio } from "../services/public-agent-voice";
-import { usePublicConversations } from "../services/public-conversations";
+import {
+  usePublicConversationDetail,
+  usePublicConversations,
+} from "../services/public-conversations";
 import { getPublicApiRequestErrorCode } from "../services/public-http";
 import {
   useEmbedConversationResume,
   usePublicOperatorMessageSync,
 } from "./use-embed-conversation-resume";
 import { usePublicAgentChatStream } from "./use-public-agent-chat-stream";
-import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { usePublicAgentFeedback } from "./use-public-agent-feedback";
 import { usePublicAgentMessagesPaging } from "./use-public-agent-messages-paging";
 
@@ -123,15 +127,28 @@ export function usePublicAgentAssistant(args: {
     isError: isConversationsError,
     error: conversationsError,
   } = usePublicConversations(agentId, accessToken, anonymousIdentifier);
+  const { data: conversationDetail } = usePublicConversationDetail({
+    conversationId: normalizedConversationId,
+    accessToken,
+    anonymousIdentifier,
+  });
 
   const conversationsEmbedAccessDisabled =
     isConversationsError &&
     getPublicApiRequestErrorCode(conversationsError) === BusinessCode.UNAUTHORIZED;
 
+  const activeOpencodeTurn =
+    conversationDetail?.activeTurn ??
+    conversations?.find((c) => c.id === normalizedConversationId)?.activeTurn ??
+    null;
+  const durableOpencodeTurnsEnabled =
+    agent?.durableOpencodeTurnsEnabled === true || Boolean(activeOpencodeTurn);
   const opencodeTurnRunning = Boolean(
-    conversations?.some(
-      (c) => c.id === normalizedConversationId && c.opencodeTurnStatus === "running",
-    ),
+    durableOpencodeTurnsEnabled
+      ? activeOpencodeTurn
+      : conversations?.some(
+          (c) => c.id === normalizedConversationId && c.opencodeTurnStatus === "running",
+        ),
   );
 
   const {
@@ -153,6 +170,8 @@ export function usePublicAgentAssistant(args: {
     saveConversation: true,
     formVariables,
     isOpencodeTurnRunning: opencodeTurnRunning,
+    durableOpencodeTurnsEnabled,
+    activeOpencodeTurn,
   });
 
   const conversationIdForMessageOps = streamConversationId ?? normalizedConversationId;
@@ -197,9 +216,11 @@ export function usePublicAgentAssistant(args: {
   }, [navigate, agentId, accessToken]);
 
   const pollWhileRunning = Boolean(
-    conversations?.some(
-      (c) => c.id === conversationIdForMessageOps && c.opencodeTurnStatus === "running",
-    ),
+    durableOpencodeTurnsEnabled
+      ? conversations?.some((c) => c.id === conversationIdForMessageOps && c.activeTurn)
+      : conversations?.some(
+          (c) => c.id === conversationIdForMessageOps && c.opencodeTurnStatus === "running",
+        ),
   );
 
   const { isLoadingMessages, isLoadingMoreMessages, hasMoreMessages, loadMoreMessages } =
@@ -215,8 +236,7 @@ export function usePublicAgentAssistant(args: {
       shouldLoadInitial: Boolean(
         conversationIdForMessageOps &&
         isUUID(conversationIdForMessageOps) &&
-        status !== "streaming" &&
-        status !== "submitted" &&
+        (durableOpencodeTurnsEnabled || (status !== "streaming" && status !== "submitted")) &&
         streamMessages.length === 0 &&
         !editInProgressRef.current,
       ),
@@ -383,6 +403,10 @@ export function usePublicAgentAssistant(args: {
       newContent: string,
       files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
     ) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable messages cannot be edited after sending");
+        return;
+      }
       const parentId = getParentId(messageId);
       if (parentId === undefined) return;
 
@@ -392,14 +416,25 @@ export function usePublicAgentAssistant(args: {
       setMessages(sliced);
       queueMicrotask(() => sendWithParent(newContent, parentId, files));
     },
-    [getParentId, setMessages, sliceWithDbAwareParent, sendWithParent, resetLastSeenIds],
+    [
+      getParentId,
+      setMessages,
+      sliceWithDbAwareParent,
+      sendWithParent,
+      resetLastSeenIds,
+      durableOpencodeTurnsEnabled,
+    ],
   );
 
   const onSwitchBranch = useCallback(
     (messageId: string) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable conversations are linear and read-only across branches");
+        return;
+      }
       switchToBranch(messageId);
     },
-    [switchToBranch],
+    [switchToBranch, durableOpencodeTurnsEnabled],
   );
 
   const onSend = useCallback(
@@ -408,19 +443,25 @@ export function usePublicAgentAssistant(args: {
       files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
     ) => {
       const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
-      queueMicrotask(() => sendWithParent(content, lastAssistant, files));
+      queueMicrotask(() =>
+        sendWithParent(content, durableOpencodeTurnsEnabled ? undefined : lastAssistant, files),
+      );
     },
-    [messages, sendWithParent],
+    [messages, sendWithParent, durableOpencodeTurnsEnabled],
   );
 
   const onRegenerate = useCallback(
     (messageId: string) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable conversations do not support regeneration yet");
+        return;
+      }
       const parentId = getParentId(messageId);
       if (parentId === undefined) return;
       setMessages(sliceWithDbAwareParent(parentId));
       regenerate(parentId ?? messageId);
     },
-    [getParentId, setMessages, sliceWithDbAwareParent, regenerate],
+    [getParentId, setMessages, sliceWithDbAwareParent, regenerate, durableOpencodeTurnsEnabled],
   );
 
   const onDislike = useCallback(

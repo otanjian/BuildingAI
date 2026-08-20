@@ -16,16 +16,22 @@ import {
 } from "../../_shared/background-streams";
 import {
   canStartLiveStream,
-  getConversationChatRegistry,
   type ConversationChatRegistry,
+  getConversationChatRegistry,
 } from "../../_shared/conversation-chat-registry";
 import { subscribeOpencodeSessionEvents } from "../../_shared/opencode-events";
 import { buildOpencodeLivePreview } from "../../_shared/opencode-live-preview";
 import { shouldRehydrateOpencodeLive } from "../../_shared/opencode-live-rehydrate";
+import type { OpencodeTurnActivity } from "../../_shared/opencode-turn-client";
+import { useDeterministicOpencodeTurn } from "../../_shared/use-deterministic-opencode-turn";
+import { writeLastConversation } from "../lib/embed-conversation-storage";
 import { getPublicConversationMessages } from "../services/public-conversation-messages";
 import {
+  acceptPublicOpencodeTurn,
   getOpencodeSessionMessages,
+  getPublicOpencodeTurnStatus,
   stopPublicConversation,
+  stopPublicOpencodeTurn,
 } from "../services/public-conversations";
 
 const STOP_FINALIZE_DELAY_MS = 350;
@@ -66,6 +72,8 @@ export interface UsePublicAgentChatStreamOptions {
   formFieldsInputs?: Record<string, unknown> | undefined;
   /** True when the server reports the mapped OpenCode turn is still running. */
   isOpencodeTurnRunning?: boolean;
+  durableOpencodeTurnsEnabled?: boolean;
+  activeOpencodeTurn?: Omit<OpencodeTurnActivity, "conversationId"> | null;
 }
 
 export interface UsePublicAgentChatStreamReturn {
@@ -101,6 +109,8 @@ export function usePublicAgentChatStream(
     formVariables,
     formFieldsInputs,
     isOpencodeTurnRunning = false,
+    durableOpencodeTurnsEnabled = false,
+    activeOpencodeTurn,
   } = options;
 
   const navigate = useNavigate();
@@ -137,9 +147,7 @@ export function usePublicAgentChatStream(
   );
 
   const newConversationCounterRef = useRef(0);
-  const [sessionKey, setSessionKey] = useState<string>(
-    normalizedInitialConversationId ?? "new-0",
-  );
+  const [sessionKey, setSessionKey] = useState<string>(normalizedInitialConversationId ?? "new-0");
 
   const hasInitialConversationId = Boolean(normalizedInitialConversationId);
   const shouldNavigateRef = useRef(!hasInitialConversationId);
@@ -280,7 +288,7 @@ export function usePublicAgentChatStream(
     finalizeConversationSideEffects: (_token?: string) => {},
     refetchActiveConversationMessages: async (_id: string | undefined) => {},
     hydrateLastAssistantUsageFromServer: async () => {},
-    mapLatestMessageId: (_role: UIMessage["role"], _dbId: string) => false,
+    mapLatestMessageId: (_role: UIMessage["role"], _dbId: string): boolean => false,
     setConversationIdState,
     setStatusOverride,
     conversationIdRef,
@@ -465,8 +473,7 @@ export function usePublicAgentChatStream(
     const prevConversationId = prevInitialConversationIdRef.current;
     prevInitialConversationIdRef.current = nextConversationId;
 
-    const isEchoNavigation =
-      nextConversationId && nextConversationId === conversationIdRef.current;
+    const isEchoNavigation = nextConversationId && nextConversationId === conversationIdRef.current;
 
     if (isEchoNavigation) {
       activeConversationIdRef.current = nextConversationId;
@@ -508,7 +515,7 @@ export function usePublicAgentChatStream(
   const {
     messages,
     setMessages: setChatMessages,
-    sendMessage,
+    sendMessage: _sendMessage,
     stop,
     status,
     regenerate,
@@ -697,6 +704,66 @@ export function usePublicAgentChatStream(
     setSessionKey,
   };
 
+  const durableTransport = useMemo(
+    () => ({
+      accept: (
+        input: Parameters<typeof acceptPublicOpencodeTurn>[0]["input"],
+        request: { signal?: AbortSignal },
+      ) =>
+        acceptPublicOpencodeTurn({
+          input,
+          accessToken,
+          anonymousIdentifier,
+          signal: request.signal,
+        }),
+      getStatus: (turnId: string, request: { signal?: AbortSignal }) =>
+        getPublicOpencodeTurnStatus({
+          turnId,
+          accessToken,
+          anonymousIdentifier,
+          signal: request.signal,
+        }),
+      stop: (turnId: string, request: { signal?: AbortSignal }) =>
+        stopPublicOpencodeTurn({
+          turnId,
+          accessToken,
+          anonymousIdentifier,
+          signal: request.signal,
+        }),
+    }),
+    [accessToken, anonymousIdentifier],
+  );
+  const initialDurableActivity = useMemo<OpencodeTurnActivity | null>(() => {
+    if (!durableOpencodeTurnsEnabled || !normalizedInitialConversationId || !activeOpencodeTurn) {
+      return null;
+    }
+    return { conversationId: normalizedInitialConversationId, ...activeOpencodeTurn };
+  }, [durableOpencodeTurnsEnabled, normalizedInitialConversationId, activeOpencodeTurn]);
+  const { client: durableTurnClient, snapshot: durableTurnSnapshot } = useDeterministicOpencodeTurn(
+    {
+      enabled: durableOpencodeTurnsEnabled,
+      transport: durableTransport,
+      initialActivity: initialDurableActivity,
+      onAccepted: (accepted) => {
+        navigate(`/agents/${agentId}/${accessToken}/c/${accepted.conversationId}`, {
+          replace: true,
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["public-agent-conversations", agentId, accessToken, anonymousIdentifier ?? ""],
+        });
+      },
+      onTerminal: async (terminal) => {
+        if (activeConversationIdRef.current === terminal.conversationId) {
+          await refetchActiveConversationMessages(terminal.conversationId);
+        }
+        finalizeConversationSideEffects(`opencode-turn:${terminal.turnId}`);
+      },
+    },
+  );
+  const durableActivity = durableTurnSnapshot.activities.find(
+    (activity) => activity.conversationId === activeConversationIdRef.current,
+  );
+
   const beginStreamForActiveConversation = useCallback((): boolean => {
     registry.evictCompletedIdle();
     const targetConversationId = conversationIdRef.current;
@@ -722,6 +789,10 @@ export function usePublicAgentChatStream(
 
   const handleRegenerate = useCallback(
     (messageId: string) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable conversations do not support regeneration yet");
+        return;
+      }
       if (status === "streaming") return;
       setStatusOverride(null);
       const msgIndex = messages.findIndex(
@@ -745,7 +816,14 @@ export function usePublicAgentChatStream(
         body: { trigger: "regenerate-message" },
       });
     },
-    [messages, regenerate, resolveMessageDbId, status, beginStreamForActiveConversation],
+    [
+      messages,
+      regenerate,
+      resolveMessageDbId,
+      status,
+      beginStreamForActiveConversation,
+      durableOpencodeTurnsEnabled,
+    ],
   );
 
   const sendOnActiveRegistryChat = useCallback(
@@ -785,6 +863,68 @@ export function usePublicAgentChatStream(
       files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
     ) => {
       const text = content.trim();
+      if (durableOpencodeTurnsEnabled) {
+        if (durableActivity) return;
+        if (!text && (!files || files.length === 0)) return;
+        let prepared;
+        try {
+          prepared = durableTurnClient.prepare({
+            conversationId: conversationIdRef.current,
+            message: {
+              role: "user",
+              parts: [
+                ...(text ? [{ type: "text" as const, text }] : []),
+                ...(files ?? []).map((file) => ({
+                  type: "file" as const,
+                  url: file.url,
+                  mediaType: file.mediaType || "application/octet-stream",
+                  ...(file.filename ? { filename: file.filename } : {}),
+                })),
+              ],
+            },
+            formVariables: formVariablesRef.current,
+            formFieldsInputs: formFieldsInputsRef.current,
+          });
+        } catch (error) {
+          toast.error((error as Error).message);
+          return;
+        }
+        conversationIdRef.current = prepared.conversationId;
+        activeConversationIdRef.current = prepared.conversationId;
+        setConversationIdState(prepared.conversationId);
+        const stableChat = registry.getOrCreate(prepared.conversationId, () =>
+          createChatForKey(prepared.conversationId),
+        );
+        stableChat.messages = [
+          ...messagesRef.current,
+          {
+            id: `opencode-user:${prepared.turnId}`,
+            role: "user",
+            parts: prepared.message.parts,
+            metadata: { opencodeTurnId: prepared.turnId },
+          } as UIMessage,
+        ];
+        registry.setActive(prepared.conversationId);
+        setSessionKey(prepared.conversationId);
+        if (stableChat !== activeChat) setActiveChat(stableChat);
+        writeLastConversation(agentId, prepared.conversationId);
+        void durableTurnClient.acceptPrepared(prepared).catch((error) => {
+          const remainsRecoverable = durableTurnClient
+            .getSnapshot()
+            .activities.some((activity) => activity.turnId === prepared.turnId);
+          if (remainsRecoverable) {
+            console.warn("OpenCode durable turn acceptance is awaiting recovery", error);
+            return;
+          }
+          stableChat.messages = stableChat.messages.filter(
+            (message) =>
+              (message.metadata as { opencodeTurnId?: string } | undefined)?.opencodeTurnId !==
+              prepared.turnId,
+          );
+          toast.error((error as Error).message || "OpenCode turn was rejected");
+        });
+        return;
+      }
       if (status === "streaming" || status === "submitted") return;
       if (!text && (!files || files.length === 0)) return;
       setStatusOverride(null);
@@ -796,7 +936,22 @@ export function usePublicAgentChatStream(
 
       sendOnActiveRegistryChat({ text, files });
     },
-    [status, beginStreamForActiveConversation, sendOnActiveRegistryChat],
+    [
+      status,
+      beginStreamForActiveConversation,
+      sendOnActiveRegistryChat,
+      durableOpencodeTurnsEnabled,
+      durableActivity,
+      durableTurnClient,
+      agentId,
+      accessToken,
+      anonymousIdentifier,
+      navigate,
+      queryClient,
+      registry,
+      createChatForKey,
+      activeChat,
+    ],
   );
 
   const sendWithParent = useCallback(
@@ -806,6 +961,14 @@ export function usePublicAgentChatStream(
       files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
     ) => {
       const text = content.trim();
+      if (durableOpencodeTurnsEnabled) {
+        if (parentIdClientOrDb) {
+          toast.error("OpenCode durable conversations cannot send from a historical branch");
+          return;
+        }
+        send(content, files);
+        return;
+      }
       if (status === "streaming" || status === "submitted") return;
       if (!text && (!files || files.length === 0)) return;
       setStatusOverride(null);
@@ -821,7 +984,14 @@ export function usePublicAgentChatStream(
 
       sendOnActiveRegistryChat({ text, files });
     },
-    [status, resolveMessageDbId, beginStreamForActiveConversation, sendOnActiveRegistryChat],
+    [
+      status,
+      resolveMessageDbId,
+      beginStreamForActiveConversation,
+      sendOnActiveRegistryChat,
+      durableOpencodeTurnsEnabled,
+      send,
+    ],
   );
 
   const streamingMessageId =
@@ -867,14 +1037,11 @@ export function usePublicAgentChatStream(
    * detached turn running and no live registry Chat stream. Falls back to polling.
    */
   useEffect(() => {
+    if (durableOpencodeTurnsEnabled) return;
     const conversationId = activeConversationIdRef.current;
     if (!conversationId) return;
     const hasStreamingRegistryChat = registry.isStreaming(conversationId);
-    if (
-      hasStreamingRegistryChat &&
-      status !== "streaming" &&
-      status !== "submitted"
-    ) {
+    if (hasStreamingRegistryChat && status !== "streaming" && status !== "submitted") {
       registry.setStatus(conversationId, "completed");
     }
     if (
@@ -906,7 +1073,10 @@ export function usePublicAgentChatStream(
         const preview = buildOpencodeLivePreview(lastUser.id, ocMessages);
         if (!preview) return prev;
 
-        const withoutPreview = prev.filter((m) => !m.metadata?.isOpencodeLivePreview);
+        const withoutPreview = prev.filter(
+          (m) =>
+            !(m.metadata as { isOpencodeLivePreview?: boolean } | undefined)?.isOpencodeLivePreview,
+        );
         return [...withoutPreview, preview];
       });
     };
@@ -996,6 +1166,7 @@ export function usePublicAgentChatStream(
     refetchActiveConversationMessages,
     finalizeConversationSideEffects,
     registry,
+    durableOpencodeTurnsEnabled,
   ]);
 
   const getDbMessageId = useCallback(
@@ -1004,6 +1175,14 @@ export function usePublicAgentChatStream(
   );
 
   const stopWithFinalize = useCallback(() => {
+    if (durableOpencodeTurnsEnabled) {
+      if (durableActivity) {
+        void durableTurnClient.stop(durableActivity.turnId).catch((error) => {
+          console.warn("Failed to request exact OpenCode turn cancellation", error);
+        });
+      }
+      return;
+    }
     const conversationId =
       (conversationIdRef.current && isUUID(conversationIdRef.current)
         ? conversationIdRef.current
@@ -1042,13 +1221,20 @@ export function usePublicAgentChatStream(
     accessToken,
     anonymousIdentifier,
     registry,
+    durableOpencodeTurnsEnabled,
+    durableActivity,
+    durableTurnClient,
   ]);
 
   return {
     conversationId: conversationIdState ?? conversationIdRef.current,
     messages,
-    status: statusOverride ?? status,
-    streamingMessageId,
+    status: durableActivity
+      ? durableActivity.status === "accepted"
+        ? "submitted"
+        : "streaming"
+      : (statusOverride ?? status),
+    streamingMessageId: durableActivity?.turnId ?? streamingMessageId,
     setMessages: setChatMessages,
     send,
     sendWithParent,

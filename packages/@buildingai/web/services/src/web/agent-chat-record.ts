@@ -18,6 +18,21 @@ export type AgentChatRecordItem = {
     archivedAt?: string | null;
     createdAt: string;
     updatedAt: string;
+    activeTurn: OpencodeActiveTurnSummary | null;
+};
+
+export type OpencodeActiveTurnSummary = {
+    turnId: string;
+    status: "accepted" | "running" | "committing";
+    lastActivityAt: string;
+    cancelRequested: boolean;
+};
+
+export type AgentChatConversationDetail = {
+    id: string;
+    title?: string | null;
+    archivedAt?: string | null;
+    activeTurn: OpencodeActiveTurnSummary | null;
 };
 
 export type AgentChatMessageItem = {
@@ -70,6 +85,15 @@ export async function listAgentConversations(
         ? `/ai-agents/${agentId}/chat/conversations?${qs}`
         : `/ai-agents/${agentId}/chat/conversations`;
     return apiHttpClient.get<ListAgentConversationsResult>(path);
+}
+
+export function getAgentConversationDetail(
+    agentId: string,
+    conversationId: string,
+): Promise<AgentChatConversationDetail> {
+    return apiHttpClient.get<AgentChatConversationDetail>(
+        `/ai-agents/${agentId}/chat/conversations/${conversationId}`,
+    );
 }
 
 export type ListConversationMessagesParams = {
@@ -146,10 +170,24 @@ export function useAgentConversationsQuery(
             const items = (query.state.data as { items?: AgentChatRecordItem[] } | undefined)
                 ?.items;
             if (!items?.length) return false;
-            return items.some((item) => item.metadata?.opencodeTurnStatus === "running")
-                ? 4000
-                : false;
+            return items.some((item) => item.activeTurn) ? 4000 : false;
         },
+    });
+}
+
+export function useAgentConversationDetailQuery(
+    agentId: string | undefined,
+    conversationId: string | undefined,
+    options?: { enabled?: boolean },
+) {
+    return useQuery({
+        queryKey: ["agents", "chat", "conversation", agentId ?? "", conversationId ?? ""],
+        queryFn: () => getAgentConversationDetail(agentId!, conversationId!),
+        enabled: !!agentId && !!conversationId && options?.enabled !== false,
+        refetchInterval: (query) =>
+            (query.state.data as AgentChatConversationDetail | undefined)?.activeTurn
+                ? 4000
+                : false,
     });
 }
 

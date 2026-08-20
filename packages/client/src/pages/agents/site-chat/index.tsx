@@ -111,7 +111,14 @@ interface SiteChatSidebarPanelProps {
   anonymousIdentifier?: string;
   navigate: NavigateFunction;
   isLoadingConversations: boolean;
-  conversations: Array<{ id: string; title: string }> | undefined;
+  conversations:
+    | Array<{
+        id: string;
+        title: string;
+        activeTurn: { turnId: string; status: string } | null;
+        opencodeTurnStatus?: string;
+      }>
+    | undefined;
   /** Active conversation id from the URL (`/c/:conversationId`), for list selection styling. */
   currentConversationId?: string;
   /** Conversation ids that currently have a background stream in flight. */
@@ -260,6 +267,7 @@ function SiteChatSidebarPanel({
                     isSelected={Boolean(currentConversationId && currentConversationId === c.id)}
                     isGenerating={
                       backgroundStreamingConversationIds.has(c.id) ||
+                      Boolean(c.activeTurn) ||
                       c.opencodeTurnStatus === "running"
                     }
                     isArchiving={archivingId === c.id}

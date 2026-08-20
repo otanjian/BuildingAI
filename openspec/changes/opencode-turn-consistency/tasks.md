@@ -54,17 +54,17 @@
 
 ## 7. Deterministic OpenCode client
 
-- [ ] 7.1 Add client-store tests for pre-generated IDs, lost HTTP 202 response, single-flight status polling, bounded backoff, one activity indicator, and terminal refresh
-- [ ] 7.2 Implement a focused OpenCode turn client/store representing persisted history plus one turn-keyed activity indicator without an AI SDK `Chat` owner
-- [ ] 7.3 Add pure BuildingAI conversation list/detail active-turn summaries with API tests for registered, anonymous, archived, and terminal conversations
-- [ ] 7.4 Add tests and migrate detail-chat OpenCode send, switch, refresh, generating badge, Stop, and completion behavior to the turn client
-- [ ] 7.5 Add tests and migrate site-chat OpenCode behavior to the same client while preserving anonymous ownership headers on every turn endpoint
-- [ ] 7.6 Disable OpenCode Regenerate, persisted-message edit, and unverifiable branch-send flows in UI/API with explicit unsupported responses and mutation tests
-- [ ] 7.7 Remove the durable OpenCode path's provisional Chat rekey, browser SSE, raw session-message polling, and module-scoped background status ownership
+- [x] 7.1 Add client-store tests for pre-generated IDs, lost HTTP 202 response, single-flight status polling, bounded backoff, one activity indicator, and terminal refresh
+- [x] 7.2 Implement a focused OpenCode turn client/store representing persisted history plus one turn-keyed activity indicator without an AI SDK `Chat` owner
+- [x] 7.3 Add pure BuildingAI conversation list/detail active-turn summaries with API tests for registered, anonymous, archived, and terminal conversations
+- [x] 7.4 Add tests and migrate detail-chat OpenCode send, switch, refresh, generating badge, Stop, and completion behavior to the turn client
+- [x] 7.5 Add tests and migrate site-chat OpenCode behavior to the same client while preserving anonymous ownership headers on every turn endpoint
+- [x] 7.6 Disable OpenCode Regenerate, persisted-message edit, and unverifiable branch-send flows in UI/API with explicit unsupported responses and mutation tests
+- [x] 7.7 Remove the durable OpenCode path's provisional Chat rekey, browser SSE, raw session-message polling, and module-scoped background status ownership
 
 ## 8. Compatibility, rollout, and observability
 
-- [ ] 8.1 Add an agent-scoped rollout flag and tests ensuring legacy and durable acceptance cannot both own one request or active conversation
+- [x] 8.1 Add an agent-scoped rollout flag and tests ensuring legacy and durable acceptance cannot both own one request or active conversation
 - [ ] 8.2 Add tested migration logic that backfills only verified linear session/runtime mappings and reports branched, duplicate, or unverifiable mappings without guessing
 - [ ] 8.3 Add tests and implementation for computed legacy response status from durable turns with no durable status metadata writes
 - [ ] 8.4 Add structured logs and metrics for conflicts, lease/activity age, worker capacity/queue depth, status latency, dispatch ambiguity, recovery, commit retry, and billing invariants

@@ -18,6 +18,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { AgentBillingHandler } from "../handlers/agent-billing";
 import { OpencodeApiService } from "../integrations/opencode-api.service";
 import { resolveArtifactRoot } from "../utils/opencode-artifact-path";
+import { isOpencodeDurableTurnsEnabled } from "../utils/opencode-durable-rollout";
 import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
 import {
     buildOpencodeDispatchSnapshot,
@@ -151,6 +152,9 @@ export class OpencodeTurnAcceptanceService {
             const agent = await this.agentsService.getAgentByIdOrThrow(input.agentId);
             if (agent.createMode !== "opencode") {
                 throw HttpErrorFactory.badRequest("Only OpenCode agents accept durable turns");
+            }
+            if (!isOpencodeDurableTurnsEnabled(agent)) {
+                throw HttpErrorFactory.conflict("OpenCode durable turns are disabled for this agent");
             }
 
             const normalizedRuntime = this.opencodeApiService.normalizeConfig(

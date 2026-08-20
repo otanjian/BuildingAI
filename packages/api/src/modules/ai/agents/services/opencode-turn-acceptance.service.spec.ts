@@ -87,6 +87,7 @@ function makeHarness(options: {
     activeTurn?: Record<string, any> | null;
     fileRows?: Array<Record<string, any>>;
     failSaveTargetName?: string;
+    durableTurnsEnabled?: boolean;
 } = {}) {
     const saved: Array<{ target: any; entity: any }> = [];
     const manager = {
@@ -148,6 +149,7 @@ function makeHarness(options: {
                     workspace: "/workspace",
                     artifactDirTemplate: "artifacts/{conversationId}",
                     model: "openai/gpt-5",
+                    durableTurnsEnabled: options.durableTurnsEnabled ?? true,
                 },
             },
         })),
@@ -405,6 +407,18 @@ describe("OpencodeTurnAcceptanceService", () => {
         });
         const service = createService(module, harness);
         await expect(service.accept(input())).rejects.toThrow(/active turn.*55555555/i);
+        expect(harness.manager.save).not.toHaveBeenCalled();
+        expect(harness.queryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects durable acceptance while the agent rollout flag is disabled", async () => {
+        const module = loadModule();
+        if (!module) return;
+
+        const harness = makeHarness({ durableTurnsEnabled: false });
+        await expect(createService(module, harness).accept(input())).rejects.toThrow(
+            /durable.*disabled/i,
+        );
         expect(harness.manager.save).not.toHaveBeenCalled();
         expect(harness.queryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
     });

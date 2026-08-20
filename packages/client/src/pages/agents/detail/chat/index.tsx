@@ -1,5 +1,6 @@
 import {
   type PublishedAgentDetail,
+  useAgentConversationDetailQuery,
   useAgentConversationsQuery,
   useArchiveAgentConversation,
   useCopyAgentFromSquareMutation,
@@ -145,7 +146,12 @@ function AgentInfoPanel({
 }: {
   agent: PublishedAgentDetail | undefined;
   isLoading: boolean;
-  conversations: Array<{ id: string; title: string }>;
+  conversations: Array<{
+    id: string;
+    title: string;
+    activeTurn: { turnId: string; status: string } | null;
+    metadata?: Record<string, unknown> | null;
+  }>;
   isLoadingConversations: boolean;
   currentConversationId?: string;
   backgroundStreamingConversationIds: ReadonlySet<string>;
@@ -384,6 +390,7 @@ function AgentInfoPanel({
                           isSelected={currentConversationId === item.id}
                           isGenerating={
                             backgroundStreamingConversationIds.has(item.id) ||
+                            Boolean(item.activeTurn) ||
                             item.metadata?.opencodeTurnStatus === "running"
                           }
                           isArchiving={archivingId === item.id}
@@ -652,14 +659,24 @@ const AgentChatPage = () => {
     { page: 1, pageSize: 30, sortBy: "updatedAt" },
     { enabled: !!agentId },
   );
+  const { data: conversationDetail } = useAgentConversationDetailQuery(agentId || undefined, uuid, {
+    enabled: Boolean(agentId && uuid),
+  });
 
-  const isOpencodeTurnRunning = useMemo(
+  const activeOpencodeTurn = useMemo(
     () =>
-      conversationsData?.items?.some(
-        (item) => item.id === uuid && item.metadata?.opencodeTurnStatus === "running",
-      ) ?? false,
-    [conversationsData?.items, uuid],
+      conversationDetail?.activeTurn ??
+      conversationsData?.items?.find((item) => item.id === uuid)?.activeTurn ??
+      null,
+    [conversationDetail?.activeTurn, conversationsData?.items, uuid],
   );
+  const isOpencodeTurnRunning = Boolean(activeOpencodeTurn);
+  const durableOpencodeTurnsEnabled =
+    agent?.durableOpencodeTurnsEnabled === true || Boolean(activeOpencodeTurn);
+  const legacyOpencodeTurnRunning =
+    conversationsData?.items?.some(
+      (item) => item.id === uuid && item.metadata?.opencodeTurnStatus === "running",
+    ) ?? false;
 
   const assistantResult = useAssistantForAgent({
     agentId,
@@ -674,7 +691,11 @@ const AgentChatPage = () => {
     showReference: agent?.showReference ?? true,
     assistantAvatar,
     conversationId: uuid,
-    isOpencodeTurnRunning,
+    isOpencodeTurnRunning: durableOpencodeTurnsEnabled
+      ? isOpencodeTurnRunning
+      : legacyOpencodeTurnRunning,
+    durableOpencodeTurnsEnabled,
+    activeOpencodeTurn,
     supportedUploadTypes,
   });
 
@@ -689,6 +710,8 @@ const AgentChatPage = () => {
         .map((item) => ({
           id: item.id,
           title: item.title?.trim() || "新对话",
+          activeTurn: item.activeTurn,
+          metadata: item.metadata,
         })),
     [conversationsData?.items],
   );
