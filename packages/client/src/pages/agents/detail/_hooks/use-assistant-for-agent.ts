@@ -15,6 +15,7 @@ import type {
 } from "@/components/ask-assistant-ui/types";
 
 import type { OpencodeTurnActivity } from "../../_shared/opencode-turn-client";
+import { opencodeDurableUiPolicy } from "../../_shared/opencode-durable-ui-policy";
 import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { useAgentChatStream } from "./use-agent-chat-stream";
 import { useAgentFeedback } from "./use-agent-feedback";
@@ -413,6 +414,7 @@ export function useAssistantForAgent(
     [stop, setMessages],
   );
 
+  const durableUiPolicy = opencodeDurableUiPolicy(durableOpencodeTurnsEnabled);
   return {
     clearMessages,
     messages: [...repositoryMessages],
@@ -433,9 +435,9 @@ export function useAssistantForAgent(
     onSend,
     onLoadMoreMessages: loadMoreMessages,
     onStop: stop,
-    onRegenerate,
-    onEditMessage,
-    onSwitchBranch,
+    onRegenerate: durableUiPolicy.canRegenerate ? onRegenerate : undefined,
+    onEditMessage: durableUiPolicy.canEditPersistedMessage ? onEditMessage : undefined,
+    onSwitchBranch: durableUiPolicy.canSwitchBranch ? onSwitchBranch : undefined,
     onSelectModel,
     onSelectMcpServers,
     onSetFeature: setFeatureFlag,

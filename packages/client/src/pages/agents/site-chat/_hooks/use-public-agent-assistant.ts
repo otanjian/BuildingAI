@@ -15,6 +15,7 @@ import type {
 import { useMessageRepository } from "@/components/ask-assistant-ui";
 
 import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
+import { opencodeDurableUiPolicy } from "../../_shared/opencode-durable-ui-policy";
 import { hasRenderableOpeningStatement } from "../../detail/_utils/opening-statement.ts";
 import {
   clearLastConversation,
@@ -536,6 +537,7 @@ export function usePublicAgentAssistant(args: {
     [accessToken, anonymousIdentifier],
   );
 
+  const durableUiPolicy = opencodeDurableUiPolicy(durableOpencodeTurnsEnabled);
   const contextValue: AssistantContextValue = {
     agentId,
     voiceConfig,
@@ -557,9 +559,9 @@ export function usePublicAgentAssistant(args: {
     onSend,
     onLoadMoreMessages: loadMoreMessages,
     onStop: stop,
-    onRegenerate,
-    onEditMessage,
-    onSwitchBranch,
+    onRegenerate: durableUiPolicy.canRegenerate ? onRegenerate : undefined,
+    onEditMessage: durableUiPolicy.canEditPersistedMessage ? onEditMessage : undefined,
+    onSwitchBranch: durableUiPolicy.canSwitchBranch ? onSwitchBranch : undefined,
     onSelectModel: () => {},
     onSelectMcpServers: () => {},
     onSetFeature: () => {},
