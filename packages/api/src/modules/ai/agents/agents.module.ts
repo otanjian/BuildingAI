@@ -60,9 +60,11 @@ import { AgentChatRecordService } from "./services/agent-chat-record.service";
 import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
+import { OpencodeArtifactBaselineService } from "./services/opencode-artifact-baseline.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
 import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
+import { OpencodeTurnMutationCoordinator } from "./services/opencode-turn-mutation-coordinator";
 import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
@@ -131,10 +133,12 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         DifyChatProvider,
         OpencodeApiService,
         OpencodeChatProvider,
+        OpencodeArtifactBaselineService,
         OpencodeArtifactService,
         OpencodeTurnAcceptanceService,
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,
+        OpencodeTurnMutationCoordinator,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,

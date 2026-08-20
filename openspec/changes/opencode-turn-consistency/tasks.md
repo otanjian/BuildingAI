@@ -21,8 +21,8 @@
 - [x] 3.2 Implement the tested read APIs with error classification against the currently deployed OpenCode contract
 - [x] 3.3 Add adapter tests for automatic permission replies, question rejection, session abort, and stable prompt `messageID`
 - [x] 3.4 Implement the tested mutating OpenCode APIs with exact session/request targeting and operation-specific deadlines
-- [ ] 3.5 Add correlation/coordinator tests for pre-dispatch baseline persistence/restart, lost response, absent/existing remote user ID, lease expiry, old/new turn contention, and runtime mismatch
-- [ ] 3.6 Implement runtime/session mapping, first-dispatch artifact baseline persistence, and all remote mutations through a dedicated conversation-scoped PostgreSQL advisory lock with post-lock exact-claim revalidation
+- [x] 3.5 Add correlation/coordinator tests for pre-dispatch baseline persistence/restart, lost response, absent/existing remote user ID, lease expiry, old/new turn contention, and runtime mismatch
+- [x] 3.6 Implement runtime/session mapping, first-dispatch artifact baseline persistence, and all remote mutations through a dedicated conversation-scoped PostgreSQL advisory lock with post-lock exact-claim revalidation
 
 ## 4. Turn worker and recovery
 
