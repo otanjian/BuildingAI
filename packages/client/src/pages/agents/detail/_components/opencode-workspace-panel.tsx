@@ -24,7 +24,7 @@ import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { cn } from "@buildingai/ui/lib/utils";
 import { normalizeWorkspaceRelativePath } from "@buildingai/ui/lib/workspace-relative-path";
 import { Copy, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type OpencodeWorkspacePanelProps = {
@@ -273,7 +273,7 @@ export function OpencodeWorkspacePanel({ agentId, className }: OpencodeWorkspace
                         {(contentQuery.error as Error)?.message || "Unable to preview file"}
                       </span>
                     ) : (
-                      contentQuery.data?.content ?? ""
+                      (contentQuery.data?.content ?? "")
                     )}
                   </pre>
                 </ScrollArea>

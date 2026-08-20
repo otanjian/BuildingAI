@@ -28,6 +28,7 @@ import {
   usePublicOperatorMessageSync,
 } from "./use-embed-conversation-resume";
 import { usePublicAgentChatStream } from "./use-public-agent-chat-stream";
+import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { usePublicAgentFeedback } from "./use-public-agent-feedback";
 import { usePublicAgentMessagesPaging } from "./use-public-agent-messages-paging";
 
@@ -127,6 +128,12 @@ export function usePublicAgentAssistant(args: {
     isConversationsError &&
     getPublicApiRequestErrorCode(conversationsError) === BusinessCode.UNAUTHORIZED;
 
+  const opencodeTurnRunning = Boolean(
+    conversations?.some(
+      (c) => c.id === normalizedConversationId && c.opencodeTurnStatus === "running",
+    ),
+  );
+
   const {
     conversationId: streamConversationId,
     messages: streamMessages,
@@ -145,6 +152,7 @@ export function usePublicAgentAssistant(args: {
     initialConversationId: normalizedConversationId,
     saveConversation: true,
     formVariables,
+    isOpencodeTurnRunning: opencodeTurnRunning,
   });
 
   const conversationIdForMessageOps = streamConversationId ?? normalizedConversationId;
@@ -190,8 +198,7 @@ export function usePublicAgentAssistant(args: {
 
   const pollWhileRunning = Boolean(
     conversations?.some(
-      (c) =>
-        c.id === conversationIdForMessageOps && c.opencodeTurnStatus === "running",
+      (c) => c.id === conversationIdForMessageOps && c.opencodeTurnStatus === "running",
     ),
   );
 
@@ -214,6 +221,7 @@ export function usePublicAgentAssistant(args: {
         !editInProgressRef.current,
       ),
       pollWhileRunning,
+      getLiveMessageCount: () => streamMessages.length,
       onLoadError: handleMessagesLoadError,
     });
 
@@ -303,6 +311,8 @@ export function usePublicAgentAssistant(args: {
     const isNavigatingAway = prev !== undefined && next === undefined;
 
     if (isSwitching || isNavigatingAway) {
+      // Note: no `stop()` / `setMessages([])` here — ConversationChatRegistry keeps
+      // each conversation's Chat alive; focus only rebinds the visible Chat.
       clear();
       pendingClearRef.current = true;
     }
@@ -313,17 +323,18 @@ export function usePublicAgentAssistant(args: {
   }, [normalizedConversationId, clear]);
 
   useEffect(() => {
-    if (streamMessages.length === 0) {
-      pendingClearRef.current = false;
-      if (!editInProgressRef.current) {
+    const decision = resolvePendingClearForStreamImport({
+      pendingClear: pendingClearRef.current,
+      streamMessageCount: streamMessages.length,
+    });
+    pendingClearRef.current = decision.pendingClear;
+
+    if (!decision.shouldImport) {
+      if (streamMessages.length === 0 && !editInProgressRef.current) {
         clear();
         parentMapRef.current.clear();
         isFirstLoadRef.current = true;
       }
-      return;
-    }
-
-    if (pendingClearRef.current) {
       return;
     }
 

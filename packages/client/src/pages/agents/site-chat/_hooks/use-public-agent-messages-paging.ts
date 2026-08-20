@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { shouldApplyHistoryPageToChat } from "../../_shared/history-page-overwrite";
 import { getPublicConversationMessages } from "../services/public-conversation-messages";
 
 const PAGE_SIZE = 50;
@@ -31,6 +32,7 @@ export interface UsePublicAgentMessagesPagingOptions {
   shouldLoadInitial: boolean;
   /** When true, refetch messages periodically (detached OpenCode turn in progress). */
   pollWhileRunning?: boolean;
+  getLiveMessageCount?: () => number;
   onLoadError?: () => void;
 }
 
@@ -52,6 +54,7 @@ export function usePublicAgentMessagesPaging(
     setMessages,
     shouldLoadInitial,
     pollWhileRunning = false,
+    getLiveMessageCount,
     onLoadError,
   } = options;
 
@@ -62,17 +65,22 @@ export function usePublicAgentMessagesPaging(
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const nextPageRef = useRef(2);
   const loadMoreLockRef = useRef(false);
+  const getLiveMessageCountRef = useRef(getLiveMessageCount);
+  getLiveMessageCountRef.current = getLiveMessageCount;
 
   const fetchPageOne = useCallback(() => {
     if (!conversationId) return Promise.resolve();
+    const requestConversationId = conversationId;
     return getPublicConversationMessages({
       agentId,
       accessToken,
       anonymousIdentifier,
-      conversationId,
+      conversationId: requestConversationId,
       page: 1,
       pageSize: PAGE_SIZE,
     }).then((res) => {
+      if (prevConversationIdRef.current !== requestConversationId) return;
+      if ((getLiveMessageCountRef.current?.() ?? 0) > 0) return;
       setHasMoreMessages(res.page < res.totalPages);
       nextPageRef.current = Math.max(2, res.page + 1);
       setMessages(res.items);
@@ -95,7 +103,11 @@ export function usePublicAgentMessagesPaging(
 
     if (!conversationId) return;
 
-    const shouldFetch = shouldLoadInitial || switched;
+    const shouldFetch = shouldApplyHistoryPageToChat({
+      shouldLoadInitial,
+      switched,
+      liveMessageCount: getLiveMessageCountRef.current?.() ?? 0,
+    });
     if (!shouldFetch) return;
 
     setIsLoadingMessages(true);
@@ -106,12 +118,7 @@ export function usePublicAgentMessagesPaging(
       .finally(() => {
         setIsLoadingMessages(false);
       });
-  }, [
-    conversationId,
-    shouldLoadInitial,
-    fetchPageOne,
-    onLoadError,
-  ]);
+  }, [conversationId, shouldLoadInitial, fetchPageOne, onLoadError]);
 
   useEffect(() => {
     if (!conversationId || !pollWhileRunning) return;

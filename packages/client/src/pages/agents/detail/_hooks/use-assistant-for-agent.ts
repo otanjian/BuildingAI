@@ -13,6 +13,7 @@ import type {
   Suggestion,
 } from "@/components/ask-assistant-ui/types";
 
+import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { useAgentChatStream } from "./use-agent-chat-stream";
 import { useAgentFeedback } from "./use-agent-feedback";
 import { useAgentMessagesPaging } from "./use-agent-messages-paging";
@@ -37,6 +38,8 @@ export interface UseAssistantForAgentOptions {
   assistantAvatar?: string;
   conversationId?: string;
   disableAutoNavigate?: boolean;
+  /** True when the server reports the mapped OpenCode turn is still running. */
+  isOpencodeTurnRunning?: boolean;
   /** Override available upload types for third-party agents (Coze/Dify). */
   supportedUploadTypes?: Array<"image" | "video" | "audio" | "file">;
 }
@@ -122,6 +125,7 @@ export function useAssistantForAgent(
     assistantAvatar,
     conversationId,
     disableAutoNavigate = false,
+    isOpencodeTurnRunning = false,
     supportedUploadTypes,
   } = options;
   const { uuid: routeConversationId } = useParams<{ uuid?: string }>();
@@ -164,6 +168,7 @@ export function useAssistantForAgent(
     conversationIdRef,
     routeConversationId: normalizedConversationId,
     disableAutoNavigate,
+    isOpencodeTurnRunning,
   });
 
   const { liked, disliked, onLike, onDislike } = useAgentFeedback(
@@ -197,9 +202,8 @@ export function useAssistantForAgent(
     const isNavigatingAway = prevId !== undefined && next === undefined;
 
     if (isSwitching || isNavigatingAway) {
-      // Note: no `stop()` / `setMessages([])` here — the Chat instance is
-      // recreated via the `useChat` id key in `useAgentChatStream`, letting
-      // the previous conversation's in-flight stream finish in the background.
+      // Note: no `stop()` / `setMessages([])` here — ConversationChatRegistry keeps
+      // each conversation's Chat alive; focus only rebinds the visible Chat.
       lastMessageDbIdRef.current = null;
       pendingParentIdRef.current = null;
       clearRepository();
@@ -209,6 +213,9 @@ export function useAssistantForAgent(
       editInProgressRef.current = false;
     }
   }, [normalizedConversationId, clearRepository]);
+
+  const liveMessageCountRef = useRef(0);
+  liveMessageCountRef.current = streamMessages.length;
 
   const shouldLoadInitial = Boolean(
     normalizedConversationId &&
@@ -228,6 +235,7 @@ export function useAssistantForAgent(
     setMessages,
     lastMessageDbIdRef,
     shouldLoadInitial,
+    getLiveMessageCount: () => liveMessageCountRef.current,
   });
 
   const models = useMemo(
@@ -246,17 +254,18 @@ export function useAssistantForAgent(
   );
 
   useEffect(() => {
-    if (streamMessages.length === 0) {
-      pendingClearRef.current = false;
-      if (!editInProgressRef.current) {
+    const decision = resolvePendingClearForStreamImport({
+      pendingClear: pendingClearRef.current,
+      streamMessageCount: streamMessages.length,
+    });
+    pendingClearRef.current = decision.pendingClear;
+
+    if (!decision.shouldImport) {
+      if (streamMessages.length === 0 && !editInProgressRef.current) {
         clearRepository();
         parentMapRef.current.clear();
         isFirstLoadRef.current = true;
       }
-      return;
-    }
-
-    if (pendingClearRef.current) {
       return;
     }
 

@@ -104,3 +104,9 @@ The system SHALL recover a mapped OpenCode session that is stuck mid-turn or tha
 - **WHEN** the user sends a new message and the mapped OpenCode session is still stuck from a prior turn
 - **THEN** the system MUST recover (abort and optional thin-heal) before starting the new OpenCode prompt
 - **AND** MUST then proceed with at most one new active turn
+
+#### Scenario: Permission wait is not treated as hung
+
+- **WHEN** the mapped OpenCode session has unfinished work only because a permission prompt is pending
+- **THEN** the system MUST auto-approve that prompt
+- **AND** MUST NOT abort the session solely for `finish: null`

@@ -73,6 +73,30 @@ Reject overlapping sends while status is `running`.
 
 Heal repairs gaps; subsequent turns still persist from the runner. If mapping fails, still abort stuck OC and leave BA error text rather than blocking send forever.
 
+### D9: Re-focus shows live OpenCode progress
+
+When the user switches back to a conversation whose detached turn is still running, the new `useChat` instance has no active HTTP stream. It MUST render the current turn by polling OpenCode `GET /session/{opencodeSessionId}/message` (or equivalent) and mapping the latest session messages into `ChatUIMessage` parts. This provides live tool/text visibility until the runner settles and persists the final message into BuildingAI.
+
+**Why not re-attach the original SSE?** The original SSE belongs to the previous `useChat` instance; re-subscribing mid-stream is fragile and loses already-emitted deltas. Reading the session's persisted message list is stable and idempotent.
+
+**Why not make OpenCode the source of truth?** BuildingAI still owns branching (`parentId`), billing, multi-user authorization, and non-OpenCode agents. Live rendering is a read-through cache, not a SoT change.
+
+**Polling cadence:** 2–4 seconds while the focused conversation is `running`; stop when `session.idle` / `session.error` / BA status no longer `running` / user navigates away. Reduce load by pausing polls for background (non-focused) conversations.
+
+### D10: Upgrade live re-focus to OpenCode SSE
+
+D9's message polling is the **fallback**. When OpenCode exposes a stable `/event` stream per session, BuildingAI SHOULD proxy it to the focused client so progress appears in real time without polling.
+
+- **Why SSE over polling?** Lower latency, no interval drift, and browser `EventSource` automatically reconnects with `Last-Event-ID`, which survives page refresh better than hand-rolled polling.
+- **Why not just keep polling?** Polling is fine as a safety net, but every refocused conversation adds HTTP traffic and still has a 2.5 s gap. SSE is the native OpenCode push channel already used by the turn runner.
+- **Fallback rule:** If the SSE endpoint errors, drops, or the conversation is no longer `running`, the client MUST fall back to D9 polling (or plain BA messages) so the user never sees a blank assistant.
+
+**Implementation notes:**
+
+- New authenticated endpoint: `GET /ai-agents/:agentId/chat/conversations/:conversationId/opencode-session/events` (and the public `/v1` equivalent) that streams filtered OC events for the mapped `opencodeSessionId`.
+- Client subscribes only while the focused conversation is running and no active `useChat` SSE exists; it renders the same `buildOpencodeLivePreview` parts from live events.
+- On `session.idle` / `session.error` / `finish`, the client stops the SSE and refetches persisted BA messages.
+
 ## Risks / Trade-offs
 
 - [API restart mid-turn] → Runner lost; D7 reopen/pre-send recovery clears OC + metadata TTL.
@@ -86,8 +110,11 @@ Heal repairs gaps; subsequent turns still persist from the runner. If mapping fa
 1. Deploy runner + stop + timeout-abort + metadata.
 2. Deploy stuck detect/heal on reopen and pre-send.
 3. Deploy client generating flag + Stop wiring + refetch.
-4. Rollback: revert services/hooks; ignore metadata.
+4. Deploy live OC-message rendering on re-focus (this closes the two-session switch gap).
+5. Rollback: revert services/hooks; ignore metadata.
 
 ## Open Questions
 
 None blocking. Heal richness (tools vs text-only) can start text+summary tools and deepen if mapping already exists in the provider.
+
+- [Design choice] Should the OC-message poll live in `usePublicAgentChatStream` (closer to useChat) or in `usePublicAgentAssistant` (closer to the message repository)? Candidate: start in `usePublicAgentChatStream` so `setMessages` naturally merges with AI SDK state; assistant layer only decides *when* to poll based on `status` and `opencodeTurnStatus`.

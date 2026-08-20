@@ -41,6 +41,7 @@ export default {
     general: {
       label: "常规",
       general: "基础设置",
+      personalParams: "个人参数",
       notice: "通知",
       about: "关于",
     },
@@ -87,5 +88,20 @@ export default {
       emptyHint: "与 AI 对话时，系统会自动识别并保存你的偏好与关键信息。",
       delete: "删除",
     },
+  },
+  personalParams: {
+    label: "个人参数",
+    hint: "按参数编码维护你的个性化参数，供智能体对话使用。",
+    add: "新增",
+    addTitle: "新增个人参数",
+    editTitle: "编辑个人参数",
+    formHint: "填写参数编码与参数值，参数编码需唯一。",
+    code: "参数编码",
+    value: "参数值",
+    valuePlaceholder: "请输入参数值",
+    actions: "操作",
+    empty: "暂无个人参数，点击「新增」添加",
+    cancel: "取消",
+    confirm: "确认",
   },
 };

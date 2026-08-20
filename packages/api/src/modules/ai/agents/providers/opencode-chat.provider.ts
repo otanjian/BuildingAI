@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { extractTextFromParts } from "@buildingai/ai-sdk/utils/token-usage";
 import type { Agent } from "@buildingai/db/entities";
+import { UserDictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatMessageUsage, ChatUIMessage } from "@buildingai/types";
 import { AgentConfigService } from "@modules/config/services/agent-config.service";
@@ -36,6 +37,8 @@ import {
     type UiMessagePartLike,
 } from "../utils/opencode-prompt-parts";
 import { OpencodeTokenUsageAccumulator } from "../utils/opencode-token-usage";
+import { extractOpencodePermissionAsk } from "../utils/opencode-permission";
+import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
 import { mergeOpencodeTurnMetadata } from "../utils/opencode-turn-status";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
 import { createSensitiveWordWriterFromFilter } from "../utils/sensitive-word-stream";
@@ -78,6 +81,7 @@ export class OpencodeChatProvider {
         private readonly agentConfigService: AgentConfigService,
         private readonly turnRunner: OpencodeTurnRunnerService,
         private readonly sessionRecover: OpencodeSessionRecoverService,
+        private readonly userDictService: UserDictService,
     ) {}
 
     /**
@@ -275,6 +279,27 @@ export class OpencodeChatProvider {
                     "Do not write HTML reports into other conversations' artifact directories.",
                 ].join("\n");
 
+                let personalParams: Record<string, unknown> | undefined;
+                if (params.userId) {
+                    try {
+                        personalParams = await this.userDictService.getGroupValues(
+                            params.userId,
+                            "personalParams",
+                        );
+                    } catch (error) {
+                        this.logger.warn(
+                            `Failed to load personalParams for OpenCode system: ${
+                                error instanceof Error ? error.message : String(error)
+                            }`,
+                        );
+                    }
+                }
+                const system = buildOpencodeSystemPrompt({
+                    rolePrompt: agent.rolePrompt,
+                    personalParams,
+                    systemHint,
+                });
+
                 // Detached turn: lifetime is owned by the runner, not HTTP abortSignal.
                 turnHandle = this.turnRunner.start(localConversationId);
                 let persistStarted = false;
@@ -322,6 +347,16 @@ export class OpencodeChatProvider {
                     onEvent: async (event) => {
                         const sessionID = event.properties?.sessionID as string | undefined;
                         if (sessionID && sessionID !== opencodeSessionId) {
+                            return;
+                        }
+
+                        const permissionAsk = extractOpencodePermissionAsk(event);
+                        if (permissionAsk) {
+                            await this.opencodeApiService.replyPermission({
+                                config: agent.thirdPartyIntegration,
+                                requestId: permissionAsk.requestId,
+                                reply: "always",
+                            });
                             return;
                         }
 
@@ -446,8 +481,13 @@ export class OpencodeChatProvider {
                     sessionId: opencodeSessionId,
                     text: userText,
                     parts: mappedPrompt.parts as Array<Record<string, unknown>>,
-                    system: systemHint,
+                    system,
                     model: config.model,
+                });
+                // Race: a permission.asked may fire before /event is fully attached.
+                await this.opencodeApiService.approvePendingPermissions({
+                    config: agent.thirdPartyIntegration,
+                    sessionId: opencodeSessionId,
                 });
 
                 // Persist user message as soon as the remote turn is accepted so
@@ -486,6 +526,12 @@ export class OpencodeChatProvider {
                 persistStarted = true;
                 const persistTurn = this.turnRunner.keepAlive(
                     (async () => {
+                        const permissionPoll = setInterval(() => {
+                            void this.opencodeApiService.approvePendingPermissions({
+                                config: agent.thirdPartyIntegration,
+                                sessionId: opencodeSessionId,
+                            });
+                        }, 3_000);
                         try {
                             const maxWaitMs = 15 * 60 * 1000;
                             await Promise.race([
@@ -664,6 +710,7 @@ export class OpencodeChatProvider {
                                     userStopped || timedOut || streamError ? "error" : "stop",
                             });
                         } finally {
+                            clearInterval(permissionPoll);
                             if (localConversationId) {
                                 this.turnRunner.complete(localConversationId);
                             }

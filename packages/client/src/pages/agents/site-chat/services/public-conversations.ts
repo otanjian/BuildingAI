@@ -89,6 +89,22 @@ export async function getPublicConversationDetail(args: {
   return fetchPublicJson<PublicConversationDetail>(url, args.accessToken, args.anonymousIdentifier);
 }
 
+import type { OpencodeSessionMessage } from "../../_shared/opencode-live-preview";
+
+export async function getOpencodeSessionMessages(args: {
+  agentId: string;
+  conversationId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+}): Promise<{ sessionId: string | undefined; messages: OpencodeSessionMessage[] }> {
+  const url = `${getApiBaseUrl()}/v1/conversations/${args.conversationId}/opencode-session/messages`;
+  return fetchPublicJson<{ sessionId: string | undefined; messages: OpencodeSessionMessage[] }>(
+    url,
+    args.accessToken,
+    args.anonymousIdentifier,
+  );
+}
+
 export function usePublicConversations(
   agentId: string | undefined,
   accessToken: string | undefined,

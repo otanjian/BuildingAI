@@ -40,6 +40,30 @@ export function useUserConfigByGroupQuery(
     });
 }
 
+export type UserConfigRecord = {
+    id: string;
+    key: string;
+    value: any;
+    group: string;
+    description?: string;
+    createdAt: string;
+};
+
+/**
+ * Get user config records (with ids) for a group — used by the
+ * personal parameters table for add / edit / delete.
+ */
+export function useUserConfigRecordsQuery(
+    group: string,
+    options?: QueryOptionsUtil<UserConfigRecord[]>,
+) {
+    return useQuery<UserConfigRecord[]>({
+        queryKey: ["user", "config", group, "records"],
+        queryFn: () => apiHttpClient.get<UserConfigRecord[]>(`/user/config/${group}/records`),
+        ...options,
+    });
+}
+
 export function useSetUserConfigMutation() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -48,6 +72,17 @@ export function useSetUserConfigMutation() {
                 | { key: string; value: any; group?: string }
                 | { items: Array<{ key: string; value: any; group?: string }> },
         ) => apiHttpClient.post("/user/config", data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["user", "config"] });
+        },
+    });
+}
+
+export function useDeleteUserConfigMutation(group: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (key: string) =>
+            apiHttpClient.delete(`/user/config/${encodeURIComponent(group)}/${encodeURIComponent(key)}`),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["user", "config"] });
         },

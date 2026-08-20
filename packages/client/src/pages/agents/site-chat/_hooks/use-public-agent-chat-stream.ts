@@ -1,24 +1,38 @@
-import { useChat } from "@ai-sdk/react";
+import { Chat, useChat } from "@ai-sdk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ChatStatus, FileUIPart, UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { validate as isUUID } from "uuid";
 
 import { getApiBaseUrl } from "@/utils/api";
 
 import {
+  isBackgroundStreamGenerating,
   registerBackgroundStream,
   unregisterBackgroundStream,
 } from "../../_shared/background-streams";
+import {
+  canStartLiveStream,
+  getConversationChatRegistry,
+  type ConversationChatRegistry,
+} from "../../_shared/conversation-chat-registry";
+import { subscribeOpencodeSessionEvents } from "../../_shared/opencode-events";
+import { buildOpencodeLivePreview } from "../../_shared/opencode-live-preview";
+import { shouldRehydrateOpencodeLive } from "../../_shared/opencode-live-rehydrate";
 import { getPublicConversationMessages } from "../services/public-conversation-messages";
-import { stopPublicConversation } from "../services/public-conversations";
+import {
+  getOpencodeSessionMessages,
+  stopPublicConversation,
+} from "../services/public-conversations";
 
 const STOP_FINALIZE_DELAY_MS = 350;
 const USAGE_HYDRATE_RETRY_INTERVAL_MS = 1000;
 const USAGE_HYDRATE_MAX_ATTEMPTS = 10;
 const USAGE_HYDRATE_PAGE_SIZE = 2;
+const OPENCODE_LIVE_POLL_MS = 2500;
 
 function getPendingWeatherApprovalIds(messages: UIMessage[]): string[] {
   return messages.flatMap((message) =>
@@ -50,6 +64,8 @@ export interface UsePublicAgentChatStreamOptions {
   saveConversation?: boolean;
   formVariables?: Record<string, string> | undefined;
   formFieldsInputs?: Record<string, unknown> | undefined;
+  /** True when the server reports the mapped OpenCode turn is still running. */
+  isOpencodeTurnRunning?: boolean;
 }
 
 export interface UsePublicAgentChatStreamReturn {
@@ -84,6 +100,7 @@ export function usePublicAgentChatStream(
     saveConversation = true,
     formVariables,
     formFieldsInputs,
+    isOpencodeTurnRunning = false,
   } = options;
 
   const navigate = useNavigate();
@@ -119,31 +136,10 @@ export function usePublicAgentChatStream(
     normalizedInitialConversationId,
   );
 
-  /**
-   * Conversation id of the visible stream only (set from `data-conversation-id`
-   * when that echo belongs to the active conversation). Must not be overwritten
-   * by background streams.
-   */
-  const streamTargetConversationIdRef = useRef<string | undefined>(undefined);
-
-  /**
-   * Maps each `chatSessionKey` to the conversation id owned by that Chat
-   * instance's in-flight stream. Background `onFinish`/`onError` callbacks
-   * close over their session key and unregister via this map so concurrent
-   * streams cannot clear each other's generating badge.
-   */
-  const streamOwnerBySessionRef = useRef(new Map<string, string>());
-  const pendingUsageHydrateConversationIdRef = useRef<string | undefined>(undefined);
-
-  /**
-   * Key passed to `useChat({ id })`. Changes only when the user explicitly
-   * switches conversations, so the AI SDK recreates the Chat instance and the
-   * previous instance's in-flight request keeps running in the background.
-   */
-  const [chatSessionKey, setChatSessionKey] = useState<string>(
-    normalizedInitialConversationId ?? "new",
-  );
   const newConversationCounterRef = useRef(0);
+  const [sessionKey, setSessionKey] = useState<string>(
+    normalizedInitialConversationId ?? "new-0",
+  );
 
   const hasInitialConversationId = Boolean(normalizedInitialConversationId);
   const shouldNavigateRef = useRef(!hasInitialConversationId);
@@ -201,6 +197,16 @@ export function usePublicAgentChatStream(
     [queryClient, conversationsQueryKey],
   );
 
+  const resolveMessageDbId = useCallback(
+    (messageId: string | null | undefined): string | undefined => {
+      if (!messageId) return undefined;
+      return (
+        messageDbIdMapRef.current.get(messageId) ?? (isUUID(messageId) ? messageId : undefined)
+      );
+    },
+    [],
+  );
+
   const mapLatestMessageId = useCallback((role: UIMessage["role"], dbId: string): boolean => {
     const latest = [...messagesRef.current].reverse().find((message) => message.role === role);
     if (!latest) return false;
@@ -209,8 +215,12 @@ export function usePublicAgentChatStream(
     return true;
   }, []);
 
-  const transport = useMemo(
-    () =>
+  /**
+   * Mutable ownership key so provisional `new-N` Chats keep sending the correct
+   * conversationId after `registry.rekey` without recreating the Chat/transport.
+   */
+  const buildTransport = useCallback(
+    (ownershipKeyRef: { current: string }) =>
       new DefaultChatTransport({
         api: `${getApiBaseUrl()}/v1/chat-messages`,
         headers: {
@@ -222,12 +232,9 @@ export function usePublicAgentChatStream(
           pendingParentIdRef.current = null;
           const fv = formVariablesRef.current;
           const ffi = formFieldsInputsRef.current;
-          const currentConversationId = conversationIdRef.current;
+          const boundId = isUUID(ownershipKeyRef.current) ? ownershipKeyRef.current : undefined;
           return {
-            conversationId:
-              currentConversationId && isUUID(currentConversationId)
-                ? currentConversationId
-                : undefined,
+            conversationId: boundId,
             ...(saveConversation === false && { saveConversation: false }),
             ...(fv && Object.keys(fv).length > 0 && { formVariables: fv }),
             ...(ffi && Object.keys(ffi).length > 0 && { formFieldsInputs: ffi }),
@@ -252,164 +259,261 @@ export function usePublicAgentChatStream(
           };
         },
       }),
-    [accessToken, saveConversation, anonymousIdentifier],
+    [accessToken, anonymousIdentifier, saveConversation],
   );
 
-  const { messages, setMessages, sendMessage, stop, status, regenerate, addToolApprovalResponse } =
-    useChat({
-      id: `public-agent-chat-${agentId}-${accessToken}-${anonymousIdentifier ?? ""}-${chatSessionKey}`,
-      sendAutomaticallyWhen: ({ messages: currentMessages }) => {
-        const lastMessage = currentMessages.at(-1);
-        const shouldContinue =
-          lastMessage?.parts?.some(
-            (part) =>
-              "state" in part &&
-              part.state === "approval-responded" &&
-              "approval" in part &&
-              (part.approval as { approved?: boolean })?.approved === true,
-          ) ?? false;
-        return shouldContinue;
-      },
-      transport,
-      onData: (data) => {
-        if (data.type === "data-stream-complete" && data.data) {
-          const id = data.data as string;
-          if (!isUUID(id)) return;
-          // Payload carries conversationId — required because AI SDK useChat
-          // routes all Chat instances through one callbacksRef, so onFinish
-          // cannot trust chatSessionKey to identify which stream ended.
-          for (const [sessionKey, ownedId] of streamOwnerBySessionRef.current) {
-            if (ownedId === id) streamOwnerBySessionRef.current.delete(sessionKey);
+  const registryScopeKey = `public-agent-${agentId}-${accessToken ?? anonymousIdentifier ?? "anon"}`;
+  const registry = useMemo(
+    () =>
+      getConversationChatRegistry(registryScopeKey) as ConversationChatRegistry<Chat<UIMessage>>,
+    [registryScopeKey],
+  );
+
+  // Latest helpers for Chat callbacks created once per registry entry.
+  const hookApiRef = useRef({
+    navigate,
+    queryClient,
+    agentId,
+    accessToken,
+    conversationsQueryKey,
+    shouldNavigateRef,
+    finalizeConversationSideEffects: (_token?: string) => {},
+    refetchActiveConversationMessages: async (_id: string | undefined) => {},
+    hydrateLastAssistantUsageFromServer: async () => {},
+    mapLatestMessageId: (_role: UIMessage["role"], _dbId: string) => false,
+    setConversationIdState,
+    setStatusOverride,
+    conversationIdRef,
+    lastAssistantDbIdRef,
+    activeConversationIdRef,
+    sendTargetConversationIdRef,
+    pendingUserDbIdRef,
+    pendingAssistantDbIdRef,
+    registry,
+    setSessionKey,
+  });
+
+  const createChatForKey = useCallback(
+    (key: string): Chat<UIMessage> => {
+      const ownershipKeyRef = { current: key };
+
+      return new Chat({
+        id: `public-agent-chat-${agentId}-${key}`,
+        transport: buildTransport(ownershipKeyRef),
+        sendAutomaticallyWhen: ({ messages: currentMessages }) => {
+          const lastMessage = currentMessages.at(-1);
+          return (
+            lastMessage?.parts?.some(
+              (part) =>
+                "state" in part &&
+                part.state === "approval-responded" &&
+                "approval" in part &&
+                (part.approval as { approved?: boolean })?.approved === true,
+            ) ?? false
+          );
+        },
+        onData: (data) => {
+          const api = hookApiRef.current;
+          if (data.type === "data-stream-complete" && data.data) {
+            const id = data.data as string;
+            if (!isUUID(id)) return;
+            api.registry.setStatus(id, "completed");
+            unregisterBackgroundStream(id);
+            api.finalizeConversationSideEffects();
+            if (id === api.activeConversationIdRef.current) {
+              void api.refetchActiveConversationMessages(id);
+              void api.hydrateLastAssistantUsageFromServer();
+            }
+            return;
           }
-          unregisterBackgroundStream(id);
-          finalizeConversationSideEffects();
-          if (id === activeConversationIdRef.current) {
-            void refetchActiveConversationMessages(id);
-            pendingUsageHydrateConversationIdRef.current = id;
+
+          if (data.type === "data-conversation-id" && data.data) {
+            const id = data.data as string;
+            if (!isUUID(id)) return;
+            const activeId = api.activeConversationIdRef.current;
+            const isActiveStream =
+              (activeId !== undefined && activeId === id) ||
+              (activeId === undefined && api.sendTargetConversationIdRef.current === null) ||
+              key === id ||
+              (!isUUID(key) && api.sendTargetConversationIdRef.current === null);
+
+            registerBackgroundStream(id);
+            ownershipKeyRef.current = id;
+            if (!isUUID(key) && key !== id) {
+              api.registry.rekey(key, id);
+            }
+            api.registry.setStatus(id, "streaming");
+
+            if (!isActiveStream) return;
+
+            if (activeId === undefined) {
+              api.activeConversationIdRef.current = id;
+            }
+            const wasEmpty = !api.conversationIdRef.current;
+            api.conversationIdRef.current = id;
+            api.setConversationIdState(id);
+            api.setSessionKey(id);
+            if (wasEmpty && api.shouldNavigateRef.current) {
+              api.navigate(`/agents/${api.agentId}/${api.accessToken}/c/${id}`, { replace: true });
+              api.queryClient.invalidateQueries({ queryKey: api.conversationsQueryKey });
+            }
+            return;
           }
-          return;
-        }
 
-        if (data.type === "data-conversation-id" && data.data) {
-          const id = data.data as string;
-          if (!isUUID(id)) return;
-          const activeId = activeConversationIdRef.current;
-
-          // Determine whether this echo belongs to the visible conversation:
-          // - visible conversation exists and matches the echo id
-          // - no visible conversation yet but we just sent a request expecting
-          //   a brand-new conversation id
-          const isActiveStream =
-            (activeId !== undefined && activeId === id) ||
-            (activeId === undefined && sendTargetConversationIdRef.current === null);
-
-          registerBackgroundStream(id);
-
-          // Never bind background echoes to the current chatSessionKey — that
-          // key belongs to the visible Chat after a switch (callbacksRef shares
-          // onData across instances).
-          if (!isActiveStream) return;
-
-          streamOwnerBySessionRef.current.set(chatSessionKey, id);
-          streamTargetConversationIdRef.current = id;
-          if (activeId === undefined) {
-            activeConversationIdRef.current = id;
+          if (data.type === "data-user-message-id" && data.data) {
+            const id = data.data as string;
+            if (!isUUID(id)) return;
+            const ownedId = isUUID(ownershipKeyRef.current)
+              ? ownershipKeyRef.current
+              : api.conversationIdRef.current;
+            if (ownedId !== api.activeConversationIdRef.current) return;
+            api.pendingUserDbIdRef.current = id;
+            if (api.mapLatestMessageId("user", id)) {
+              api.pendingUserDbIdRef.current = null;
+            }
           }
-          const wasEmpty = !conversationIdRef.current;
-          conversationIdRef.current = id;
-          setConversationIdState(id);
-          if (shouldNavigateRef.current && wasEmpty) {
-            navigate(`/agents/${agentId}/${accessToken}/c/${id}`, { replace: true });
-            queryClient.invalidateQueries({ queryKey: conversationsQueryKey });
+          if (data.type === "data-assistant-message-id" && data.data) {
+            const id = data.data as string;
+            if (!isUUID(id)) return;
+            const ownedId = isUUID(ownershipKeyRef.current)
+              ? ownershipKeyRef.current
+              : api.conversationIdRef.current;
+            if (ownedId !== api.activeConversationIdRef.current) return;
+            api.lastAssistantDbIdRef.current = id;
+            api.pendingAssistantDbIdRef.current = id;
+            if (api.mapLatestMessageId("assistant", id)) {
+              api.pendingAssistantDbIdRef.current = null;
+            }
           }
-        }
-
-        if (data.type === "data-assistant-message-id" && data.data) {
-          const id = data.data as string;
-          if (!isUUID(id)) return;
-          if (streamTargetConversationIdRef.current !== activeConversationIdRef.current) return;
-          lastAssistantDbIdRef.current = id;
-          pendingAssistantDbIdRef.current = id;
-          if (mapLatestMessageId("assistant", id)) {
-            pendingAssistantDbIdRef.current = null;
+        },
+        onFinish: () => {
+          const api = hookApiRef.current;
+          const ownedId = isUUID(ownershipKeyRef.current)
+            ? ownershipKeyRef.current
+            : api.conversationIdRef.current && isUUID(api.conversationIdRef.current)
+              ? api.conversationIdRef.current
+              : key;
+          api.registry.setStatus(ownedId, "completed");
+          unregisterBackgroundStream(isUUID(ownedId) ? ownedId : undefined);
+          if (ownedId === api.activeConversationIdRef.current) {
+            api.finalizeConversationSideEffects();
+            void api.hydrateLastAssistantUsageFromServer();
           }
-        }
+        },
+        onError: (error) => {
+          const api = hookApiRef.current;
+          const ownedId = isUUID(ownershipKeyRef.current)
+            ? ownershipKeyRef.current
+            : api.conversationIdRef.current && isUUID(api.conversationIdRef.current)
+              ? api.conversationIdRef.current
+              : key;
+          api.registry.setStatus(ownedId, "error");
+          unregisterBackgroundStream(isUUID(ownedId) ? ownedId : undefined);
 
-        if (data.type === "data-user-message-id" && data.data) {
-          const id = data.data as string;
-          if (!isUUID(id)) return;
-          if (streamTargetConversationIdRef.current !== activeConversationIdRef.current) return;
-          pendingUserDbIdRef.current = id;
-          if (mapLatestMessageId("user", id)) {
-            pendingUserDbIdRef.current = null;
+          const isActiveError = ownedId === api.activeConversationIdRef.current;
+          if (!isActiveError) {
+            console.warn("Background agent chat stream error:", error);
+            return;
           }
-        }
-      },
-      onFinish: () => {
-        // Prefer data-stream-complete for unregister. Fallback only clears the
-        // owner bound to this session key when it is still the active chat.
-        const ownedId = streamOwnerBySessionRef.current.get(chatSessionKey);
-        streamOwnerBySessionRef.current.delete(chatSessionKey);
-        if (ownedId && ownedId === activeConversationIdRef.current) {
-          unregisterBackgroundStream(ownedId);
-          finalizeConversationSideEffects();
-        }
 
-        const hydrateId = pendingUsageHydrateConversationIdRef.current;
-        if (hydrateId && hydrateId === activeConversationIdRef.current) {
-          pendingUsageHydrateConversationIdRef.current = undefined;
-          void hydrateLastAssistantUsageFromServer();
-        }
-      },
-      onError: (error) => {
-        const ownedId = streamOwnerBySessionRef.current.get(chatSessionKey);
-        streamOwnerBySessionRef.current.delete(chatSessionKey);
-        const fallbackId =
-          ownedId && ownedId === activeConversationIdRef.current
-            ? ownedId
-            : activeConversationIdRef.current;
-        unregisterBackgroundStream(fallbackId);
-
-        const isActiveError =
-          fallbackId !== undefined && fallbackId === activeConversationIdRef.current;
-
-        if (!isActiveError) {
-          console.warn("Background agent chat stream error:", error);
-          return;
-        }
-
-        console.error("Public agent chat stream error:", error);
-        const message = (error as Error | undefined)?.message || "Unknown error";
-        setStatusOverride("error");
-        setMessages((prev) => {
-          if (prev.length === 0) return prev;
+          console.error("Public agent chat stream error:", error);
+          const message = (error as Error | undefined)?.message || "Unknown error";
+          api.setStatusOverride("error");
+          const chat = api.registry.get(ownedId) ?? api.registry.get(key);
+          if (!chat) return;
+          const prev = chat.messages;
+          if (prev.length === 0) {
+            chat.messages = [
+              {
+                id: crypto.randomUUID(),
+                role: "assistant",
+                parts: [{ type: "data-error", data: message }],
+              },
+            ];
+            return;
+          }
           const updated = [...prev];
           const lastIndex = updated.length - 1;
           const lastMessage = updated[lastIndex];
           if (lastMessage && lastMessage.role === "assistant") {
             updated[lastIndex] = {
               ...lastMessage,
-              parts: [
-                ...(lastMessage.parts || []),
-                {
-                  type: "data-error",
-                  data: message,
-                },
-              ],
+              parts: [...(lastMessage.parts || []), { type: "data-error", data: message }],
             };
-            return updated;
+          } else {
+            updated.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "data-error", data: message }],
+            });
           }
-          // If the stream fails before an assistant message is created,
-          // insert a synthetic assistant error message so the UI can display it.
-          updated.push({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            parts: [{ type: "data-error", data: message }],
-          });
-          return updated;
-        });
-      },
-    });
+          chat.messages = updated;
+        },
+      });
+    },
+    [agentId, buildTransport],
+  );
+
+  const [activeChat, setActiveChat] = useState<Chat<UIMessage>>(() =>
+    registry.getOrCreate(sessionKey, () => createChatForKey(sessionKey)),
+  );
+
+  // Rebind during render on conversation change so live registry messages are
+  // visible on the first paint after switch (see detail stream hook).
+  if (normalizedInitialConversationId !== prevInitialConversationIdRef.current) {
+    const nextConversationId = normalizedInitialConversationId;
+    const prevConversationId = prevInitialConversationIdRef.current;
+    prevInitialConversationIdRef.current = nextConversationId;
+
+    const isEchoNavigation =
+      nextConversationId && nextConversationId === conversationIdRef.current;
+
+    if (isEchoNavigation) {
+      activeConversationIdRef.current = nextConversationId;
+      registry.setActive(nextConversationId);
+      const existing = registry.get(nextConversationId);
+      if (existing && existing !== activeChat) {
+        setActiveChat(existing);
+        setSessionKey(nextConversationId);
+      }
+    } else if (prevConversationId !== nextConversationId) {
+      activeConversationIdRef.current = nextConversationId;
+      conversationIdRef.current = nextConversationId;
+      setConversationIdState(nextConversationId);
+      sendTargetConversationIdRef.current = nextConversationId ?? undefined;
+      setStatusOverride(null);
+
+      let nextKey: string;
+      if (nextConversationId) {
+        nextKey = nextConversationId;
+      } else {
+        newConversationCounterRef.current += 1;
+        nextKey = `new-${newConversationCounterRef.current}`;
+      }
+
+      registry.setActive(nextConversationId ?? nextKey);
+      const chat = registry.getOrCreate(nextKey, () => createChatForKey(nextKey));
+      setSessionKey(nextKey);
+      setActiveChat(chat);
+
+      lastAssistantDbIdRef.current = null;
+      pendingParentIdRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    registry.setActive(normalizedInitialConversationId ?? sessionKey);
+  }, [registry, normalizedInitialConversationId, sessionKey]);
+
+  const {
+    messages,
+    setMessages: setChatMessages,
+    sendMessage,
+    stop,
+    status,
+    regenerate,
+    addToolApprovalResponse,
+  } = useChat({ chat: activeChat });
 
   messagesRef.current = messages;
 
@@ -470,7 +574,7 @@ export function usePublicAgentChatStream(
       const { usage, userConsumedPower } = getUsage(source);
       if (!usage && userConsumedPower == null) return;
 
-      setMessages((prev) =>
+      setChatMessages((prev) =>
         prev.map((m) => {
           if (m.id !== targetClientId) return m;
           const nextMetadata: Record<string, unknown> =
@@ -541,12 +645,14 @@ export function usePublicAgentChatStream(
         await sleep(USAGE_HYDRATE_RETRY_INTERVAL_MS);
       }
     }
-  }, [accessToken, agentId, anonymousIdentifier, scheduleTimeout, setMessages]);
+  }, [accessToken, agentId, anonymousIdentifier, scheduleTimeout, setChatMessages]);
 
   const refetchActiveConversationMessages = useCallback(
     async (conversationId: string | undefined): Promise<void> => {
       if (!conversationId || !isUUID(conversationId)) return;
       if (activeConversationIdRef.current !== conversationId) return;
+      // Prefer live registry stream over history overwrite while still generating.
+      if (registry.isStreaming(conversationId)) return;
 
       try {
         const res = await getPublicConversationMessages({
@@ -558,177 +664,65 @@ export function usePublicAgentChatStream(
           pageSize: 50,
         });
         if (activeConversationIdRef.current !== conversationId) return;
-        setMessages(res.items);
+        if (registry.isStreaming(conversationId)) return;
+        setChatMessages(res.items);
       } catch (error) {
         console.warn("Failed to refetch public agent conversation messages after finish", error);
       }
     },
-    [accessToken, agentId, anonymousIdentifier, setMessages],
+    [accessToken, agentId, anonymousIdentifier, setChatMessages, registry],
   );
 
-  useEffect(() => {
-    const nextConversationId = normalizedInitialConversationId;
-    const prevConversationId = prevInitialConversationIdRef.current;
+  // Keep Chat factory callbacks on the latest closures.
+  hookApiRef.current = {
+    navigate,
+    queryClient,
+    agentId,
+    accessToken,
+    conversationsQueryKey,
+    shouldNavigateRef,
+    finalizeConversationSideEffects,
+    refetchActiveConversationMessages,
+    hydrateLastAssistantUsageFromServer,
+    mapLatestMessageId,
+    setConversationIdState,
+    setStatusOverride,
+    conversationIdRef,
+    lastAssistantDbIdRef,
+    activeConversationIdRef,
+    sendTargetConversationIdRef,
+    pendingUserDbIdRef,
+    pendingAssistantDbIdRef,
+    registry,
+    setSessionKey,
+  };
 
-    if (prevConversationId === nextConversationId) return;
-    prevInitialConversationIdRef.current = nextConversationId;
-
-    // The URL now matches the conversation our current Chat instance is already
-    // bound to (e.g. the `data-conversation-id` echo navigated here right after
-    // creating it). Do NOT recreate the instance — its stream is in flight.
-    if (nextConversationId && nextConversationId === conversationIdRef.current) {
-      activeConversationIdRef.current = nextConversationId;
-      return;
+  const beginStreamForActiveConversation = useCallback((): boolean => {
+    registry.evictCompletedIdle();
+    const targetConversationId = conversationIdRef.current;
+    const alreadyStreaming = Boolean(
+      targetConversationId && registry.isStreaming(targetConversationId),
+    );
+    const decision = canStartLiveStream({
+      streamingCount: registry.countStreaming(),
+      conversationAlreadyStreaming: alreadyStreaming,
+    });
+    if (!decision.allowed) {
+      toast.error(decision.reason);
+      return false;
     }
-
-    // Explicit switch to another conversation or to a brand-new one: recreate
-    // the Chat instance. The previous instance's in-flight request keeps
-    // streaming in the background and completes on its own.
-    activeConversationIdRef.current = nextConversationId;
-    conversationIdRef.current = nextConversationId;
-    setConversationIdState(nextConversationId);
-    // undefined = no request sent yet, so no `data-conversation-id` echo is
-    // expected (a `null` value is reserved for "request sent, awaiting new id"
-    // and is only set inside the send paths).
-    sendTargetConversationIdRef.current = nextConversationId ?? undefined;
-
-    if (nextConversationId) {
-      setChatSessionKey(nextConversationId);
-    } else {
-      newConversationCounterRef.current += 1;
-      setChatSessionKey(`new-${newConversationCounterRef.current}`);
+    const statusKey =
+      targetConversationId && isUUID(targetConversationId) ? targetConversationId : sessionKey;
+    registry.setStatus(statusKey, "streaming");
+    if (targetConversationId && isUUID(targetConversationId)) {
+      registerBackgroundStream(targetConversationId);
     }
-
-    pendingParentIdRef.current = null;
-    lastAssistantDbIdRef.current = null;
-  }, [normalizedInitialConversationId, setChatSessionKey]);
-
-  const resolveMessageDbId = useCallback(
-    (messageId: string | null | undefined): string | undefined => {
-      if (!messageId) return undefined;
-      const mapped = messageDbIdMapRef.current.get(messageId);
-      if (mapped) return mapped;
-      return isUUID(messageId) ? messageId : undefined;
-    },
-    [],
-  );
-
-  const getDbMessageId = useCallback(
-    (clientMessageId: string): string | undefined => resolveMessageDbId(clientMessageId),
-    [resolveMessageDbId],
-  );
-
-  useEffect(() => {
-    if (messages.length === 0) {
-      setStatusOverride(null);
-      messageDbIdMapRef.current.clear();
-      pendingUserDbIdRef.current = null;
-      pendingAssistantDbIdRef.current = null;
-      lastAssistantDbIdRef.current = null;
-      return;
-    }
-
-    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-    lastAssistantDbIdRef.current = lastAssistant?.id ?? null;
-
-    const lastUser = [...messages]
-      .map((m, index) => ({ m, index }))
-      .reverse()
-      .find(({ m }) => m.role === "user");
-
-    if (lastUser && pendingUserDbIdRef.current) {
-      messageDbIdMapRef.current.set(messages[lastUser.index].id, pendingUserDbIdRef.current);
-      pendingUserDbIdRef.current = null;
-    }
-
-    const last = messages[messages.length - 1];
-    if (last?.role === "assistant" && pendingAssistantDbIdRef.current) {
-      messageDbIdMapRef.current.set(last.id, pendingAssistantDbIdRef.current);
-      pendingAssistantDbIdRef.current = null;
-    }
-  }, [messages]);
-
-  const streamingMessageId =
-    status === "streaming" && messages.length > 0 ? messages[messages.length - 1]?.id : null;
-
-  const send = useCallback(
-    (
-      content: string,
-      files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
-    ) => {
-      const text = content.trim();
-      if (status === "streaming") return;
-      if (!text && (!files || files.length === 0)) return;
-      setStatusOverride(null);
-      pendingParentIdRef.current = lastAssistantDbIdRef.current ?? null;
-      const targetConversationId = conversationIdRef.current;
-      sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) {
-        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
-        registerBackgroundStream(targetConversationId);
-      }
-
-      const fileParts: FileUIPart[] | undefined =
-        files && files.length > 0
-          ? files.map((file) => ({
-              type: "file" as const,
-              url: file.url,
-              mediaType: file.mediaType || "application/octet-stream",
-              ...(file.filename ? { filename: file.filename } : {}),
-            }))
-          : undefined;
-
-      sendMessage({
-        text: text || "",
-        ...(fileParts && { files: fileParts }),
-      });
-    },
-    [status, sendMessage, chatSessionKey],
-  );
-
-  const sendWithParent = useCallback(
-    (
-      content: string,
-      parentIdClientOrDb: string | null | undefined,
-      files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
-    ) => {
-      const text = content.trim();
-      if (status === "streaming") return;
-      if (!text && (!files || files.length === 0)) return;
-      setStatusOverride(null);
-
-      const resolvedParentId = parentIdClientOrDb
-        ? (resolveMessageDbId(parentIdClientOrDb) ?? null)
-        : null;
-      pendingParentIdRef.current = resolvedParentId;
-
-      const targetConversationId = conversationIdRef.current;
-      sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) {
-        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
-        registerBackgroundStream(targetConversationId);
-      }
-
-      const fileParts: FileUIPart[] | undefined =
-        files && files.length > 0
-          ? files.map((file) => ({
-              type: "file" as const,
-              url: file.url,
-              mediaType: file.mediaType || "application/octet-stream",
-              ...(file.filename ? { filename: file.filename } : {}),
-            }))
-          : undefined;
-
-      sendMessage({
-        text: text || "",
-        ...(fileParts && { files: fileParts }),
-      });
-    },
-    [status, sendMessage, resolveMessageDbId, chatSessionKey],
-  );
+    return true;
+  }, [registry, sessionKey]);
 
   const handleRegenerate = useCallback(
     (messageId: string) => {
+      if (status === "streaming") return;
       setStatusOverride(null);
       const msgIndex = messages.findIndex(
         (m) => m.id === messageId || resolveMessageDbId(m.id) === messageId,
@@ -744,30 +738,282 @@ export function usePublicAgentChatStream(
 
       const targetConversationId = conversationIdRef.current;
       sendTargetConversationIdRef.current = targetConversationId ?? null;
-      if (targetConversationId) {
-        streamOwnerBySessionRef.current.set(chatSessionKey, targetConversationId);
-        registerBackgroundStream(targetConversationId);
-      }
+      if (!beginStreamForActiveConversation()) return;
 
       regenerate({
         messageId: msg.id,
         body: { trigger: "regenerate-message" },
       });
     },
-    [messages, regenerate, resolveMessageDbId, chatSessionKey],
+    [messages, regenerate, resolveMessageDbId, status, beginStreamForActiveConversation],
+  );
+
+  const sendOnActiveRegistryChat = useCallback(
+    (args: {
+      text: string;
+      files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>;
+    }) => {
+      const targetConversationId = conversationIdRef.current;
+      const key =
+        targetConversationId && isUUID(targetConversationId) ? targetConversationId : sessionKey;
+      const chat = registry.getOrCreate(key, () => createChatForKey(key));
+      if (chat !== activeChat) {
+        setActiveChat(chat);
+      }
+
+      const fileParts: FileUIPart[] | undefined =
+        args.files && args.files.length > 0
+          ? args.files.map((file) => ({
+              type: "file" as const,
+              url: file.url,
+              mediaType: file.mediaType || "application/octet-stream",
+              ...(file.filename ? { filename: file.filename } : {}),
+            }))
+          : undefined;
+
+      void chat.sendMessage({
+        text: args.text || "",
+        ...(fileParts && { files: fileParts }),
+      });
+    },
+    [conversationIdRef, sessionKey, registry, createChatForKey, activeChat],
+  );
+
+  const send = useCallback(
+    (
+      content: string,
+      files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
+    ) => {
+      const text = content.trim();
+      if (status === "streaming" || status === "submitted") return;
+      if (!text && (!files || files.length === 0)) return;
+      setStatusOverride(null);
+      pendingParentIdRef.current = lastAssistantDbIdRef.current ?? null;
+
+      const targetConversationId = conversationIdRef.current;
+      sendTargetConversationIdRef.current = targetConversationId ?? null;
+      if (!beginStreamForActiveConversation()) return;
+
+      sendOnActiveRegistryChat({ text, files });
+    },
+    [status, beginStreamForActiveConversation, sendOnActiveRegistryChat],
+  );
+
+  const sendWithParent = useCallback(
+    (
+      content: string,
+      parentIdClientOrDb: string | null | undefined,
+      files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
+    ) => {
+      const text = content.trim();
+      if (status === "streaming" || status === "submitted") return;
+      if (!text && (!files || files.length === 0)) return;
+      setStatusOverride(null);
+
+      const resolvedParentId = parentIdClientOrDb
+        ? (resolveMessageDbId(parentIdClientOrDb) ?? null)
+        : null;
+      pendingParentIdRef.current = resolvedParentId;
+
+      const targetConversationId = conversationIdRef.current;
+      sendTargetConversationIdRef.current = targetConversationId ?? null;
+      if (!beginStreamForActiveConversation()) return;
+
+      sendOnActiveRegistryChat({ text, files });
+    },
+    [status, resolveMessageDbId, beginStreamForActiveConversation, sendOnActiveRegistryChat],
+  );
+
+  const streamingMessageId =
+    status === "streaming" && messages.length > 0 ? messages[messages.length - 1]?.id : null;
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      setStatusOverride(null);
+    }
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      messageDbIdMapRef.current.clear();
+      autoApprovedWeatherApprovalIdsRef.current.clear();
+      pendingUserDbIdRef.current = null;
+      pendingAssistantDbIdRef.current = null;
+      lastAssistantDbIdRef.current = null;
+      return;
+    }
+
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    lastAssistantDbIdRef.current = lastAssistant?.id ?? null;
+
+    const lastUserIndex = [...messages]
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find(({ message }: { message: UIMessage }) => message.role === "user")?.index;
+    if (lastUserIndex !== undefined && pendingUserDbIdRef.current) {
+      messageDbIdMapRef.current.set(messages[lastUserIndex].id, pendingUserDbIdRef.current);
+      pendingUserDbIdRef.current = null;
+    }
+
+    const last = messages[messages.length - 1];
+    if (last?.role === "assistant" && pendingAssistantDbIdRef.current) {
+      messageDbIdMapRef.current.set(last.id, pendingAssistantDbIdRef.current);
+      pendingAssistantDbIdRef.current = null;
+    }
+  }, [messages]);
+
+  /**
+   * Prefer OpenCode SSE for live progress while the focused conversation has a
+   * detached turn running and no live registry Chat stream. Falls back to polling.
+   */
+  useEffect(() => {
+    const conversationId = activeConversationIdRef.current;
+    if (!conversationId) return;
+    const hasStreamingRegistryChat = registry.isStreaming(conversationId);
+    if (
+      hasStreamingRegistryChat &&
+      status !== "streaming" &&
+      status !== "submitted"
+    ) {
+      registry.setStatus(conversationId, "completed");
+    }
+    if (
+      !shouldRehydrateOpencodeLive({
+        isOpencodeTurnRunning:
+          isOpencodeTurnRunning || isBackgroundStreamGenerating(conversationId),
+        hasStreamingRegistryChat: registry.isStreaming(conversationId),
+        chatStatus: status,
+      })
+    ) {
+      return;
+    }
+    // If the current Chat instance already has a live stream for this
+    // conversation, let the normal SSE drive the UI.
+    if (status === "streaming" || status === "submitted") return;
+
+    let disposed = false;
+    let sseAbortController: AbortController | undefined;
+
+    const applyPreview = (
+      ocMessages: import("../../_shared/opencode-live-preview").OpencodeSessionMessage[],
+    ) => {
+      if (disposed) return;
+      if (activeConversationIdRef.current !== conversationId) return;
+      setChatMessages((prev) => {
+        const lastUser = [...prev].reverse().find((m) => m.role === "user");
+        if (!lastUser) return prev;
+
+        const preview = buildOpencodeLivePreview(lastUser.id, ocMessages);
+        if (!preview) return prev;
+
+        const withoutPreview = prev.filter((m) => !m.metadata?.isOpencodeLivePreview);
+        return [...withoutPreview, preview];
+      });
+    };
+
+    const poll = async () => {
+      if (disposed) return;
+      if (activeConversationIdRef.current !== conversationId) return;
+      if (!isBackgroundStreamGenerating(conversationId) && !isOpencodeTurnRunning) return;
+
+      try {
+        const { messages: ocMessages } = await getOpencodeSessionMessages({
+          agentId,
+          accessToken,
+          anonymousIdentifier,
+          conversationId,
+        });
+        applyPreview(ocMessages);
+      } catch (error) {
+        console.warn("Failed to poll OpenCode session messages", error);
+      }
+    };
+
+    const startPolling = () => {
+      const id = window.setInterval(poll, OPENCODE_LIVE_POLL_MS);
+      poll();
+      return () => window.clearInterval(id);
+    };
+
+    if (accessToken) {
+      sseAbortController = new AbortController();
+      const MIN_SSE_PREVIEW_MS = 500;
+      let pollingCleanup: (() => void) | undefined;
+
+      const sseStart = Date.now();
+      void subscribeOpencodeSessionEvents({
+        url: `${getApiBaseUrl()}/v1/conversations/${conversationId}/opencode-session/events`,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(anonymousIdentifier ? { "X-Anonymous-Identifier": anonymousIdentifier } : {}),
+        },
+        signal: sseAbortController.signal,
+        onSnapshot: applyPreview,
+        onDone: () => {
+          unregisterBackgroundStream(conversationId);
+          registry.setStatus(conversationId, "completed");
+          void refetchActiveConversationMessages(conversationId);
+          finalizeConversationSideEffects();
+        },
+        onError: (error) => {
+          console.warn("OpenCode session events failed, falling back to polling", error);
+          if (disposed) return;
+          if (!pollingCleanup && Date.now() - sseStart >= MIN_SSE_PREVIEW_MS) {
+            pollingCleanup = startPolling();
+          }
+        },
+      });
+
+      const pollingGuard = window.setTimeout(() => {
+        if (!disposed && !pollingCleanup) {
+          pollingCleanup = startPolling();
+        }
+      }, MIN_SSE_PREVIEW_MS);
+
+      return () => {
+        disposed = true;
+        sseAbortController?.abort();
+        window.clearTimeout(pollingGuard);
+        pollingCleanup?.();
+      };
+    }
+
+    const cleanupPolling = startPolling();
+
+    return () => {
+      disposed = true;
+      sseAbortController?.abort();
+      cleanupPolling?.();
+    };
+  }, [
+    normalizedInitialConversationId,
+    status,
+    agentId,
+    accessToken,
+    anonymousIdentifier,
+    setChatMessages,
+    isOpencodeTurnRunning,
+    refetchActiveConversationMessages,
+    finalizeConversationSideEffects,
+    registry,
+  ]);
+
+  const getDbMessageId = useCallback(
+    (clientMessageId: string): string | undefined => resolveMessageDbId(clientMessageId),
+    [resolveMessageDbId],
   );
 
   const stopWithFinalize = useCallback(() => {
     const conversationId =
-      streamOwnerBySessionRef.current.get(chatSessionKey) ?? conversationIdRef.current;
-    streamOwnerBySessionRef.current.delete(chatSessionKey);
+      (conversationIdRef.current && isUUID(conversationIdRef.current)
+        ? conversationIdRef.current
+        : undefined) ?? (isUUID(sessionKey) ? sessionKey : undefined);
     const targetAssistantId = [...messagesRef.current]
       .reverse()
       .find((m) => m.role === "assistant")?.id;
-    const token =
+    const finalizeToken =
       conversationId && targetAssistantId ? `${conversationId}:${targetAssistantId}` : undefined;
 
-    // Explicit stop: abort HTTP subscriber AND server-owned OpenCode turn.
     if (conversationId && accessToken) {
       void stopPublicConversation({
         conversationId,
@@ -778,10 +1024,13 @@ export function usePublicAgentChatStream(
       });
     }
     stop();
+    if (conversationId) {
+      registry.setStatus(conversationId, "completed");
+    }
     unregisterBackgroundStream(conversationId);
 
     scheduleTimeout(() => {
-      finalizeConversationSideEffects(token);
+      finalizeConversationSideEffects(finalizeToken);
       void hydrateLastAssistantUsageFromServer();
     }, STOP_FINALIZE_DELAY_MS);
   }, [
@@ -789,9 +1038,10 @@ export function usePublicAgentChatStream(
     scheduleTimeout,
     finalizeConversationSideEffects,
     hydrateLastAssistantUsageFromServer,
-    chatSessionKey,
+    sessionKey,
     accessToken,
     anonymousIdentifier,
+    registry,
   ]);
 
   return {
@@ -799,7 +1049,7 @@ export function usePublicAgentChatStream(
     messages,
     status: statusOverride ?? status,
     streamingMessageId,
-    setMessages,
+    setMessages: setChatMessages,
     send,
     sendWithParent,
     stop: stopWithFinalize,

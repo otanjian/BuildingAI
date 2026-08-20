@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 
 import type { DisplayMessage } from "../types";
+import { resolveImportParentId } from "./message-import-parent";
 
 /**
  * Message record type (from API or streaming)
@@ -391,6 +392,29 @@ export class MessageRepository {
     this.lastImportSeenIds = new Set(ids);
   }
 
+  private resolveRecordParent(record: RawMessageRecord, knownIds: Set<string>): string | null {
+    let lastUserId: string | null = null;
+    for (let current = this.head; current; current = current.prev) {
+      if (current.current.role === "user") {
+        lastUserId = current.current.id;
+        break;
+      }
+    }
+    if (!lastUserId) {
+      for (const existing of this.messages.values()) {
+        if (existing.current.role === "user") lastUserId = existing.current.id;
+      }
+    }
+    return resolveImportParentId({
+      role: record.message.role,
+      requestedParentId: record.parentId,
+      knownIds,
+      lastUserId,
+      recordSequence: record.sequence,
+      headSequence: this.head?.sequence ?? null,
+    });
+  }
+
   /**
    * Incrementally imports: upserts in the order of records
    */
@@ -400,10 +424,12 @@ export class MessageRepository {
     let changed = false;
     const prevHeadId = this.headId;
     const currentSeenIds = new Set(sortedRecords.map((r) => r.id));
+    const knownIds = new Set(this.messages.keys());
 
     for (const record of sortedRecords) {
+      const parentId = this.resolveRecordParent(record, knownIds);
       const logicalKey = this.buildLogicalKey(
-        record.parentId ?? null,
+        parentId,
         record.message.role,
         record.sequence,
       );
@@ -420,12 +446,8 @@ export class MessageRepository {
       }
 
       const exists = this.messages.has(record.id);
-      this.addOrUpdateMessage(
-        record.parentId ?? null,
-        record.message,
-        record.sequence,
-        record.createdAt,
-      );
+      this.addOrUpdateMessage(parentId, record.message, record.sequence, record.createdAt);
+      knownIds.add(record.id);
       if (!exists) changed = true;
 
       this.logicalKeyIndex.set(logicalKey, record.id);
@@ -461,15 +483,13 @@ export class MessageRepository {
     if (records.length === 0) return;
     const sortedRecords = [...records].sort((a, b) => a.sequence - b.sequence);
 
+    const knownIds = new Set<string>();
     for (const record of sortedRecords) {
-      this.addOrUpdateMessage(
-        record.parentId ?? null,
-        record.message,
-        record.sequence,
-        record.createdAt,
-      );
+      const parentId = this.resolveRecordParent(record, knownIds);
+      this.addOrUpdateMessage(parentId, record.message, record.sequence, record.createdAt);
+      knownIds.add(record.id);
       this.logicalKeyIndex.set(
-        this.buildLogicalKey(record.parentId ?? null, record.message.role, record.sequence),
+        this.buildLogicalKey(parentId, record.message.role, record.sequence),
         record.id,
       );
     }

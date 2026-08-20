@@ -2,6 +2,7 @@ import {
   BookmarkCheck,
   Hammer,
   Info,
+  ListChecks,
   type LucideIcon,
   Settings,
   TicketPercent,
@@ -13,6 +14,7 @@ import {
 export type SettingsPage =
   | "profile"
   | "general"
+  | "personalParams"
   | "wallet"
   | "redeemCDK"
   | "tools"
@@ -53,6 +55,7 @@ export const SETTINGS_NAV: SettingsNavGroup[] = [
     label: "settings.nav.general.label",
     items: [
       { id: "general", name: "settings.nav.general.general", icon: Settings },
+      { id: "personalParams", name: "settings.nav.general.personalParams", icon: ListChecks },
       { id: "about", name: "settings.nav.general.about", icon: Info },
     ],
   },

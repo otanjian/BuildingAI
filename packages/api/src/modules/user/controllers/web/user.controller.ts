@@ -28,7 +28,7 @@ import { WebController } from "@common/decorators/controller.decorator";
 import { RolePermissionService } from "@common/modules/auth/services/role-permission.service";
 import { SmsService } from "@common/modules/sms/services/sms.service";
 import { MenuService } from "@modules/menu/services/menu.service";
-import { Body, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
 
 import { DatasetMemberService } from "../../../ai/datasets/services/datasets-member.service";
 import { UserService } from "../../services/user.service";
@@ -453,6 +453,47 @@ export class UserWebController extends BaseController {
     @Get("config/:group")
     async getConfigByGroup(@Playground() user: UserPlayground, @Param("group") group: string) {
         return this.userDictService.getGroupValues(user.id, group);
+    }
+
+    /**
+     * Get user config records (with ids) for a specific group.
+     * Used by the personal parameters table for add / edit / delete.
+     *
+     * @param user Current user
+     * @param group Group name
+     * @returns User config records as {id, key, value, description, createdAt} rows
+     */
+    @Get("config/:group/records")
+    async getConfigRecordsByGroup(@Playground() user: UserPlayground, @Param("group") group: string) {
+        const records = await this.userDictService.getByGroup(user.id, group);
+        return records.map((record) => ({
+            id: record.id,
+            key: record.key,
+            value: record.value,
+            group: record.group,
+            description: record.description ?? undefined,
+            createdAt: record.createdAt,
+        }));
+    }
+
+    /**
+     * Delete a single user configuration by key in a group.
+     *
+     * @param user Current user
+     * @param group Group name
+     * @param key Configuration key
+     */
+    @Delete("config/:group/:key")
+    async deleteUserConfig(
+        @Playground() user: UserPlayground,
+        @Param("group") group: string,
+        @Param("key") key: string,
+    ) {
+        const ok = await this.userDictService.deleteByKey(user.id, key, group);
+        if (!ok) {
+            throw HttpErrorFactory.notFound("配置项不存在");
+        }
+        return { success: true };
     }
 
     /**

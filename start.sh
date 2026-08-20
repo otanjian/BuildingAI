@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# BuildingAI local dev orchestrator: API :4090, web :4091, SAP ADT MCP :8100, SAP PyRFC MCP :8200, optional Docker infra
+# BuildingAI local dev orchestrator: API :4090, web :4091, OpenCode :4096,
+# SAP ADT MCP :8100, SAP PyRFC MCP :8200, optional Docker infra
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,6 +14,7 @@ SAP_PYRFC_ENV="${SAP_PYRFC_DIR}/.env"
 
 DEV_PORTS=(4090 4091)
 CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
+OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 SAP_PORT="${MCP_PORT:-8100}"
 SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
 ERPNEXT_PORT=8000
@@ -38,15 +40,16 @@ usage() {
 Usage: ./start.sh [command] [target] [options]
 
 Commands:
-  (default)     Start dev stack (+ SAP MCP if configured)
+  (default)     Start dev stack + OpenCode (+ SAP MCP if configured)
   restart       Stop all managed services, then start again (no port prompt)
-  stop          Stop dev ports, SAP MCP, and infra started by this script
+  stop          Stop dev ports, OpenCode, SAP MCP, and infra started by this script
   status        Show listeners and PID files
-  logs          Tail logs (default: dev; use "sap" or "all")
+  logs          Tail logs (default: dev; use "opencode", "sap", or "all")
 
 Targets (optional, for start/restart/stop):
-  all           Dev + SAP MCPs + infra when enabled (default)
-  dev           BuildingAI only (pnpm dev:core — API + web + deps, no extension Vite)
+  all           Dev + OpenCode + SAP MCPs + infra when enabled (default)
+  dev           BuildingAI API + web + OpenCode (pnpm dev:core — no extension Vite)
+  opencode      OpenCode serve only (:4096)
   sap           SAP ABAP ADT MCP only (:8100)
   sap-pyrfc     SAP PyRFC MCP only (:8200)
   infra         Docker redis + postgres only
@@ -56,20 +59,24 @@ Options:
   -d, --detach  Run API + web in background (logs: .run/dev.log)
 
 Environment (root .env or shell):
+  START_OPENCODE=auto|true|false        Default auto (start if opencode binary exists)
   START_SAP_MCP=auto|true|false         Default auto (start if integrations/sap-abap-adt-mcp/.env exists)
   START_SAP_PYRFC_MCP=auto|true|false   Default auto (start if integrations/sap-pyrfc-mcp/.env exists)
   START_DOCKER_INFRA=true|false         Default false — docker compose up redis postgres
+  OPENCODE_PORT=4096                    OpenCode serve HTTP port
+  OPENCODE_BIN                          Optional path to opencode binary
   MCP_PORT=8100                         SAP ADT MCP HTTP port
   SAP_PYRFC_MCP_PORT=8200               SAP PyRFC MCP HTTP port
 
 Examples:
-  ./start.sh                      # first start (foreground dev)
+  ./start.sh                      # first start (foreground dev + OpenCode)
   ./start.sh restart              # restart everything managed
   ./start.sh stop                 # stop everything
   ./start.sh status
-  ./start.sh logs sap
+  ./start.sh logs opencode
   ./start.sh restart sap          # SAP ADT MCP only
   ./start.sh restart sap-pyrfc    # SAP PyRFC MCP only
+  ./start.sh restart opencode     # OpenCode serve only
   ./start.sh infra start          # postgres + redis via Docker
   ./start.sh -f restart           # force-free ports, then start
 
@@ -101,14 +108,16 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
     done
   fi
+  OPENCODE_PORT="${OPENCODE_PORT:-4096}"
   SAP_PORT="${MCP_PORT:-8100}"
   SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
+  START_OPENCODE="${START_OPENCODE:-auto}"
   START_SAP_MCP="${START_SAP_MCP:-auto}"
   START_SAP_PYRFC_MCP="${START_SAP_PYRFC_MCP:-auto}"
   START_DOCKER_INFRA="${START_DOCKER_INFRA:-false}"
@@ -212,6 +221,41 @@ web_proxy_ready() {
   curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/api/config" >/dev/null 2>&1
 }
 
+opencode_ready() {
+  local port="${OPENCODE_PORT:-4096}"
+  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/global/health" >/dev/null 2>&1
+}
+
+resolve_opencode_bin() {
+  local candidate
+  if [[ -n "${OPENCODE_BIN:-}" ]]; then
+    if [[ -x "${OPENCODE_BIN}" ]]; then
+      printf '%s' "${OPENCODE_BIN}"
+      return 0
+    fi
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    command -v opencode
+    return 0
+  fi
+  candidate="${HOME}/.opencode/bin/opencode"
+  if [[ -x "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
+should_start_opencode() {
+  case "${START_OPENCODE:-auto}" in
+    true|1|yes|YES) return 0 ;;
+    false|0|no|NO) return 1 ;;
+    auto|*)
+      resolve_opencode_bin >/dev/null 2>&1
+      ;;
+  esac
+}
+
 warn_if_web_empty() {
   local port="${CLIENT_DEV_PORT:-4091}"
   local max_wait="${WEB_READY_MAX_WAIT:-10}"
@@ -268,10 +312,20 @@ wait_for_api_ready() {
 wait_for_dev_ready() {
   local max_wait="${DEV_READY_MAX_WAIT:-120}"
   local i
+  local want_opencode=0
+  if should_start_opencode; then
+    want_opencode=1
+  fi
   for i in $(seq 1 "$max_wait"); do
     if api_ready && web_ready && web_proxy_ready; then
-      echo "  Dev stack ready (api + web + proxy)."
-      return 0
+      if [[ "$want_opencode" != 1 ]] || opencode_ready; then
+        if [[ "$want_opencode" == 1 ]]; then
+          echo "  Dev stack ready (api + web + proxy + OpenCode)."
+        else
+          echo "  Dev stack ready (api + web + proxy)."
+        fi
+        return 0
+      fi
     fi
     sleep 1
   done
@@ -280,6 +334,9 @@ wait_for_dev_ready() {
   api_ready && echo "  API :4090 — ok" || echo "  API :4090 — down"
   web_ready && echo "  Web :${CLIENT_DEV_PORT:-4091} — ok" || echo "  Web :${CLIENT_DEV_PORT:-4091} — down"
   web_proxy_ready && echo "  Proxy /api/config — ok" || echo "  Proxy /api/config — down"
+  if [[ "$want_opencode" == 1 ]]; then
+    opencode_ready && echo "  OpenCode :${OPENCODE_PORT:-4096} — ok" || echo "  OpenCode :${OPENCODE_PORT:-4096} — down"
+  fi
   echo "  Logs: ./start.sh logs"
   return 1
 }
@@ -525,6 +582,65 @@ stop_sap_pyrfc_mcp() {
   stop_pid_file "sap-pyrfc-mcp"
 }
 
+start_opencode() {
+  local force="${1:-0}"
+
+  if ! should_start_opencode; then
+    echo "OpenCode: skipped (set START_OPENCODE=true or install the opencode binary)"
+    return 0
+  fi
+
+  local bin=""
+  bin="$(resolve_opencode_bin || true)"
+  if [[ -z "$bin" ]]; then
+    echo "Error: START_OPENCODE=${START_OPENCODE:-true} but opencode binary not found."
+    echo "  Install opencode, or set OPENCODE_BIN=/path/to/opencode"
+    echo "  Expected: ${HOME}/.opencode/bin/opencode"
+    return 1
+  fi
+
+  if opencode_ready; then
+    echo "  OpenCode: already healthy at http://127.0.0.1:${OPENCODE_PORT}/"
+    return 0
+  fi
+
+  load_nvm
+  cd "${ROOT_DIR}"
+  pnpm exec pm2 delete opencode-serve 2>/dev/null || true
+  ensure_ports_available "$force" "$OPENCODE_PORT"
+
+  echo "Starting OpenCode serve on port ${OPENCODE_PORT}..."
+  ensure_run_dir
+  : >>"${RUN_DIR}/opencode-serve.log"
+  pnpm exec pm2 start "$bin" --name opencode-serve --time \
+    --output "${RUN_DIR}/opencode-serve.log" \
+    --error "${RUN_DIR}/opencode-serve.log" \
+    --merge-logs -- \
+    serve --port "${OPENCODE_PORT}" --hostname 127.0.0.1 --print-logs
+  pnpm exec pm2 save 2>/dev/null || true
+
+  local i=0
+  while [[ $i -lt 30 ]]; do
+    if opencode_ready; then
+      echo "  OpenCode: http://127.0.0.1:${OPENCODE_PORT}/  (log: .run/opencode-serve.log)"
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  echo "Warning: OpenCode :${OPENCODE_PORT} did not become healthy. See .run/opencode-serve.log"
+  tail -20 "${RUN_DIR}/opencode-serve.log" 2>/dev/null || true
+  return 1
+}
+
+stop_opencode() {
+  if cd "${ROOT_DIR}" 2>/dev/null; then
+    load_nvm
+    pnpm exec pm2 delete opencode-serve 2>/dev/null || true
+  fi
+  kill_port "${OPENCODE_PORT:-4096}"
+}
+
 check_deps() {
   if [[ ! -d node_modules ]]; then
     echo "Installing dependencies..."
@@ -581,12 +697,13 @@ BuildingAI dev server
   Web:  http://127.0.0.1:${CLIENT_DEV_PORT}/
   API:  http://127.0.0.1:4090/
   Install wizard (first run): http://127.0.0.1:4090/install
+$(should_start_opencode && echo "  OpenCode: http://127.0.0.1:${OPENCODE_PORT}/")
 
 $(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/sse")
 $(should_start_sap_pyrfc && echo "  SAP PyRFC MCP: http://127.0.0.1:${SAP_PYRFC_PORT}/mcp")
 $(port_in_use "$ERPNEXT_PORT" && echo "  ERPNext MCP: http://127.0.0.1:${ERPNEXT_PORT}/ (detected)" || echo "  ERPNext MCP: port ${ERPNEXT_PORT} not listening (start ERPNext separately)")
 
-Commands: ./start.sh restart | stop | status | logs [dev|sap|sap-pyrfc]
+Commands: ./start.sh restart | stop | status | logs [dev|opencode|sap|sap-pyrfc]
 
 EOF
 }
@@ -728,8 +845,9 @@ stop_dev() {
   stop_pid_file "dev-api"
   if cd "${ROOT_DIR}" 2>/dev/null && [[ -f ecosystem.config.js ]]; then
     load_nvm
+    # Delete only API/web apps. Do not tear down the PM2 daemon —
+    # that would drop a managed `opencode-serve` process.
     pnpm exec pm2 delete ecosystem.config.js 2>/dev/null || true
-    pnpm exec pm2 kill 2>/dev/null || true
   fi
   pkill -f "turbo run dev" 2>/dev/null || true
   pkill -f "nodemon -q" 2>/dev/null || true
@@ -764,6 +882,12 @@ cmd_status() {
     echo "  :${SAP_PYRFC_PORT}  SAP PyRFC MCP   down"
   fi
 
+  if port_in_use "${OPENCODE_PORT:-4096}"; then
+    echo "  :${OPENCODE_PORT}  OpenCode        listening"
+  else
+    echo "  :${OPENCODE_PORT}  OpenCode        down"
+  fi
+
   if port_in_use "$ERPNEXT_PORT"; then
     echo "  :${ERPNEXT_PORT}  ERPNext   listening (external)"
   else
@@ -793,13 +917,14 @@ cmd_logs() {
   ensure_run_dir
   case "$which" in
     dev) tail -f "${RUN_DIR}/dev.log" ;;
+    opencode) tail -f "${RUN_DIR}/opencode-serve.log" ;;
     sap) tail -f "${RUN_DIR}/sap-mcp.log" ;;
     sap-pyrfc) tail -f "${RUN_DIR}/sap-pyrfc-mcp.log" ;;
     all)
-      tail -f "${RUN_DIR}/dev.log" "${RUN_DIR}/sap-mcp.log" "${RUN_DIR}/sap-pyrfc-mcp.log" 2>/dev/null
+      tail -f "${RUN_DIR}/dev.log" "${RUN_DIR}/opencode-serve.log" "${RUN_DIR}/sap-mcp.log" "${RUN_DIR}/sap-pyrfc-mcp.log" 2>/dev/null
       ;;
     *)
-      echo "Unknown log target: $which (use dev, sap, sap-pyrfc, or all)"
+      echo "Unknown log target: $which (use dev, opencode, sap, sap-pyrfc, or all)"
       exit 1
       ;;
   esac
@@ -810,11 +935,16 @@ stop_target() {
   case "$target" in
     all)
       stop_dev
+      stop_opencode
       stop_sap_mcp
       stop_sap_pyrfc_mcp
       stop_infra
       ;;
-    dev) stop_dev ;;
+    dev)
+      stop_dev
+      stop_opencode
+      ;;
+    opencode) stop_opencode ;;
     sap) stop_sap_mcp ;;
     sap-pyrfc) stop_sap_pyrfc_mcp ;;
     infra) stop_infra ;;
@@ -840,6 +970,7 @@ start_target() {
       start_infra
       start_sap_mcp "$force" "$skip_sap_build" 0 || true
       start_sap_pyrfc_mcp "$force" 0 || true
+      start_opencode "$force" || true
       if [[ "$detach" == 1 ]]; then
         start_dev "$force" 1
       else
@@ -847,11 +978,15 @@ start_target() {
       fi
       ;;
     dev)
+      start_opencode "$force" || true
       if [[ "$detach" == 1 ]]; then
         start_dev "$force" 1
       else
         start_dev "$force" 0
       fi
+      ;;
+    opencode)
+      start_opencode "$force"
       ;;
     sap)
       start_sap_mcp "$force" "$skip_sap_build" 1
@@ -884,7 +1019,7 @@ parse_args() {
         ;;
       status) COMMAND="status"; shift ;;
       logs) COMMAND="logs"; shift; LOG_TARGET="${1:-dev}"; shift || true ;;
-      dev | sap | sap-pyrfc | infra | all)
+      dev | sap | sap-pyrfc | opencode | infra | all)
         TARGET="$1"
         shift
         ;;
@@ -933,4 +1068,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

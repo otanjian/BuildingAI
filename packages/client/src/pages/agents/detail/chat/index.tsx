@@ -647,6 +647,20 @@ const AgentChatPage = () => {
     [agent],
   );
 
+  const { data: conversationsData, isLoading: isLoadingConversations } = useAgentConversationsQuery(
+    agentId || undefined,
+    { page: 1, pageSize: 30, sortBy: "updatedAt" },
+    { enabled: !!agentId },
+  );
+
+  const isOpencodeTurnRunning = useMemo(
+    () =>
+      conversationsData?.items?.some(
+        (item) => item.id === uuid && item.metadata?.opencodeTurnStatus === "running",
+      ) ?? false,
+    [conversationsData?.items, uuid],
+  );
+
   const assistantResult = useAssistantForAgent({
     agentId,
     agentName: agent?.name ?? "Agent",
@@ -660,15 +674,11 @@ const AgentChatPage = () => {
     showReference: agent?.showReference ?? true,
     assistantAvatar,
     conversationId: uuid,
+    isOpencodeTurnRunning,
     supportedUploadTypes,
   });
 
   const { ...contextValue } = assistantResult;
-  const { data: conversationsData, isLoading: isLoadingConversations } = useAgentConversationsQuery(
-    agentId || undefined,
-    { page: 1, pageSize: 30, sortBy: "updatedAt" },
-    { enabled: !!agentId },
-  );
   const conversations = useMemo(
     () =>
       (conversationsData?.items ?? [])

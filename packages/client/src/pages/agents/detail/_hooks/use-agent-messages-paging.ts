@@ -3,6 +3,8 @@ import { listAgentConversationMessages } from "@buildingai/services/web";
 import type { UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { shouldApplyHistoryPageToChat } from "../../_shared/history-page-overwrite";
+
 const PAGE_SIZE = 20;
 
 function convertToUIMessage(
@@ -47,6 +49,7 @@ export interface UseAgentMessagesPagingOptions {
   setMessages: (messages: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])) => void;
   lastMessageDbIdRef: React.RefObject<string | null>;
   shouldLoadInitial: boolean;
+  getLiveMessageCount?: () => number;
 }
 
 export interface UseAgentMessagesPagingReturn {
@@ -59,7 +62,8 @@ export interface UseAgentMessagesPagingReturn {
 export function useAgentMessagesPaging(
   options: UseAgentMessagesPagingOptions,
 ): UseAgentMessagesPagingReturn {
-  const { agentId, conversationId, setMessages, lastMessageDbIdRef, shouldLoadInitial } = options;
+  const { agentId, conversationId, setMessages, lastMessageDbIdRef, shouldLoadInitial, getLiveMessageCount } =
+    options;
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
@@ -68,6 +72,8 @@ export function useAgentMessagesPaging(
   const prevConversationIdRef = useRef<string | undefined>(undefined);
   const nextPageRef = useRef(2);
   const loadMoreLockRef = useRef(false);
+  const getLiveMessageCountRef = useRef(getLiveMessageCount);
+  getLiveMessageCountRef.current = getLiveMessageCount;
 
   useEffect(() => {
     const prevId = prevConversationIdRef.current;
@@ -85,12 +91,28 @@ export function useAgentMessagesPaging(
 
     if (!conversationId) return;
 
-    const shouldFetch = shouldLoadInitial || switched;
+    const liveMessageCount = getLiveMessageCountRef.current?.() ?? 0;
+    const shouldFetch = shouldApplyHistoryPageToChat({
+      shouldLoadInitial,
+      switched,
+      liveMessageCount,
+    });
     if (!shouldFetch) return;
 
+    const requestConversationId = conversationId;
     setIsLoadingMessages(true);
-    listAgentConversationMessages(agentId, conversationId, { page: 1, pageSize: PAGE_SIZE })
+    listAgentConversationMessages(agentId, requestConversationId, { page: 1, pageSize: PAGE_SIZE })
       .then((res) => {
+        if (prevConversationIdRef.current !== requestConversationId) return;
+        if (
+          !shouldApplyHistoryPageToChat({
+            shouldLoadInitial,
+            switched,
+            liveMessageCount: getLiveMessageCountRef.current?.() ?? 0,
+          })
+        ) {
+          return;
+        }
         const total = res.total;
         const items = res.items.map((item, idx) =>
           convertToUIMessage(item, idx, { page: 1, pageSize: PAGE_SIZE, total }),

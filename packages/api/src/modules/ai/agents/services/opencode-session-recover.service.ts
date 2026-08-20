@@ -3,6 +3,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { generateId } from "ai";
 
 import { OpencodeApiService } from "../integrations/opencode-api.service";
+import { shouldAbortStuckSession } from "../utils/opencode-permission";
 import {
     findHealableCompletedAssistant,
     isOpencodeSessionStuck,
@@ -50,7 +51,13 @@ export class OpencodeSessionRecoverService {
         if (!sessionId) return result;
 
         // Live runner owns the session — do not abort under it.
+        // Still flush permission asks: headless serve has no TUI, and a missed
+        // SSE event would leave the in-flight turn hung forever.
         if (this.turnRunner.isRunning(params.conversationId)) {
+            await this.opencodeApiService.approvePendingPermissions({
+                config: params.agent.thirdPartyIntegration,
+                sessionId,
+            });
             return result;
         }
 
@@ -69,7 +76,16 @@ export class OpencodeSessionRecoverService {
             return result;
         }
 
-        if (isOpencodeSessionStuck(ocMessages)) {
+        const pendingCount = await this.opencodeApiService.approvePendingPermissions({
+            config: params.agent.thirdPartyIntegration,
+            sessionId,
+        });
+        if (
+            shouldAbortStuckSession({
+                isStuck: isOpencodeSessionStuck(ocMessages),
+                pendingPermissionCount: pendingCount,
+            })
+        ) {
             await this.opencodeApiService.abortSession({
                 config: params.agent.thirdPartyIntegration,
                 sessionId,
@@ -146,8 +162,8 @@ export class OpencodeSessionRecoverService {
                 metaPatch,
                 mergeOpencodeTurnMetadata(metadata, { status: nextStatus, at }),
             );
-        } else if (metadata.opencodeTurnStatus === "running") {
-            // Stale running with no live runner
+        } else if (metadata.opencodeTurnStatus === "running" && pendingCount === 0) {
+            // Stale running with no live runner and no permission wait
             Object.assign(
                 metaPatch,
                 mergeOpencodeTurnMetadata(metadata, { status: "aborted", at }),

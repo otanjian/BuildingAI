@@ -98,6 +98,9 @@ export default defineConfig({
       "/assets": { target: apiTarget, changeOrigin: true },
       "/extension": { target: apiTarget, changeOrigin: true },
       "/api": { target: apiTarget, changeOrigin: true },
+      // Site-embed OpenAPI aliases (`/v1/chat-messages`, `/v1/conversations`, …)
+      // when VITE_DEVELOP_APP_BASE_URL is empty and getApiBaseUrl() uses the Vite origin.
+      "/v1": { target: apiTarget, changeOrigin: true },
       "/consoleapi": { target: apiTarget, changeOrigin: true },
       "/web": { target: apiTarget, changeOrigin: true },
       ...buildExtensionApiProxies(apiTarget),

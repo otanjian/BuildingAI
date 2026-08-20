@@ -41,6 +41,7 @@ export default {
     general: {
       label: "General",
       general: "General Settings",
+      personalParams: "Personal Parameters",
       notice: "Notifications",
       about: "About",
     },
@@ -87,5 +88,20 @@ export default {
       emptyHint: "When you chat with AI, the system may save your preferences and key information.",
       delete: "Delete",
     },
+  },
+  personalParams: {
+    label: "Personal Parameters",
+    hint: "Maintain your personal parameters by code for agent conversations.",
+    add: "Add",
+    addTitle: "Add Parameter",
+    editTitle: "Edit Parameter",
+    formHint: "Enter a unique parameter code and its value.",
+    code: "Code",
+    value: "Value",
+    valuePlaceholder: "Enter parameter value",
+    actions: "Actions",
+    empty: 'No parameters yet. Click "Add" to create one.',
+    cancel: "Cancel",
+    confirm: "Confirm",
   },
 };

@@ -79,3 +79,25 @@ The system SHALL detect HTML artifacts for a conversation (preferring `index.htm
 - **WHEN** a client requests an artifact path for a conversation
 - **THEN** the system MUST allow access only if the requester is authorized for that Agent conversation
 - **AND** MUST reject path traversal outside that conversation’s artifact root
+
+### Requirement: Headless OpenCode permission asks are auto-approved
+
+The system SHALL reply to OpenCode permission prompts during Agent chat. OpenCode `serve` has no TUI; an unanswered `ask` leaves the mapped session busy and the BuildingAI turn without an assistant message. Two conversations MUST be able to run concurrently without sharing a permission UI.
+
+#### Scenario: Permission ask during a turn is answered
+
+- **WHEN** OpenCode emits `permission.asked` or `permission.v2.asked` for the mapped session
+- **THEN** BuildingAI MUST reply `always` so the tool call can continue
+- **AND** MUST NOT wait for a human approval in the Agent dialog
+
+#### Scenario: Two conversations do not block each other on permission
+
+- **WHEN** two OpenCode Agent conversations each trigger a permission ask
+- **THEN** each session’s ask MUST be answered independently
+- **AND** neither conversation MUST be aborted solely because the other is waiting
+
+#### Scenario: Recover does not abort a permission wait
+
+- **WHEN** a mapped OpenCode session has `finish: null` but a pending permission request
+- **THEN** the system MUST approve the pending request
+- **AND** MUST NOT treat that session as stuck-and-abortable

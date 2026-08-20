@@ -176,6 +176,83 @@ export class OpencodeApiService {
         }
     }
 
+    /**
+     * List pending permission prompts (`GET /permission`).
+     * Headless serve has no TUI — BuildingAI must reply or the turn hangs.
+     */
+    async listPendingPermissions(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        sessionId?: string;
+    }): Promise<Array<{ id: string; sessionID: string }>> {
+        const normalized = this.normalizeConfig(params.config);
+        const response = await this.request(normalized, "/permission", { method: "GET" });
+        if (!response.ok) {
+            const text = await response.text();
+            this.logger.warn(`OpenCode list permissions failed: ${response.status} ${text}`);
+            return [];
+        }
+        const body = (await response.json()) as unknown;
+        if (!Array.isArray(body)) return [];
+        return body
+            .map((item) => {
+                const row = (item && typeof item === "object" ? item : {}) as Record<
+                    string,
+                    unknown
+                >;
+                return {
+                    id: String(row.id ?? ""),
+                    sessionID: String(row.sessionID ?? ""),
+                };
+            })
+            .filter((item) => item.id && item.sessionID)
+            .filter((item) => !params.sessionId || item.sessionID === params.sessionId);
+    }
+
+    /**
+     * Reply to a permission prompt (`POST /permission/:id/reply`).
+     */
+    async replyPermission(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        requestId: string;
+        reply?: "once" | "always" | "reject";
+    }): Promise<void> {
+        const normalized = this.normalizeConfig(params.config);
+        const reply = params.reply ?? "always";
+        const response = await this.request(
+            normalized,
+            `/permission/${encodeURIComponent(params.requestId)}/reply`,
+            {
+                method: "POST",
+                body: JSON.stringify({ reply }),
+            },
+        );
+        if (!response.ok && response.status !== 204) {
+            const text = await response.text();
+            this.logger.warn(`OpenCode permission reply failed: ${response.status} ${text}`);
+        }
+    }
+
+    /**
+     * Auto-approve every pending permission for a session (headless YOLO).
+     */
+    async approvePendingPermissions(params: {
+        config?: ThirdPartyIntegrationConfig | null;
+        sessionId: string;
+    }): Promise<number> {
+        const pending = await this.listPendingPermissions({
+            config: params.config,
+            sessionId: params.sessionId,
+        });
+        for (const item of pending) {
+            await this.replyPermission({
+                config: params.config,
+                requestId: item.id,
+                reply: "always",
+            });
+        }
+        return pending.length;
+    }
+
     async abortSession(params: {
         config?: ThirdPartyIntegrationConfig | null;
         sessionId: string;

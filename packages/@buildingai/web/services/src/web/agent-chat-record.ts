@@ -111,6 +111,25 @@ export async function createOperatorAgentMessage(
     );
 }
 
+export type OpencodeSessionMessage = {
+    info?: { id?: string; role?: string; finish?: string | null; error?: unknown };
+    parts?: Array<Record<string, unknown>>;
+};
+
+export type GetOpencodeSessionMessagesResult = {
+    sessionId: string | undefined;
+    messages: OpencodeSessionMessage[];
+};
+
+export async function getAgentOpencodeSessionMessages(
+    agentId: string,
+    conversationId: string,
+): Promise<GetOpencodeSessionMessagesResult> {
+    return apiHttpClient.get<GetOpencodeSessionMessagesResult>(
+        `/ai-agents/${agentId}/chat/conversations/${conversationId}/opencode-session/messages`,
+    );
+}
+
 const CONVERSATIONS_KEY = ["agents", "chat", "conversations"] as const;
 const MESSAGES_KEY = ["agents", "chat", "messages"] as const;
 
@@ -124,7 +143,8 @@ export function useAgentConversationsQuery(
         queryFn: () => listAgentConversations(agentId!, params),
         enabled: !!agentId && options?.enabled !== false,
         refetchInterval: (query) => {
-            const items = (query.state.data as { items?: AgentChatRecordItem[] } | undefined)?.items;
+            const items = (query.state.data as { items?: AgentChatRecordItem[] } | undefined)
+                ?.items;
             if (!items?.length) return false;
             return items.some((item) => item.metadata?.opencodeTurnStatus === "running")
                 ? 4000

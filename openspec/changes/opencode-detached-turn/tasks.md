@@ -32,4 +32,22 @@
 - [ ] 5.3 Manual: reproduce hung OC (`finish: null`) after BA timeout → reopen or next send recovers (abort + optional heal); session accepts a new prompt
 - [ ] 5.4 Manual: OC completed ahead of BA → reopen thin-heals assistant into BA without duplicating on second reopen
 - [ ] 5.5 Manual: second send while running is rejected; one turn remains
-- [x] 5.6 `openspec validate opencode-detached-turn` (+ unit tests from 3.4)
+- [ ] 5.6 Manual: open two sessions → send in both → switch back and forth → each shows its own generating progress / final assistant
+- [x] 5.7 `openspec validate opencode-detached-turn` (+ unit tests from 3.4)
+
+## 6. Client: re-render detached turn after session switch
+
+- [x] 6.1 Detect when the user re-focuses a conversation whose OpenCode turn is still running (server `opencodeTurnStatus` running + client background-streams active)
+- [x] 6.2 Poll OpenCode `GET /session/{opencodeSessionId}/message` periodically while the focused conversation is running, mapping live OC messages into `ChatUIMessage` parts so the user sees tool steps and text progress
+- [x] 6.3 Fall back to BuildingAI messages when the focused turn is no longer running; once the server finishes, persist the final assistant and stop the OC poll
+- [x] 6.4 Apply the same OC-message polling to the agent-detail chat hook (`useAgentChatStream`); reuse the shared renderer; no duplicate assistants when the same OC message is later persisted by the runner
+- [x] 6.5 Unit tests for OC-message → UIMessage mapping and poll lifecycle
+
+## 7. Live OpenCode SSE for focused conversations
+
+- [x] 7.1 Backend: expose `GET /ai-agents/:agentId/chat/conversations/:conversationId/opencode-session/events` that proxies/filter OpenCode session events to the client (auth-checked, only while turn is running)
+- [x] 7.2 Backend: expose public equivalent under `/v1/ai-agents/...` for site-chat (publish-token checked)
+- [x] 7.3 Client detail chat: replace 2.5s polling with SSE when available; fall back to polling on error
+- [x] 7.4 Client site-chat: same SSE upgrade for public agent
+- [x] 7.5 Keep polling as fallback; no duplicate assistants between SSE preview and final persisted message
+- [x] 7.6 Unit tests for event mapping + SSE lifecycle; manual two-session switch test shows real-time progress

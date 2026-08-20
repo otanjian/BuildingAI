@@ -30,6 +30,7 @@ import { ArchiveConversationDto } from "../../dto/web/chat/archive-conversation.
 import { CreateOperatorMessageDto } from "../../dto/web/chat/create-operator-message.dto";
 import { ListAgentConversationsDto } from "../../dto/web/chat/list-agent-conversations.dto";
 import { ListConversationMessagesDto } from "../../dto/web/chat/list-conversation-messages.dto";
+import { OpencodeApiService } from "../../integrations/opencode-api.service";
 import { AgentChatCompletionService } from "../../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../../services/agent-chat-message.service";
 import { AgentChatMessageFeedbackService } from "../../services/agent-chat-message-feedback.service";
@@ -51,6 +52,7 @@ export class AgentChatWebController {
         private readonly agentChatMessageService: AgentChatMessageService,
         private readonly agentChatMessageFeedbackService: AgentChatMessageFeedbackService,
         private readonly agentsService: AgentsService,
+        private readonly opencodeApiService: OpencodeApiService,
         private readonly opencodeArtifactService: OpencodeArtifactService,
         private readonly opencodeWorkspaceService: OpencodeWorkspaceService,
         private readonly opencodeChatProvider: OpencodeChatProvider,
@@ -429,6 +431,190 @@ export class AgentChatWebController {
             query,
             playground.id,
         );
+    }
+
+    /**
+     * Stream live OpenCode session events for a running turn.
+     * Used when the client re-focuses a detached conversation; polling stays as fallback.
+     */
+    @Get(":id/chat/conversations/:conversationId/opencode-session/events")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/opencode-session/events",
+        targetPath: ":id/chat/conversations/:conversationId/opencode-session/events",
+        method: "GET",
+    })
+    async streamOpencodeSessionEvents(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+        @Res() res: Response,
+    ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权查看该对话");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权查看该对话");
+        }
+        const agent = await this.agentsService.findOneById(agentId);
+        if (!agent || agent.createMode !== "opencode") {
+            throw HttpErrorFactory.badRequest("Only OpenCode agents expose session events");
+        }
+        const sessionId =
+            typeof record.metadata === "object" && record.metadata
+                ? (record.metadata as Record<string, unknown>).opencodeSessionId
+                : undefined;
+        if (typeof sessionId !== "string") {
+            throw HttpErrorFactory.badRequest("Conversation has no OpenCode session");
+        }
+
+        const abortController = new AbortController();
+        const abortSignal = abortController.signal;
+
+        const handleDisconnect = () => {
+            if (!abortSignal.aborted) abortController.abort();
+        };
+        req.on("close", handleDisconnect);
+        req.on("aborted", handleDisconnect);
+        res.on("close", handleDisconnect);
+
+        res.status(200);
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no");
+        res.flushHeaders?.();
+
+        // Heartbeat so intermediaries keep the connection open and the client
+        // knows the stream is alive even when OpenCode is idle.
+        const heartbeat = setInterval(() => {
+            if (!res.writableEnded) {
+                res.write(`: heartbeat\n\n`);
+            }
+        }, 15000);
+
+        let ended = false;
+        const writeEvent = (event: { type: string; properties?: Record<string, any> }) => {
+            if (ended || res.writableEnded) return;
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+        };
+
+        try {
+            await this.opencodeApiService.streamEvents({
+                config: agent.thirdPartyIntegration,
+                signal: abortSignal,
+                shouldStop: (event) => {
+                    if (event.type === "session.idle") {
+                        return event.properties?.sessionID === sessionId;
+                    }
+                    if (event.type === "session.error") {
+                        return event.properties?.sessionID === sessionId;
+                    }
+                    return false;
+                },
+                onEvent: async (event) => {
+                    const eventSessionId = event.properties?.sessionID as string | undefined;
+                    if (eventSessionId && eventSessionId !== sessionId) return;
+
+                    if (event.type === "message.updated") {
+                        const info = event.properties?.info as Record<string, any> | undefined;
+                        writeEvent({
+                            type: "message.updated",
+                            properties: {
+                                info: {
+                                    id: info?.id,
+                                    role: info?.role,
+                                    finish: info?.finish,
+                                    error: info?.error,
+                                },
+                            },
+                        });
+                        return;
+                    }
+
+                    if (event.type === "message.part.updated") {
+                        const part = event.properties?.part as Record<string, any> | undefined;
+                        if (!part) return;
+                        writeEvent({
+                            type: "message.part.updated",
+                            properties: {
+                                part: {
+                                    id: part.id,
+                                    messageID: part.messageID,
+                                    type: part.type,
+                                    text: part.text,
+                                    tool: part.tool,
+                                    state: part.state,
+                                },
+                            },
+                        });
+                        return;
+                    }
+
+                    if (event.type === "session.idle" || event.type === "session.error") {
+                        writeEvent({
+                            type: event.type,
+                            properties: { sessionID: sessionId },
+                        });
+                        return;
+                    }
+                },
+            });
+        } catch (error) {
+            if (!abortSignal.aborted) {
+                const message = error instanceof Error ? error.message : "OpenCode event stream failed";
+                writeEvent({ type: "session.error", properties: { sessionID: sessionId, error: message } });
+            }
+        } finally {
+            clearInterval(heartbeat);
+            if (!ended && !res.writableEnded) {
+                res.end();
+            }
+            ended = true;
+        }
+    }
+
+    @Get(":id/chat/conversations/:conversationId/opencode-session/messages")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/opencode-session/messages",
+        targetPath: ":id/chat/conversations/:conversationId/opencode-session/messages",
+        method: "GET",
+    })
+    async listOpencodeSessionMessages(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ): Promise<{
+        sessionId: string | undefined;
+        messages: Array<Record<string, any>>;
+    }> {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权查看该对话");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权查看该对话");
+        }
+        const agent = await this.agentsService.findOneById(agentId);
+        if (!agent || agent.createMode !== "opencode") {
+            throw HttpErrorFactory.badRequest("Only OpenCode agents expose session messages");
+        }
+        const sessionId =
+            typeof record.metadata === "object" && record.metadata
+                ? (record.metadata as Record<string, unknown>).opencodeSessionId
+                : undefined;
+        if (typeof sessionId !== "string") {
+            return { sessionId: undefined, messages: [] };
+        }
+        const messages = await this.opencodeApiService.listSessionMessages({
+            config: agent.thirdPartyIntegration,
+            sessionId,
+        });
+        return { sessionId, messages };
     }
 
     @Post(":id/chat/conversations/:conversationId/stop")
