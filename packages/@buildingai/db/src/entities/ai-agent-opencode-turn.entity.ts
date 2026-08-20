@@ -52,11 +52,25 @@ export type OpencodeTurnStatus = (typeof OPENCODE_TURN_STATUSES)[number];
         )
         OR
         (
-            "status" IN ('running', 'committing')
+            "status" = 'running'
             AND "completed_at" IS NULL
             AND "assistant_message_id" IS NULL
             AND "dispatch_snapshot" IS NOT NULL
             AND "artifact_baseline" IS NOT NULL
+        )
+        OR
+        (
+            "status" = 'committing'
+            AND "completed_at" IS NULL
+            AND "assistant_message_id" IS NULL
+            AND "dispatch_snapshot" IS NOT NULL
+            AND (
+                "artifact_baseline" IS NOT NULL
+                OR (
+                    "cancel_requested_at" IS NOT NULL
+                    AND "started_at" IS NULL
+                )
+            )
         )
         OR
         (
@@ -67,6 +81,7 @@ export type OpencodeTurnStatus = (typeof OPENCODE_TURN_STATUSES)[number];
             AND "artifact_baseline" IS NULL
             AND "lease_token" IS NULL
             AND "lease_expires_at" IS NULL
+            AND "cancel_requested_at" IS NULL
         )
     )`,
 )

@@ -59,6 +59,8 @@ import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
+import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
+import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
@@ -125,6 +127,8 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeApiService,
         OpencodeChatProvider,
         OpencodeArtifactService,
+        OpencodeTurnRepository,
+        OpencodeTurnLeaseRepository,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,

@@ -3,8 +3,8 @@
 - [x] 1.1 Add failing database tests for turn-ID idempotency, one active turn per conversation, unique message links, terminal checks, and unique runtime-bound session mapping
 - [x] 1.2 Add the OpenCode turn entity, conversation session/runtime columns, exports, and module registration
 - [x] 1.3 Add and test an idempotent versioned migration for turn constraints/indexes plus namespaced OpenCode billing uniqueness
-- [ ] 1.4 Add a row-locked turn repository/state-transition service with unit tests for every allowed and rejected transition
-- [ ] 1.5 Add lease repository tests and implementation for claim-token fencing, `SKIP LOCKED` batches, renewal, release, expiry, and two-instance exclusion
+- [x] 1.4 Add a row-locked turn repository/state-transition service with unit tests for every allowed and rejected transition
+- [x] 1.5 Add lease repository tests and implementation for claim-token fencing, `SKIP LOCKED` batches, renewal, release, expiry, and two-instance exclusion
 
 ## 2. Atomic acceptance and API contracts
 
