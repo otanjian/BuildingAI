@@ -178,13 +178,13 @@ describe("OpenCode durable turn schema", () => {
                 expect.objectContaining({
                     name: "ck_oc_turn_lifecycle",
                     expression: expect.stringMatching(
-                        /completed_at[\s\S]*assistant_message_id[\s\S]*dispatch_snapshot[\s\S]*artifact_baseline[\s\S]*lease_token[\s\S]*lease_expires_at/,
+                        /"status" IN \('completed', 'cancelled', 'failed'\)[\s\S]*"completed_at" IS NOT NULL[\s\S]*"assistant_message_id" IS NOT NULL[\s\S]*"dispatch_snapshot" IS NULL[\s\S]*"artifact_baseline" IS NULL[\s\S]*"lease_token" IS NULL[\s\S]*"lease_expires_at" IS NULL/,
                     ),
                 }),
                 expect.objectContaining({
                     name: "ck_oc_turn_lease_pair",
                     expression: expect.stringMatching(
-                        /lease_token[\s\S]*lease_expires_at[\s\S]*lease_token[\s\S]*lease_expires_at/,
+                        /"lease_token" IS NULL AND "lease_expires_at" IS NULL[\s\S]*"lease_token" IS NOT NULL AND "lease_expires_at" IS NOT NULL/,
                     ),
                 }),
             ]),
@@ -258,6 +258,12 @@ describe("OpenCode durable turn migration", () => {
         expect(joined).toMatch(/pg_constraint WHERE conname = 'ck_oc_turn_status'/);
         expect(joined).toMatch(/pg_constraint WHERE conname = 'ck_oc_turn_lifecycle'/);
         expect(joined).toMatch(/pg_constraint WHERE conname = 'ck_oc_turn_lease_pair'/);
+        expect(joined).toMatch(
+            /"status" IN \('completed', 'cancelled', 'failed'\)[\s\S]*"completed_at" IS NOT NULL[\s\S]*"assistant_message_id" IS NOT NULL[\s\S]*"dispatch_snapshot" IS NULL[\s\S]*"artifact_baseline" IS NULL[\s\S]*"lease_token" IS NULL[\s\S]*"lease_expires_at" IS NULL/,
+        );
+        expect(joined).toMatch(
+            /"lease_token" IS NULL AND "lease_expires_at" IS NULL[\s\S]*"lease_token" IS NOT NULL AND "lease_expires_at" IS NOT NULL/,
+        );
         expect(joined).toMatch(/pg_constraint WHERE conname = 'ck_agent_chat_oc_session_binding'/);
         expect(joined).toMatch(/FOREIGN KEY \("conversation_id"\).*ON DELETE CASCADE/);
         expect(joined).toMatch(/FOREIGN KEY \("input_message_id"\).*ON DELETE RESTRICT/);
