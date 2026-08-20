@@ -66,6 +66,7 @@ import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptan
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
 import { OpencodeTurnMutationCoordinator } from "./services/opencode-turn-mutation-coordinator";
 import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
+import { OpencodeTurnTerminalCommitService } from "./services/opencode-turn-terminal-commit";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
@@ -139,6 +140,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,
         OpencodeTurnMutationCoordinator,
+        OpencodeTurnTerminalCommitService,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,

@@ -28,8 +28,8 @@
 
 - [ ] 4.1 Add worker tests for accepted-to-running execution, single-flight observation, changed-evidence activity, stale-busy timeout, retry deadlines, fast busy-to-idle, and idle-before-message visibility
 - [ ] 4.2 Implement bounded status/session/interaction observation plus retryable exact-message settlement in `committing`, without an OpenCode event stream or blank projection
-- [ ] 4.3 Add projection tests for exact assistant descendants, non-blank outcomes, tools, usage, sensitive-word filtering, and artifacts changed from the persisted baseline
-- [ ] 4.4 Implement exact final-message assembly and final artifact detection from the frozen snapshot and bounded remote reads
+- [x] 4.3 Add projection tests for exact assistant descendants, non-blank outcomes, tools, usage, sensitive-word filtering, and artifacts changed from the persisted baseline
+- [x] 4.4 Implement exact final-message assembly and final artifact detection from the frozen snapshot and bounded remote reads
 - [ ] 4.5 Add recovery-matrix tests for busy/retry, automatic permission handling, question failure, missing mapped session, completed/error descendants, and ambiguous dispatch
 - [ ] 4.6 Add worker-pool tests for local capacity, excess queue depth, expired-lease claims, renewal, and graceful process shutdown
 - [ ] 4.7 Implement the bounded per-instance worker pool and periodic reconciler without mutating history reads
@@ -37,10 +37,10 @@
 
 ## 5. Atomic terminal projection and billing
 
-- [ ] 5.1 Add tests proving message, statistics, and billing services use a supplied transaction manager for every query, number generation, and write
-- [ ] 5.2 Implement external transaction-manager support and remove best-effort statistic swallowing from the durable commit path
-- [ ] 5.3 Add terminal transaction tests for success, namespaced duplicate deduction, rollback, insufficient balance, crash/retry, partial cancellation, and terminal no-op
-- [ ] 5.4 Implement the row-locked transaction that saves one assistant, deducts by `opencode-turn:<turnId>`, updates statistics, clears recover-only snapshot fields, and commits the matching terminal state
+- [x] 5.1 Add tests proving message, statistics, and billing services use a supplied transaction manager for every query, number generation, and write
+- [x] 5.2 Implement external transaction-manager support and remove best-effort statistic swallowing from the durable commit path
+- [x] 5.3 Add terminal transaction tests for success, namespaced duplicate deduction, rollback, insufficient balance, crash/retry, partial cancellation, and terminal no-op
+- [x] 5.4 Implement the row-locked transaction that saves one assistant, deducts by `opencode-turn:<turnId>`, updates statistics, clears recover-only snapshot fields, and commits the matching terminal state
 - [ ] 5.5 Add invariant queries/tests proving every terminal turn has one assistant, no completed billed turn lacks its assistant, and no turn has multiple deductions
 
 ## 6. Turn-scoped control and pure history

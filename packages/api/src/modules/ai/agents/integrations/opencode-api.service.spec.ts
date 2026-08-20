@@ -117,6 +117,53 @@ describe("OpencodeApiService durable read adapter", () => {
         expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
+    it("bounds recent message reads and preserves parent correlation fields", async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+            response([
+                {
+                    info: {
+                        id: "msg_assistant",
+                        role: "assistant",
+                        parentID: "msg_user",
+                        finish: "stop",
+                    },
+                    parts: [{ id: "part_1", type: "text", text: "done" }],
+                },
+            ]),
+        );
+
+        await expect(
+            service.listRecentSessionMessages({
+                config: CONFIG,
+                sessionId: "ses_1",
+                limit: 20,
+            }),
+        ).resolves.toEqual([
+            expect.objectContaining({
+                info: expect.objectContaining({
+                    id: "msg_assistant",
+                    parentID: "msg_user",
+                }),
+            }),
+        ]);
+        expect(global.fetch).toHaveBeenCalledWith(
+            "http://opencode.test/session/ses_1/message?limit=20",
+            expect.objectContaining({ method: "GET" }),
+        );
+    });
+
+    it.each([0, 51, Number.NaN])("rejects an unsafe recent-message limit: %s", async (limit) => {
+        global.fetch = jest.fn();
+        await expect(
+            service.listRecentSessionMessages({
+                config: CONFIG,
+                sessionId: "ses_1",
+                limit,
+            }),
+        ).rejects.toThrow(/limit/i);
+        expect(global.fetch).not.toHaveBeenCalled();
+    });
+
     it("aborts a read at its operation deadline and classifies the failure", async () => {
         global.fetch = jest.fn((_url, init) => {
             return new Promise<Response>((_resolve, reject) => {

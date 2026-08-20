@@ -88,6 +88,7 @@ export class OpencodeTurnRepository {
         const turn = await manager.findOne(AgentOpencodeTurn, {
             where: { id: turnId },
             lock: { mode: "pessimistic_write" },
+            relations: { conversation: true },
         });
         if (!turn) {
             throw new OpencodeTurnNotFoundError(turnId);

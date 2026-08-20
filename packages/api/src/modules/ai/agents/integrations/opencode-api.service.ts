@@ -286,6 +286,30 @@ export class OpencodeApiService {
         return message;
     }
 
+    async listRecentSessionMessages(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+            limit: number;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSessionMessage[]> {
+        if (!Number.isInteger(params.limit) || params.limit < 1 || params.limit > 50) {
+            throw new RangeError("OpenCode recent message limit must be an integer from 1 to 50");
+        }
+        const operation = "list-recent-session-messages";
+        const body = await this.requestJson<unknown>({
+            operation,
+            config: params.config,
+            path: `/session/${encodeURIComponent(params.sessionId)}/message?limit=${params.limit}`,
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
+        });
+        if (!Array.isArray(body)) {
+            throw this.invalidResponse(operation, "Recent message response is not an array");
+        }
+        return body as OpencodeSessionMessage[];
+    }
+
     async promptAsync(params: {
         config?: ThirdPartyIntegrationConfig | null;
         sessionId: string;

@@ -17,6 +17,24 @@ export class OpencodeArtifactBaselineService {
         return { version: 1, files };
     }
 
+    async changedHtmlFiles(
+        artifactRoot: string,
+        baseline: OpencodeArtifactBaseline,
+    ): Promise<string[]> {
+        this.assertBaseline(baseline);
+        const current = await this.capture(artifactRoot);
+        const previous = new Map(baseline.files.map((file) => [file.path, file]));
+        return current.files
+            .filter((file) => /\.html?$/i.test(file.path))
+            .filter((file) => {
+                const before = previous.get(file.path);
+                return (
+                    !before || before.size !== file.size || before.mtimeMs !== file.mtimeMs
+                );
+            })
+            .map((file) => file.path);
+    }
+
     private async walk(
         root: string,
         current: string,
@@ -45,6 +63,25 @@ export class OpencodeArtifactBaselineService {
                 size: stat.size,
                 mtimeMs: stat.mtimeMs,
             });
+        }
+    }
+
+    private assertBaseline(value: OpencodeArtifactBaseline): void {
+        if (value?.version !== 1 || !Array.isArray(value.files)) {
+            throw new Error("Invalid OpenCode artifact baseline");
+        }
+        for (const file of value.files) {
+            if (
+                !file ||
+                typeof file.path !== "string" ||
+                !file.path ||
+                path.isAbsolute(file.path) ||
+                file.path.split("/").includes("..") ||
+                !Number.isFinite(file.size) ||
+                !Number.isFinite(file.mtimeMs)
+            ) {
+                throw new Error("Invalid OpenCode artifact baseline entry");
+            }
         }
     }
 }

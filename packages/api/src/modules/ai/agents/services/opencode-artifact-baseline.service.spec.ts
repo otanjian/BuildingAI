@@ -48,4 +48,34 @@ describe("OpencodeArtifactBaselineService", () => {
             new OpencodeArtifactBaselineService().capture(path.join(parent, "missing")),
         ).resolves.toEqual({ version: 1, files: [] });
     });
+
+    it("detects only final HTML files changed from the persisted baseline", async () => {
+        const parent = await mkdtemp(path.join(tmpdir(), "opencode-baseline-"));
+        roots.push(parent);
+        const root = path.join(parent, "artifacts");
+        await mkdir(path.join(root, "nested"), { recursive: true });
+        await writeFile(path.join(root, "existing.html"), "before");
+        await writeFile(path.join(root, "unchanged.html"), "same");
+        const service = new OpencodeArtifactBaselineService();
+        const baseline = await service.capture(root);
+
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        await writeFile(path.join(root, "existing.html"), "after-with-new-size");
+        await writeFile(path.join(root, "nested", "new.html"), "new");
+        await writeFile(path.join(root, "ignored.txt"), "not html");
+
+        await expect(service.changedHtmlFiles(root, baseline)).resolves.toEqual([
+            "existing.html",
+            "nested/new.html",
+        ]);
+    });
+
+    it("fails closed when a persisted baseline shape is invalid", async () => {
+        await expect(
+            new OpencodeArtifactBaselineService().changedHtmlFiles("/tmp", {
+                version: 1,
+                files: [{ path: "../escape.html", size: 1, mtimeMs: 1 }],
+            }),
+        ).rejects.toThrow(/baseline/i);
+    });
 });

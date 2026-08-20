@@ -145,6 +145,7 @@ describe("OpencodeTurnRepository state machine", () => {
             expect.objectContaining({
                 where: { id: "11111111-1111-4111-8111-111111111111" },
                 lock: { mode: "pessimistic_write" },
+                relations: { conversation: true },
             }),
         );
         expect(manager.findOne.mock.invocationCallOrder[0]).toBeLessThan(

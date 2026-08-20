@@ -7,7 +7,7 @@ import {
     AgentChatRecord,
     User,
 } from "@buildingai/db/entities";
-import { In, Repository } from "@buildingai/db/typeorm";
+import { In, Repository, type EntityManager } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatUIMessage } from "@buildingai/types";
 import { Injectable } from "@nestjs/common";
@@ -314,7 +314,19 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         });
     }
 
-    async updateStats(conversationId: string): Promise<void> {
+    async updateStats(conversationId: string, manager?: EntityManager): Promise<void> {
+        if (manager) {
+            const stats = await this.agentChatMessageService.getMessageStats(
+                conversationId,
+                manager,
+            );
+            await manager.update(AgentChatRecord, { id: conversationId }, {
+                messageCount: stats.messageCount,
+                totalTokens: stats.totalTokens,
+                consumedPower: stats.totalPower,
+            });
+            return;
+        }
         try {
             const stats = await this.agentChatMessageService.getMessageStats(conversationId);
             await this.chatRecordRepository.update(conversationId, {
