@@ -19,6 +19,7 @@ export * from "./decorate";
 export * from "./extension";
 export * from "./mcp";
 export * from "./membership";
+export * from "./opencode-turn";
 export * from "./opencode-workspace";
 export * from "./recharge";
 export * from "./tag";

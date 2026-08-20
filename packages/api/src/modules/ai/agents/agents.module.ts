@@ -13,6 +13,7 @@ import { AiModel } from "@buildingai/db/entities/ai-model.entity";
 import { AiProvider } from "@buildingai/db/entities/ai-provider.entity";
 import { AiUserMcpServer } from "@buildingai/db/entities/ai-user-mcp-server.entity";
 import { Datasets } from "@buildingai/db/entities/datasets.entity";
+import { File } from "@buildingai/db/entities/file.entity";
 import { Secret } from "@buildingai/db/entities/secret.entity";
 import { SecretTemplate } from "@buildingai/db/entities/secret-template.entity";
 import { Tag } from "@buildingai/db/entities/tag.entity";
@@ -34,6 +35,7 @@ import { AgentAnnotationWebController } from "./controllers/web/agent-annotation
 import { AgentChatWebController } from "./controllers/web/agent-chat.controller";
 import { AgentPublishWebController } from "./controllers/web/agent-publish.controller";
 import { AgentsWebController } from "./controllers/web/agents.controller";
+import { OpencodeTurnWebController } from "./controllers/web/opencode-turn.controller";
 import { AgentBillingHandler } from "./handlers/agent-billing";
 import { AnnotationReplyHandler } from "./handlers/annotation-reply";
 import { FollowUpSuggestionsHandler } from "./handlers/follow-up-suggestions";
@@ -59,6 +61,7 @@ import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
+import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
 import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
@@ -84,6 +87,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
             AiUserMcpServer,
             Secret,
             SecretTemplate,
+            File,
         ]),
         forwardRef(() => AiDatasetsModule),
         AiMemoryModule,
@@ -96,6 +100,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         AgentChatWebController,
         AgentPublishWebController,
         AgentAnnotationWebController,
+        OpencodeTurnWebController,
         // AgentOpenApiController,
     ],
     providers: [
@@ -127,6 +132,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeApiService,
         OpencodeChatProvider,
         OpencodeArtifactService,
+        OpencodeTurnAcceptanceService,
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,
         OpencodeSessionRecoverService,

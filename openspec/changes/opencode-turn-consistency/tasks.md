@@ -8,12 +8,12 @@
 
 ## 2. Atomic acceptance and API contracts
 
-- [ ] 2.1 Add request/response DTO and authorization tests for client-generated conversation/turn UUIDs, one current user command, rejected browser history/parent overrides, bypassed local quick replies, registered/anonymous ownership, and conflicting ID reuse
+- [x] 2.1 Add request/response DTO and authorization tests for client-generated conversation/turn UUIDs, one current user command, rejected browser history/parent overrides, bypassed local quick replies, registered/anonymous ownership, and conflicting ID reuse
 - [x] 2.2 Add pure tests for client-command-only request hashing, credential-free execution/billing snapshots, runtime fingerprints, and API/log snapshot redaction
 - [x] 2.3 Implement canonical command hashing and snapshot construction, failing explicitly when attachment references or runtime configuration are invalid
-- [ ] 2.4 Add acceptance transaction tests for minimum-point precheck, duplicate/lost response, changed balance/config, same-conversation concurrency, and setup rollback
-- [ ] 2.5 Implement the short acceptance transaction and HTTP 202 endpoint with no OpenCode calls before commit
-- [ ] 2.6 Add shared web-service types and methods for accept, authorized turn status, and turn-scoped Stop contracts
+- [x] 2.4 Add acceptance transaction tests for minimum-point precheck, duplicate/lost response, changed balance/config, same-conversation concurrency, and setup rollback
+- [x] 2.5 Implement the short acceptance transaction and HTTP 202 endpoint with no OpenCode calls before commit
+- [x] 2.6 Add shared web-service types and methods for accept, authorized turn status, and turn-scoped Stop contracts
 
 ## 3. Bounded OpenCode adapter and mutation serialization
 
