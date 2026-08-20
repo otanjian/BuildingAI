@@ -51,11 +51,6 @@ function terminalPatch() {
     return {
         assistantMessageId: "33333333-3333-4333-8333-333333333333",
         completedAt: new Date("2026-08-21T00:30:00.000Z"),
-        dispatchSnapshot: null,
-        artifactBaseline: null,
-        leaseToken: null,
-        leaseExpiresAt: null,
-        cancelRequestedAt: null,
     };
 }
 
@@ -83,19 +78,44 @@ describe("OpencodeTurnRepository state machine", () => {
         const module = loadRepositoryModule();
         if (!module) return;
 
-        const manager = makeManager(makeTurn(from));
+        const initialTurn = makeTurn(from);
+        if (["completed", "cancelled", "failed"].includes(from)) {
+            Object.assign(initialTurn, terminalPatch(), {
+                artifactBaseline: null,
+                cancelRequestedAt: null,
+                dispatchSnapshot: null,
+                leaseExpiresAt: null,
+                leaseToken: null,
+            });
+        }
+        const manager = makeManager(initialTurn);
         const repository = new module.OpencodeTurnRepository();
-        const action = repository.transition(manager, {
-            turnId: "11111111-1111-4111-8111-111111111111",
-            to,
-            patch: transitionPatch(to),
-        });
 
         if (from === to) {
+            if (["completed", "cancelled", "failed"].includes(from)) {
+                await expect(
+                    repository.getTerminalNoop(manager, initialTurn.id, from),
+                ).resolves.toEqual({ changed: false, turn: initialTurn });
+                expect(manager.save).not.toHaveBeenCalled();
+                return;
+            }
+            const action = repository.transition(manager, {
+                turnId: initialTurn.id,
+                to,
+                leaseToken: "22222222-2222-4222-8222-222222222222",
+                patch: transitionPatch(to),
+            });
             await expect(action).resolves.toMatchObject({ changed: false, turn: { status: from } });
             expect(manager.save).not.toHaveBeenCalled();
             return;
         }
+
+        const action = repository.transition(manager, {
+            turnId: initialTurn.id,
+            to,
+            leaseToken: "22222222-2222-4222-8222-222222222222",
+            patch: transitionPatch(to),
+        });
 
         if (ALLOWED_EDGES.has(`${from}:${to}`)) {
             await expect(action).resolves.toMatchObject({ changed: true, turn: { status: to } });
@@ -116,6 +136,7 @@ describe("OpencodeTurnRepository state machine", () => {
         await repository.transition(manager, {
             turnId: "11111111-1111-4111-8111-111111111111",
             to: "running",
+            leaseToken: "22222222-2222-4222-8222-222222222222",
             patch: { artifactBaseline: { files: [] } },
         });
 
@@ -149,6 +170,7 @@ describe("OpencodeTurnRepository state machine", () => {
             repository.transition(manager, {
                 turnId: "11111111-1111-4111-8111-111111111111",
                 to: "committing",
+                leaseToken: "22222222-2222-4222-8222-222222222222",
             }),
         ).resolves.toMatchObject({
             changed: true,
@@ -166,6 +188,7 @@ describe("OpencodeTurnRepository state machine", () => {
             repository.transition(manager, {
                 turnId: "11111111-1111-4111-8111-111111111111",
                 to: "running",
+                leaseToken: "22222222-2222-4222-8222-222222222222",
                 patch: { artifactBaseline: { files: [] } },
             }),
         ).rejects.toBeInstanceOf(module.OpencodeTurnNotFoundError);
@@ -198,6 +221,7 @@ describe("OpencodeTurnRepository state machine", () => {
             repository.transition(activeManager, {
                 turnId: "11111111-1111-4111-8111-111111111111",
                 to: "running",
+                leaseToken: "22222222-2222-4222-8222-222222222222",
             }),
         ).rejects.toBeInstanceOf(module.OpencodeTurnInvariantError);
 
@@ -206,8 +230,61 @@ describe("OpencodeTurnRepository state machine", () => {
             repository.transition(terminalManager, {
                 turnId: "11111111-1111-4111-8111-111111111111",
                 to: "completed",
+                leaseToken: "22222222-2222-4222-8222-222222222222",
                 patch: { completedAt: new Date() },
             }),
         ).rejects.toBeInstanceOf(module.OpencodeTurnInvariantError);
+    });
+
+    it("does not allow transition patches to overwrite identity or lease ownership", async () => {
+        const module = loadRepositoryModule();
+        if (!module) return;
+
+        const manager = makeManager(makeTurn("accepted"));
+        const repository = new module.OpencodeTurnRepository();
+        await repository.transition(manager, {
+            turnId: "11111111-1111-4111-8111-111111111111",
+            to: "running",
+            leaseToken: "22222222-2222-4222-8222-222222222222",
+            patch: {
+                artifactBaseline: { files: [] },
+                dispatchSnapshot: { prompt: "tampered" },
+                id: "99999999-9999-4999-8999-999999999999",
+                leaseToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            } as any,
+        });
+
+        expect(manager.save).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                id: "11111111-1111-4111-8111-111111111111",
+                dispatchSnapshot: { prompt: "redacted" },
+                leaseToken: "22222222-2222-4222-8222-222222222222",
+            }),
+        );
+    });
+
+    it("provides a separate terminal no-op path without worker lease ownership", async () => {
+        const module = loadRepositoryModule();
+        if (!module) return;
+
+        const terminal = makeTurn("completed", {
+            ...terminalPatch(),
+            artifactBaseline: null,
+            cancelRequestedAt: null,
+            dispatchSnapshot: null,
+            leaseExpiresAt: null,
+            leaseToken: null,
+        });
+        const manager = makeManager(terminal);
+        const repository = new module.OpencodeTurnRepository();
+        await expect(
+            repository.getTerminalNoop(
+                manager,
+                "11111111-1111-4111-8111-111111111111",
+                "completed",
+            ),
+        ).resolves.toEqual({ changed: false, turn: terminal });
+        expect(manager.save).not.toHaveBeenCalled();
     });
 });

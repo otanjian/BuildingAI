@@ -36,6 +36,7 @@ function makeManager(rows: Array<Record<string, any>>, affected = 1) {
     const builder = makeQueryBuilder(rows);
     return {
         builder,
+        queryRunner: { isTransactionActive: true },
         createQueryBuilder: jest.fn(() => builder),
         update: jest.fn(async () => ({ affected })),
     };
@@ -75,6 +76,13 @@ describe("OpencodeTurnLeaseRepository", () => {
         expect(manager.builder.setOnLocked).toHaveBeenCalledWith("skip_locked");
         expect(manager.builder.take).toHaveBeenCalledWith(2);
         expect(manager.update).toHaveBeenCalledTimes(2);
+        const firstClaimCriteria = (manager.update.mock.calls as any[][])[0][1];
+        expect(firstClaimCriteria).toMatchObject({
+            id: "11111111-1111-4111-8111-111111111111",
+            leaseToken: expect.objectContaining({ _type: "isNull" }),
+            leaseExpiresAt: expect.objectContaining({ _type: "isNull" }),
+            status: expect.objectContaining({ _type: "in" }),
+        });
         expect(claimed).toEqual([
             expect.objectContaining({ leaseToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }),
             expect.objectContaining({ leaseToken: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }),
@@ -102,48 +110,6 @@ describe("OpencodeTurnLeaseRepository", () => {
         expect(claimed).toHaveLength(1);
         expect(manager.builder.take).toHaveBeenCalledWith(1);
         expect(manager.builder.setOnLocked).toHaveBeenCalledWith("skip_locked");
-    });
-
-    it("lets only one instance claim a row locked by concurrent reconciliation", async () => {
-        const module = loadRepositoryModule();
-        if (!module) return;
-
-        const row = { id: "11111111-1111-4111-8111-111111111111", status: "accepted" };
-        let rowLocked = false;
-        const makeInstanceManager = () => {
-            const manager = makeManager([]);
-            manager.builder.getMany.mockImplementation(async () => {
-                if (rowLocked) return [];
-                rowLocked = true;
-                return [{ ...row }];
-            });
-            return manager;
-        };
-        const firstManager = makeInstanceManager();
-        const secondManager = makeInstanceManager();
-        const repository = new module.OpencodeTurnLeaseRepository();
-
-        const [first, second] = await Promise.all([
-            repository.claimAvailable(firstManager, {
-                limit: 1,
-                now: NOW,
-                leaseDurationMs: 30_000,
-                tokenFactory: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            }),
-            repository.claimAvailable(secondManager, {
-                limit: 1,
-                now: NOW,
-                leaseDurationMs: 30_000,
-                tokenFactory: () => "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            }),
-        ]);
-
-        expect([...first, ...second]).toHaveLength(1);
-        expect(firstManager.builder.setOnLocked).toHaveBeenCalledWith("skip_locked");
-        expect(secondManager.builder.setOnLocked).toHaveBeenCalledWith("skip_locked");
-        expect(firstManager.update.mock.calls.length + secondManager.update.mock.calls.length).toBe(
-            1,
-        );
     });
 
     it("reclaims an expired lease with a fresh fenced token", async () => {
@@ -174,6 +140,16 @@ describe("OpencodeTurnLeaseRepository", () => {
             expect.stringMatching(/leaseExpiresAt <= :now/),
             { now: NOW },
         );
+        const expiredClaimCriteria = (manager.update.mock.calls as any[][])[0][1];
+        expect(expiredClaimCriteria).toMatchObject({
+            id: "11111111-1111-4111-8111-111111111111",
+            leaseToken: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            leaseExpiresAt: expect.objectContaining({
+                _type: "lessThanOrEqual",
+                _value: NOW,
+            }),
+            status: expect.objectContaining({ _type: "in" }),
+        });
     });
 
     it("renews only an active row with the exact claim token", async () => {
@@ -253,6 +229,23 @@ describe("OpencodeTurnLeaseRepository", () => {
                 leaseDurationMs: 30_000,
             }),
         ).resolves.toEqual([]);
+        expect(manager.createQueryBuilder).not.toHaveBeenCalled();
+    });
+
+    it("rejects claims outside an active caller transaction", async () => {
+        const module = loadRepositoryModule();
+        if (!module) return;
+
+        const manager = makeManager([]);
+        manager.queryRunner.isTransactionActive = false;
+        const repository = new module.OpencodeTurnLeaseRepository();
+        await expect(
+            repository.claimAvailable(manager, {
+                limit: 1,
+                now: NOW,
+                leaseDurationMs: 30_000,
+            }),
+        ).rejects.toThrow("active transaction");
         expect(manager.createQueryBuilder).not.toHaveBeenCalled();
     });
 

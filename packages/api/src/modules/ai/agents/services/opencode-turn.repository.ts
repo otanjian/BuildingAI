@@ -16,6 +16,16 @@ const ALLOWED_TRANSITIONS: Readonly<Record<OpencodeTurnStatus, readonly Opencode
     failed: [],
 };
 
+const TRANSITION_PATCH_FIELDS = [
+    "artifactBaseline",
+    "assistantMessageId",
+    "completedAt",
+    "errorCode",
+    "errorMessage",
+    "lastActivityAt",
+    "startedAt",
+] as const satisfies readonly (keyof OpencodeTurnTransitionPatch)[];
+
 export class OpencodeTurnNotFoundError extends Error {
     constructor(turnId: string) {
         super(`OpenCode turn not found: ${turnId}`);
@@ -52,9 +62,22 @@ export type OpencodeTurnTransitionResult = {
 export type OpencodeTurnTransitionInput = {
     turnId: string;
     to: OpencodeTurnStatus;
-    leaseToken?: string;
-    patch?: Partial<AgentOpencodeTurn>;
+    leaseToken: string;
+    patch?: OpencodeTurnTransitionPatch;
 };
+
+export type OpencodeTurnTransitionPatch = Partial<
+    Pick<
+        AgentOpencodeTurn,
+        | "artifactBaseline"
+        | "assistantMessageId"
+        | "completedAt"
+        | "errorCode"
+        | "errorMessage"
+        | "lastActivityAt"
+        | "startedAt"
+    >
+>;
 
 @Injectable()
 export class OpencodeTurnRepository {
@@ -77,25 +100,60 @@ export class OpencodeTurnRepository {
         input: OpencodeTurnTransitionInput,
     ): Promise<OpencodeTurnTransitionResult> {
         const turn = await this.findLocked(manager, input.turnId);
-        this.assertLease(turn, input.leaseToken);
 
         if (turn.status === input.to) {
+            this.assertLease(turn, input.leaseToken);
             return { changed: false, turn };
         }
         if (!ALLOWED_TRANSITIONS[turn.status].includes(input.to)) {
             throw new OpencodeTurnTransitionError(turn.status, input.to);
         }
+        this.assertLease(turn, input.leaseToken);
 
-        const next = Object.assign(turn, input.patch ?? {}, { status: input.to });
+        const next = Object.assign(turn, this.pickPatch(input.patch), { status: input.to });
+        if (OPENCODE_TURN_TERMINAL_STATUSES.includes(input.to as any)) {
+            Object.assign(next, {
+                artifactBaseline: null,
+                cancelRequestedAt: null,
+                dispatchSnapshot: null,
+                leaseToken: null,
+                leaseExpiresAt: null,
+            });
+        }
         this.assertInvariants(next);
         const saved = await manager.save(AgentOpencodeTurn, next);
         return { changed: true, turn: saved };
     }
 
-    private assertLease(turn: AgentOpencodeTurn, expected?: string): void {
-        if (expected !== undefined && turn.leaseToken !== expected) {
+    async getTerminalNoop(
+        manager: EntityManager,
+        turnId: string,
+        expected: Extract<OpencodeTurnStatus, "completed" | "cancelled" | "failed">,
+    ): Promise<OpencodeTurnTransitionResult> {
+        const turn = await this.findLocked(manager, turnId);
+        if (turn.status !== expected || !OPENCODE_TURN_TERMINAL_STATUSES.includes(turn.status)) {
+            throw new OpencodeTurnTransitionError(turn.status, expected);
+        }
+        return { changed: false, turn };
+    }
+
+    private assertLease(turn: AgentOpencodeTurn, expected: string): void {
+        if (turn.leaseToken !== expected) {
             throw new OpencodeTurnLeaseLostError(turn.id);
         }
+    }
+
+    private pickPatch(
+        patch: OpencodeTurnTransitionPatch | undefined,
+    ): OpencodeTurnTransitionPatch {
+        if (!patch) return {};
+        const safePatch: OpencodeTurnTransitionPatch = {};
+        for (const field of TRANSITION_PATCH_FIELDS) {
+            if (Object.prototype.hasOwnProperty.call(patch, field)) {
+                (safePatch as Record<string, unknown>)[field] = patch[field];
+            }
+        }
+        return safePatch;
     }
 
     private assertInvariants(turn: AgentOpencodeTurn): void {

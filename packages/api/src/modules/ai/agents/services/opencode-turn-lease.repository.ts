@@ -2,7 +2,7 @@ import {
     AgentOpencodeTurn,
     OPENCODE_TURN_ACTIVE_STATUSES,
 } from "@buildingai/db/entities/ai-agent-opencode-turn.entity";
-import { In, type EntityManager } from "@buildingai/db/typeorm";
+import { In, IsNull, LessThanOrEqual, type EntityManager } from "@buildingai/db/typeorm";
 import { Injectable } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 
@@ -31,6 +31,7 @@ export class OpencodeTurnLeaseRepository {
     ): Promise<OpencodeTurnClaim[]> {
         if (options.limit <= 0) return [];
         this.assertLeaseDuration(options.leaseDurationMs);
+        this.assertTransaction(manager);
 
         const rows = await manager
             .createQueryBuilder(AgentOpencodeTurn, "turn")
@@ -53,9 +54,18 @@ export class OpencodeTurnLeaseRepository {
 
         for (const row of rows) {
             const leaseToken = tokenFactory();
+            const originalLeaseToken = row.leaseToken;
+            const originalLeaseExpiresAt = row.leaseExpiresAt;
             const result = await manager.update(
                 AgentOpencodeTurn,
-                { id: row.id, status: In([...OPENCODE_TURN_ACTIVE_STATUSES]) },
+                {
+                    id: row.id,
+                    status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
+                    leaseToken: originalLeaseToken ?? IsNull(),
+                    leaseExpiresAt: originalLeaseExpiresAt
+                        ? LessThanOrEqual(options.now)
+                        : IsNull(),
+                },
                 { leaseToken, leaseExpiresAt },
             );
             if (result.affected !== 1) {
@@ -105,6 +115,12 @@ export class OpencodeTurnLeaseRepository {
     private assertLeaseDuration(leaseDurationMs: number): void {
         if (!Number.isFinite(leaseDurationMs) || leaseDurationMs <= 0) {
             throw new RangeError("leaseDurationMs must be a positive finite number");
+        }
+    }
+
+    private assertTransaction(manager: EntityManager): void {
+        if (!manager.queryRunner?.isTransactionActive) {
+            throw new Error("OpenCode turn lease claim requires an active transaction");
         }
     }
 
