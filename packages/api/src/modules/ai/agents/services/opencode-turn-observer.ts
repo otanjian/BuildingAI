@@ -77,7 +77,7 @@ export function decideOpencodeTurnObservation(
         if (input.exactDescendantErrorVisible) {
             return {
                 kind: "settle",
-                activityChanged: true,
+                activityChanged,
                 outcome: "failed",
                 errorCode: "OPENCODE_REMOTE_MESSAGE_ERROR",
             };
@@ -85,21 +85,21 @@ export function decideOpencodeTurnObservation(
         if (input.exactTerminalDescendantsVisible) {
             return {
                 kind: "settle",
-                activityChanged: true,
+                activityChanged,
                 outcome: "completed",
             };
         }
         if (input.localStatus !== "committing") {
             return {
                 kind: "committing",
-                activityChanged: true,
+                activityChanged,
                 terminalEvidence: false,
                 ...(input.cancelRequested ? { requestedOutcome: "cancelled" as const } : {}),
             };
         }
         return {
             kind: "continue",
-            activityChanged: true,
+            activityChanged,
             retryAfterMs: DEFAULT_SETTLE_RETRY_MS,
         };
     }

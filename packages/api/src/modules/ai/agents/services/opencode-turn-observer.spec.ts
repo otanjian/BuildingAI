@@ -17,7 +17,7 @@ const NOW = 10_000;
 function observation(
     overrides: Partial<OpencodeTurnObservation> = {},
 ): OpencodeTurnObservation {
-    return {
+    const base: OpencodeTurnObservation = {
         localStatus: "running",
         remoteStatus: { type: "busy" },
         previousEvidence: {
@@ -42,8 +42,18 @@ function observation(
         pendingPermissionIds: [],
         pendingQuestionIds: [],
         cancelRequested: false,
-        ...overrides,
     };
+    const merged = { ...base, ...overrides };
+    if (overrides.remoteStatus && !overrides.currentEvidence) {
+        merged.currentEvidence = {
+            ...base.currentEvidence,
+            statusKey:
+                overrides.remoteStatus.type === "retry"
+                    ? `retry:${overrides.remoteStatus.attempt}:${overrides.remoteStatus.next}`
+                    : overrides.remoteStatus.type,
+        };
+    }
+    return merged;
 }
 
 describe("decideOpencodeTurnObservation", () => {
@@ -147,6 +157,29 @@ describe("decideOpencodeTurnObservation", () => {
         ).toEqual({
             kind: "continue",
             activityChanged: true,
+            retryAfterMs: expect.any(Number),
+        });
+    });
+
+    it("does not refresh activity for repeated identical idle evidence", () => {
+        const idleEvidence = {
+            statusKey: "idle",
+            sessionUpdatedAt: 100,
+            messageFingerprint: "message-1",
+            interactionFingerprint: "interaction-1",
+        };
+        expect(
+            decideOpencodeTurnObservation(
+                observation({
+                    localStatus: "committing",
+                    remoteStatus: { type: "idle" },
+                    previousEvidence: idleEvidence,
+                    currentEvidence: idleEvidence,
+                }),
+            ),
+        ).toEqual({
+            kind: "continue",
+            activityChanged: false,
             retryAfterMs: expect.any(Number),
         });
     });

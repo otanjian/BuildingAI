@@ -65,8 +65,10 @@ import { OpencodeArtifactService } from "./services/opencode-artifact.service";
 import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
 import { OpencodeTurnMutationCoordinator } from "./services/opencode-turn-mutation-coordinator";
+import { OpencodeTurnReconcilerService } from "./services/opencode-turn-reconciler.service";
 import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
 import { OpencodeTurnTerminalCommitService } from "./services/opencode-turn-terminal-commit";
+import { OpencodeTurnWorkerService } from "./services/opencode-turn-worker.service";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
@@ -140,7 +142,9 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,
         OpencodeTurnMutationCoordinator,
+        OpencodeTurnReconcilerService,
         OpencodeTurnTerminalCommitService,
+        OpencodeTurnWorkerService,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,

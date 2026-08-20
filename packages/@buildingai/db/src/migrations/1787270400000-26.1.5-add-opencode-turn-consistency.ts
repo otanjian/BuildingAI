@@ -17,6 +17,7 @@ export class Migration1787270400000 implements MigrationInterface {
                 "opencode_user_message_id" TEXT NOT NULL,
                 "status" TEXT NOT NULL DEFAULT 'accepted',
                 "last_activity_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+                "remote_evidence_hash" TEXT,
                 "error_code" TEXT,
                 "error_message" TEXT,
                 "lease_token" UUID,
@@ -29,6 +30,9 @@ export class Migration1787270400000 implements MigrationInterface {
                 CONSTRAINT "pk_oc_turn" PRIMARY KEY ("id")
             )
         `);
+        await queryRunner.query(
+            `ALTER TABLE "ai_agent_opencode_turn" ADD COLUMN IF NOT EXISTS "remote_evidence_hash" TEXT`,
+        );
 
         await queryRunner.query(
             `ALTER TABLE "ai_agent_chat_record" ADD COLUMN IF NOT EXISTS "opencode_session_id" TEXT`,
@@ -86,6 +90,7 @@ export class Migration1787270400000 implements MigrationInterface {
                     AND "lease_token" IS NULL
                     AND "lease_expires_at" IS NULL
                     AND "cancel_requested_at" IS NULL
+                    AND "remote_evidence_hash" IS NULL
                 )
             )`,
         );

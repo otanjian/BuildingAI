@@ -262,6 +262,7 @@ export class OpencodeTurnAcceptanceService {
                     opencodeUserMessageId: generateOpencodeMessageId(),
                     status: "accepted",
                     lastActivityAt: new Date(),
+                    remoteEvidenceHash: null,
                     errorCode: null,
                     errorMessage: null,
                     leaseToken: null,

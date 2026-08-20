@@ -43,6 +43,7 @@ function makeTurn(status: (typeof STATUSES)[number], overrides: Record<string, u
         completedAt: null,
         leaseToken: "22222222-2222-4222-8222-222222222222",
         leaseExpiresAt: new Date("2026-08-21T01:00:00.000Z"),
+        remoteEvidenceHash: status === "accepted" ? null : "evidence-hash",
         ...overrides,
     };
 }
@@ -86,6 +87,7 @@ describe("OpencodeTurnRepository state machine", () => {
                 dispatchSnapshot: null,
                 leaseExpiresAt: null,
                 leaseToken: null,
+                remoteEvidenceHash: null,
             });
         }
         const manager = makeManager(initialTurn);
@@ -263,6 +265,52 @@ describe("OpencodeTurnRepository state machine", () => {
                 leaseToken: "22222222-2222-4222-8222-222222222222",
             }),
         );
+    });
+
+    it("records changed active evidence only with the exact lease token", async () => {
+        const module = loadRepositoryModule();
+        if (!module) return;
+        const turn = makeTurn("running");
+        const manager = makeManager(turn);
+        const repository = new module.OpencodeTurnRepository();
+        const at = new Date("2026-08-21T00:20:00.000Z");
+
+        await expect(
+            repository.recordActiveEvidence(manager, {
+                turnId: turn.id,
+                leaseToken: turn.leaseToken,
+                lastActivityAt: at,
+                errorCode: "RECOVERY_INTENT",
+                errorMessage: "visible later",
+                remoteEvidenceHash: "next-hash",
+            }),
+        ).resolves.toMatchObject({ lastActivityAt: at, errorCode: "RECOVERY_INTENT" });
+        expect(manager.save).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                lastActivityAt: at,
+                errorCode: "RECOVERY_INTENT",
+                errorMessage: "visible later",
+                remoteEvidenceHash: "next-hash",
+            }),
+        );
+    });
+
+    it.each([
+        ["stale lease", makeTurn("running"), "wrong-token"],
+        ["terminal", makeTurn("completed", { ...terminalPatch(), leaseToken: null }), null],
+    ])("rejects active evidence from a %s worker", async (_case, turn, leaseToken) => {
+        const module = loadRepositoryModule();
+        if (!module) return;
+        const manager = makeManager(turn);
+        await expect(
+            new module.OpencodeTurnRepository().recordActiveEvidence(manager, {
+                turnId: turn.id,
+                leaseToken,
+                lastActivityAt: new Date(),
+            }),
+        ).rejects.toThrow(/lease|active/i);
+        expect(manager.save).not.toHaveBeenCalled();
     });
 
     it("provides a separate terminal no-op path without worker lease ownership", async () => {

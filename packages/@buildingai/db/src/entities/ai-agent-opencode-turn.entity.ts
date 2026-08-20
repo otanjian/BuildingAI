@@ -82,6 +82,7 @@ export type OpencodeTurnStatus = (typeof OPENCODE_TURN_STATUSES)[number];
             AND "lease_token" IS NULL
             AND "lease_expires_at" IS NULL
             AND "cancel_requested_at" IS NULL
+            AND "remote_evidence_hash" IS NULL
         )
     )`,
 )
@@ -120,6 +121,9 @@ export class AgentOpencodeTurn extends BaseEntity {
 
     @Column({ type: "timestamptz", nullable: false, comment: "Last changed remote evidence time" })
     lastActivityAt: Date;
+
+    @Column({ type: "text", nullable: true, comment: "Hash of normalized remote evidence" })
+    remoteEvidenceHash: string | null;
 
     @Column({ type: "text", nullable: true, comment: "Terminal machine-readable error code" })
     errorCode: string | null;

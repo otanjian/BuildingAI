@@ -23,6 +23,7 @@ const TRANSITION_PATCH_FIELDS = [
     "errorCode",
     "errorMessage",
     "lastActivityAt",
+    "remoteEvidenceHash",
     "startedAt",
 ] as const satisfies readonly (keyof OpencodeTurnTransitionPatch)[];
 
@@ -75,9 +76,19 @@ export type OpencodeTurnTransitionPatch = Partial<
         | "errorCode"
         | "errorMessage"
         | "lastActivityAt"
+        | "remoteEvidenceHash"
         | "startedAt"
     >
 >;
+
+export type OpencodeTurnActiveEvidenceInput = {
+    turnId: string;
+    leaseToken: string;
+    lastActivityAt: Date;
+    remoteEvidenceHash?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+};
 
 @Injectable()
 export class OpencodeTurnRepository {
@@ -119,6 +130,7 @@ export class OpencodeTurnRepository {
                 dispatchSnapshot: null,
                 leaseToken: null,
                 leaseExpiresAt: null,
+                remoteEvidenceHash: null,
             });
         }
         this.assertInvariants(next);
@@ -136,6 +148,33 @@ export class OpencodeTurnRepository {
             throw new OpencodeTurnTransitionError(turn.status, expected);
         }
         return { changed: false, turn };
+    }
+
+    async recordActiveEvidence(
+        manager: EntityManager,
+        input: OpencodeTurnActiveEvidenceInput,
+    ): Promise<AgentOpencodeTurn> {
+        const turn = await this.findLocked(manager, input.turnId);
+        if (!OPENCODE_TURN_ACTIVE_STATUSES.includes(turn.status as any)) {
+            throw new OpencodeTurnInvariantError(
+                "OpenCode active evidence can only update an active turn",
+            );
+        }
+        this.assertLease(turn, input.leaseToken);
+        Object.assign(turn, {
+            lastActivityAt: input.lastActivityAt,
+            ...(Object.prototype.hasOwnProperty.call(input, "remoteEvidenceHash")
+                ? { remoteEvidenceHash: input.remoteEvidenceHash ?? null }
+                : {}),
+            ...(Object.prototype.hasOwnProperty.call(input, "errorCode")
+                ? { errorCode: input.errorCode ?? null }
+                : {}),
+            ...(Object.prototype.hasOwnProperty.call(input, "errorMessage")
+                ? { errorMessage: input.errorMessage ?? null }
+                : {}),
+        });
+        this.assertInvariants(turn);
+        return manager.save(AgentOpencodeTurn, turn);
     }
 
     private assertLease(turn: AgentOpencodeTurn, expected: string): void {
@@ -194,7 +233,8 @@ export class OpencodeTurnRepository {
                 turn.artifactBaseline !== null ||
                 turn.leaseToken !== null ||
                 turn.leaseExpiresAt !== null ||
-                turn.cancelRequestedAt !== null
+                turn.cancelRequestedAt !== null ||
+                turn.remoteEvidenceHash !== null
             ) {
                 throw new OpencodeTurnInvariantError(
                     "Terminal OpenCode turn requires one projection and cleared recovery state",

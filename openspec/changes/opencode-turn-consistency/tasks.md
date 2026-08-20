@@ -26,13 +26,13 @@
 
 ## 4. Turn worker and recovery
 
-- [ ] 4.1 Add worker tests for accepted-to-running execution, single-flight observation, changed-evidence activity, stale-busy timeout, retry deadlines, fast busy-to-idle, and idle-before-message visibility
-- [ ] 4.2 Implement bounded status/session/interaction observation plus retryable exact-message settlement in `committing`, without an OpenCode event stream or blank projection
+- [x] 4.1 Add worker tests for accepted-to-running execution, single-flight observation, changed-evidence activity, stale-busy timeout, retry deadlines, fast busy-to-idle, and idle-before-message visibility
+- [x] 4.2 Implement bounded status/session/interaction observation plus retryable exact-message settlement in `committing`, without an OpenCode event stream or blank projection
 - [x] 4.3 Add projection tests for exact assistant descendants, non-blank outcomes, tools, usage, sensitive-word filtering, and artifacts changed from the persisted baseline
 - [x] 4.4 Implement exact final-message assembly and final artifact detection from the frozen snapshot and bounded remote reads
-- [ ] 4.5 Add recovery-matrix tests for busy/retry, automatic permission handling, question failure, missing mapped session, completed/error descendants, and ambiguous dispatch
-- [ ] 4.6 Add worker-pool tests for local capacity, excess queue depth, expired-lease claims, renewal, and graceful process shutdown
-- [ ] 4.7 Implement the bounded per-instance worker pool and periodic reconciler without mutating history reads
+- [x] 4.5 Add recovery-matrix tests for busy/retry, automatic permission handling, question failure, missing mapped session, completed/error descendants, and ambiguous dispatch
+- [x] 4.6 Add worker-pool tests for local capacity, excess queue depth, expired-lease claims, renewal, and graceful process shutdown
+- [x] 4.7 Implement the bounded per-instance worker pool and periodic reconciler without mutating history reads
 - [ ] 4.8 Add multi-instance integration tests proving fenced stale workers, serialized shared-session mutations, exact remote targeting, and one local final commit
 
 ## 5. Atomic terminal projection and billing

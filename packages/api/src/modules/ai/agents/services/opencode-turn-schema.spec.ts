@@ -88,6 +88,7 @@ describe("OpenCode durable turn schema", () => {
             opencodeUserMessageId: { type: "text", nullable: false },
             status: { type: "text", nullable: false, default: "accepted" },
             lastActivityAt: { type: "timestamptz", nullable: false },
+            remoteEvidenceHash: { type: "text", nullable: true },
             errorCode: { type: "text", nullable: true },
             errorMessage: { type: "text", nullable: true },
             leaseToken: { type: "uuid", nullable: true },
@@ -178,7 +179,7 @@ describe("OpenCode durable turn schema", () => {
                 expect.objectContaining({
                     name: "ck_oc_turn_lifecycle",
                     expression: expect.stringMatching(
-                        /"status" IN \('completed', 'cancelled', 'failed'\)[\s\S]*"completed_at" IS NOT NULL[\s\S]*"assistant_message_id" IS NOT NULL[\s\S]*"dispatch_snapshot" IS NULL[\s\S]*"artifact_baseline" IS NULL[\s\S]*"lease_token" IS NULL[\s\S]*"lease_expires_at" IS NULL[\s\S]*"cancel_requested_at" IS NULL/,
+                        /"status" IN \('completed', 'cancelled', 'failed'\)[\s\S]*"completed_at" IS NOT NULL[\s\S]*"assistant_message_id" IS NOT NULL[\s\S]*"dispatch_snapshot" IS NULL[\s\S]*"artifact_baseline" IS NULL[\s\S]*"lease_token" IS NULL[\s\S]*"lease_expires_at" IS NULL[\s\S]*"cancel_requested_at" IS NULL[\s\S]*"remote_evidence_hash" IS NULL/,
                     ),
                 }),
                 expect.objectContaining({
@@ -265,7 +266,7 @@ describe("OpenCode durable turn migration", () => {
         expect(joined).toMatch(/pg_constraint WHERE conname = 'ck_oc_turn_lifecycle'/);
         expect(joined).toMatch(/pg_constraint WHERE conname = 'ck_oc_turn_lease_pair'/);
         expect(joined).toMatch(
-            /"status" IN \('completed', 'cancelled', 'failed'\)[\s\S]*"completed_at" IS NOT NULL[\s\S]*"assistant_message_id" IS NOT NULL[\s\S]*"dispatch_snapshot" IS NULL[\s\S]*"artifact_baseline" IS NULL[\s\S]*"lease_token" IS NULL[\s\S]*"lease_expires_at" IS NULL[\s\S]*"cancel_requested_at" IS NULL/,
+            /"status" IN \('completed', 'cancelled', 'failed'\)[\s\S]*"completed_at" IS NOT NULL[\s\S]*"assistant_message_id" IS NOT NULL[\s\S]*"dispatch_snapshot" IS NULL[\s\S]*"artifact_baseline" IS NULL[\s\S]*"lease_token" IS NULL[\s\S]*"lease_expires_at" IS NULL[\s\S]*"cancel_requested_at" IS NULL[\s\S]*"remote_evidence_hash" IS NULL/,
         );
         expect(joined).toMatch(
             /"status" = 'committing'[\s\S]*"artifact_baseline" IS NOT NULL[\s\S]*"cancel_requested_at" IS NOT NULL[\s\S]*"started_at" IS NULL/,
