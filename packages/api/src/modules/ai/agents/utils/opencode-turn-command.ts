@@ -43,21 +43,8 @@ export type OpencodeDispatchSnapshot = {
 };
 
 const REDACTED = "[REDACTED]";
-const REDACTED_KEYS = new Set([
-    "accesstoken",
-    "apikey",
-    "authorization",
-    "artifactbaseline",
-    "basicauthpassword",
-    "basicauthuser",
-    "cookie",
-    "dispatchsnapshot",
-    "password",
-    "promptparts",
-    "secret",
-    "system",
-    "token",
-]);
+const REDACTED_KEY_PATTERN =
+    /(?:artifactbaseline|authorization|cookie|credential|instruction|password|prompt|secret|snapshot|system|token)/i;
 
 export class OpencodeTurnCommandError extends Error {
     constructor(message: string) {
@@ -226,6 +213,12 @@ function normalizeBaseUrl(value: unknown): string {
     url.username = "";
     url.password = "";
     url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+        if (REDACTED_KEY_PATTERN.test(key) || /apikey|signature/i.test(key)) {
+            url.searchParams.delete(key);
+        }
+    }
+    url.searchParams.sort();
     url.pathname = url.pathname.replace(/\/+$/, "") || "/";
     return url.toString().replace(/\/$/, "");
 }
@@ -241,7 +234,10 @@ export function hashOpencodeRuntime(input: unknown): string {
     });
 }
 
-function canonicalPromptParts(value: unknown): OpencodeDispatchPromptPart[] {
+function canonicalPromptParts(
+    value: unknown,
+    resolvedAttachmentUrls: ReadonlySet<string>,
+): OpencodeDispatchPromptPart[] {
     if (!Array.isArray(value) || value.length === 0) {
         throw new OpencodeTurnCommandError("OpenCode dispatch prompt cannot be empty");
     }
@@ -250,10 +246,16 @@ function canonicalPromptParts(value: unknown): OpencodeDispatchPromptPart[] {
             return { type: "text", text: part.text };
         }
         if (part?.type === "file") {
+            const url = canonicalAttachmentUrl(part.url);
+            if (!resolvedAttachmentUrls.has(url)) {
+                throw new OpencodeTurnCommandError(
+                    "OpenCode snapshot requires a persisted, authorized attachment reference",
+                );
+            }
             const file: OpencodeDispatchPromptPart = {
                 type: "file",
                 mime: nonEmpty(part.mime, "Attachment MIME type"),
-                url: canonicalAttachmentUrl(part.url),
+                url,
             };
             if (typeof part.filename === "string" && part.filename.trim()) {
                 file.filename = part.filename.trim();
@@ -289,8 +291,13 @@ export function buildOpencodeDispatchSnapshot(input: Record<string, any>): Openc
         throw new OpencodeTurnCommandError("OpenCode billing snapshot is invalid");
     }
 
+    const resolvedAttachmentUrls = new Set(
+        (Array.isArray(input.resolvedAttachmentUrls) ? input.resolvedAttachmentUrls : []).map(
+            canonicalAttachmentUrl,
+        ),
+    );
     const snapshot: OpencodeDispatchSnapshot = {
-        promptParts: canonicalPromptParts(input.promptParts),
+        promptParts: canonicalPromptParts(input.promptParts, resolvedAttachmentUrls),
         system: typeof input.system === "string" ? input.system : "",
         artifactRoot,
         billing: { enabled: billing.enabled === true, power, tokens },
@@ -311,13 +318,30 @@ export function redactOpencodeTurnLogData(value: unknown): unknown {
     if (Array.isArray(value)) {
         return value.map(redactOpencodeTurnLogData);
     }
+    if (typeof value === "string") {
+        try {
+            const parsed = new URL(value);
+            if (
+                parsed.username ||
+                parsed.password ||
+                [...parsed.searchParams.keys()].some(
+                    (key) => REDACTED_KEY_PATTERN.test(key) || /apikey|signature/i.test(key),
+                )
+            ) {
+                return REDACTED;
+            }
+        } catch {
+            // Non-URL strings are safe unless their containing key is sensitive.
+        }
+        return value;
+    }
     if (!value || typeof value !== "object") {
         return value;
     }
     const output: Record<string, unknown> = {};
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
         const normalizedKey = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
-        output[key] = REDACTED_KEYS.has(normalizedKey)
+        output[key] = REDACTED_KEY_PATTERN.test(normalizedKey) || /apikey|signature/i.test(normalizedKey)
             ? REDACTED
             : redactOpencodeTurnLogData(child);
     }

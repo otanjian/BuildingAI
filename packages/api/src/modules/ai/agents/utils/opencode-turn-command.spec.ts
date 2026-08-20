@@ -158,6 +158,7 @@ describe("OpenCode dispatch and billing snapshot", () => {
                 basicAuthPassword: "SECRET",
                 apiKey: "SECRET-API",
             },
+            resolvedAttachmentUrls: ["https://app.example/uploads/a.png?version=1"],
         });
         const json = JSON.stringify(snapshot);
 
@@ -190,6 +191,7 @@ describe("OpenCode dispatch and billing snapshot", () => {
             artifactRoot: "/workspace/artifacts/conversation",
             workspace: "/workspace",
             billing: { enabled: false, power: 0, tokens: 1000 },
+            resolvedAttachmentUrls: [],
         };
         expect(() =>
             module.buildOpencodeDispatchSnapshot({
@@ -206,6 +208,18 @@ describe("OpenCode dispatch and billing snapshot", () => {
                 promptParts: [{ type: "text", text: "hello" }],
             }),
         ).toThrow(/artifact root/i);
+        expect(() =>
+            module.buildOpencodeDispatchSnapshot({
+                ...base,
+                promptParts: [
+                    {
+                        type: "file",
+                        mime: "image/png",
+                        url: "https://external.example/unowned.png",
+                    },
+                ],
+            }),
+        ).toThrow(/persisted.*authorized attachment/i);
     });
 });
 
@@ -224,6 +238,9 @@ describe("OpenCode runtime fingerprint and redaction", () => {
         };
         const first = module.hashOpencodeRuntime(base);
         expect(module.hashOpencodeRuntime({ ...base, basicAuthPassword: "second", model: "new", points: 9 })).toBe(first);
+        expect(module.hashOpencodeRuntime({ ...base, baseURL: "https://opencode.example/?apiKey=first" })).toBe(
+            module.hashOpencodeRuntime({ ...base, baseURL: "https://opencode.example/?apiKey=second" }),
+        );
         expect(module.hashOpencodeRuntime({ ...base, baseURL: "https://other.example" })).not.toBe(first);
         expect(module.hashOpencodeRuntime({ ...base, workspace: "/workspace/other" })).not.toBe(first);
     });
@@ -236,6 +253,13 @@ describe("OpenCode runtime fingerprint and redaction", () => {
             turnId: "turn-id",
             apiKey: "secret",
             accessToken: "secret",
+            clientSecret: "secret",
+            refreshToken: "secret",
+            secretKey: "secret",
+            prompt: { text: "private" },
+            snapshot: { billing: "private" },
+            customInstructions: "private",
+            endpoint: "https://user:password@example.com/path",
             nested: {
                 basicAuthPassword: "secret",
                 authorization: "Basic secret",
@@ -250,6 +274,13 @@ describe("OpenCode runtime fingerprint and redaction", () => {
             turnId: "turn-id",
             apiKey: "[REDACTED]",
             accessToken: "[REDACTED]",
+            clientSecret: "[REDACTED]",
+            refreshToken: "[REDACTED]",
+            secretKey: "[REDACTED]",
+            prompt: "[REDACTED]",
+            snapshot: "[REDACTED]",
+            customInstructions: "[REDACTED]",
+            endpoint: "[REDACTED]",
             nested: {
                 basicAuthPassword: "[REDACTED]",
                 authorization: "[REDACTED]",
