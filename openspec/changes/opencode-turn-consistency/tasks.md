@@ -33,7 +33,7 @@
 - [x] 4.5 Add recovery-matrix tests for busy/retry, automatic permission handling, question failure, missing mapped session, completed/error descendants, and ambiguous dispatch
 - [x] 4.6 Add worker-pool tests for local capacity, excess queue depth, expired-lease claims, renewal, and graceful process shutdown
 - [x] 4.7 Implement the bounded per-instance worker pool and periodic reconciler without mutating history reads
-- [ ] 4.8 Add multi-instance integration tests proving fenced stale workers, serialized shared-session mutations, exact remote targeting, and one local final commit
+- [x] 4.8 Add multi-instance integration tests proving fenced stale workers, serialized shared-session mutations, exact remote targeting, and one local final commit
 
 ## 5. Atomic terminal projection and billing
 
@@ -41,7 +41,7 @@
 - [x] 5.2 Implement external transaction-manager support and remove best-effort statistic swallowing from the durable commit path
 - [x] 5.3 Add terminal transaction tests for success, namespaced duplicate deduction, rollback, insufficient balance, crash/retry, partial cancellation, and terminal no-op
 - [x] 5.4 Implement the row-locked transaction that saves one assistant, deducts by `opencode-turn:<turnId>`, updates statistics, clears recover-only snapshot fields, and commits the matching terminal state
-- [ ] 5.5 Add invariant queries/tests proving every terminal turn has one assistant, no completed billed turn lacks its assistant, and no turn has multiple deductions
+- [x] 5.5 Add invariant queries/tests proving every terminal turn has one assistant, no completed billed turn lacks its assistant, and no turn has multiple deductions
 
 ## 6. Turn-scoped control and pure history
 

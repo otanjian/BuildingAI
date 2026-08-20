@@ -64,6 +64,7 @@ import { OpencodeArtifactBaselineService } from "./services/opencode-artifact-ba
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
 import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
+import { OpencodeTurnInvariantService } from "./services/opencode-turn-invariant.service";
 import { OpencodeTurnMutationCoordinator } from "./services/opencode-turn-mutation-coordinator";
 import { OpencodeTurnReconcilerService } from "./services/opencode-turn-reconciler.service";
 import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
@@ -141,6 +142,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         OpencodeTurnAcceptanceService,
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,
+        OpencodeTurnInvariantService,
         OpencodeTurnMutationCoordinator,
         OpencodeTurnReconcilerService,
         OpencodeTurnTerminalCommitService,
