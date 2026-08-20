@@ -147,7 +147,7 @@ export class Migration1787270400000 implements MigrationInterface {
         await queryRunner.query(`
             CREATE UNIQUE INDEX IF NOT EXISTS "uq_account_log_oc_turn_billing"
             ON "account_log" ("association_no")
-            WHERE "association_no" LIKE 'opencode-turn:%'
+            WHERE "association_no" LIKE 'opencode-turn:%' AND "action" = 0
         `);
     }
 

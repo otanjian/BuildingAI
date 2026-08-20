@@ -291,7 +291,7 @@ describe("OpenCode durable turn migration", () => {
             /CREATE INDEX IF NOT EXISTS "idx_oc_turn_conversation_created".*"conversation_id", "created_at"/,
         );
         expect(joined).toMatch(
-            /CREATE UNIQUE INDEX IF NOT EXISTS "uq_account_log_oc_turn_billing".*"association_no".*WHERE "association_no" LIKE 'opencode-turn:%'/,
+            /CREATE UNIQUE INDEX IF NOT EXISTS "uq_account_log_oc_turn_billing".*"association_no".*WHERE "association_no" LIKE 'opencode-turn:%' AND "action" = 0/,
         );
 
         const tablePosition = sql.findIndex((statement) => statement.includes("CREATE TABLE"));
