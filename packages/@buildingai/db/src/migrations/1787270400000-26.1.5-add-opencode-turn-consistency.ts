@@ -69,6 +69,8 @@ export class Migration1787270400000 implements MigrationInterface {
                     AND "assistant_message_id" IS NOT NULL
                     AND "dispatch_snapshot" IS NULL
                     AND "artifact_baseline" IS NULL
+                    AND "lease_token" IS NULL
+                    AND "lease_expires_at" IS NULL
                 )
             )`,
         );
