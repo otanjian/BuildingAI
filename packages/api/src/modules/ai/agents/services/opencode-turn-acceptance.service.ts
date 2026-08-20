@@ -355,7 +355,10 @@ export class OpencodeTurnAcceptanceService {
             const turn = await manager.findOne(AgentOpencodeTurn, {
                 where: { id: input.turnId },
                 relations: { conversation: true },
-                lock: { mode: "pessimistic_write" },
+                lock: {
+                    mode: "pessimistic_write",
+                    tables: ["ai_agent_opencode_turn"],
+                },
             });
             if (!turn) throw HttpErrorFactory.notFound("OpenCode turn not found");
             this.assertConversationOwner(turn.conversation, input);

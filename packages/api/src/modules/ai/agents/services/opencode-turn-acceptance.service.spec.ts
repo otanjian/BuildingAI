@@ -495,6 +495,16 @@ describe("OpencodeTurnAcceptanceService", () => {
             expect.anything(),
             expect.objectContaining({ id: TURN_ID, cancelRequestedAt: expect.any(Date) }),
         );
+        expect(harness.manager.findOne).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                lock: {
+                    mode: "pessimistic_write",
+                    tables: ["ai_agent_opencode_turn"],
+                },
+                relations: { conversation: true },
+            }),
+        );
         expect(harness.opencodeApiService.createSession).not.toHaveBeenCalled();
         },
     );

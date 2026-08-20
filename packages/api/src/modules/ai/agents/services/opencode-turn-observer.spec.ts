@@ -160,6 +160,22 @@ describe("decideOpencodeTurnObservation", () => {
         });
     });
 
+    it("enters committing before settling terminal evidence observed while running", () => {
+        expect(
+            decideOpencodeTurnObservation(
+                observation({
+                    localStatus: "running",
+                    remoteStatus: { type: "idle" },
+                    exactTerminalDescendantsVisible: true,
+                }),
+            ),
+        ).toEqual({
+            kind: "committing",
+            activityChanged: true,
+            terminalEvidence: true,
+        });
+    });
+
     it("never commits blank when idle precedes message visibility", () => {
         expect(
             decideOpencodeTurnObservation(

@@ -3,6 +3,7 @@ import { Client, type ClientConfig } from "pg";
 const RUN_POSTGRES_INTEGRATION = process.env.OPENCODE_TURN_PG_INTEGRATION === "1";
 const describePostgres = RUN_POSTGRES_INTEGRATION ? describe : describe.skip;
 const TABLE_NAME = `opencode_turn_lease_it_${process.pid}_${Date.now()}`;
+const CONVERSATION_TABLE = `${TABLE_NAME}_conversation`;
 const MUTATION_TABLE = `${TABLE_NAME}_mutation`;
 const ASSISTANT_TABLE = `${TABLE_NAME}_assistant`;
 const TURN_ID = "11111111-1111-4111-8111-111111111111";
@@ -48,6 +49,11 @@ describePostgres("OpenCode turn lease PostgreSQL integration", () => {
     beforeAll(async () => {
         await Promise.all([admin.connect(), firstInstance.connect(), secondInstance.connect()]);
         await admin.query(`
+            CREATE UNLOGGED TABLE "${CONVERSATION_TABLE}" (
+                id UUID PRIMARY KEY
+            )
+        `);
+        await admin.query(`
             CREATE UNLOGGED TABLE "${TABLE_NAME}" (
                 id UUID PRIMARY KEY,
                 conversation_id UUID NOT NULL,
@@ -77,6 +83,10 @@ describePostgres("OpenCode turn lease PostgreSQL integration", () => {
             )
         `);
         await admin.query(
+            `INSERT INTO "${CONVERSATION_TABLE}" (id) VALUES ($1)`,
+            [CONVERSATION_ID],
+        );
+        await admin.query(
             `INSERT INTO "${TABLE_NAME}" (
                 id, conversation_id, status, opencode_session_id, opencode_user_message_id
              ) VALUES ($1, $2, 'accepted', 'ses_exact', 'msg_exact')`,
@@ -104,7 +114,25 @@ describePostgres("OpenCode turn lease PostgreSQL integration", () => {
         await admin.query(`DROP TABLE IF EXISTS "${TABLE_NAME}"`);
         await admin.query(`DROP TABLE IF EXISTS "${MUTATION_TABLE}"`);
         await admin.query(`DROP TABLE IF EXISTS "${ASSISTANT_TABLE}"`);
+        await admin.query(`DROP TABLE IF EXISTS "${CONVERSATION_TABLE}"`);
         await Promise.all([admin.end(), firstInstance.end(), secondInstance.end()]);
+    });
+
+    it("locks only the durable-turn side when hydrating an outer-joined conversation", async () => {
+        await firstInstance.query("BEGIN");
+        const selected = await firstInstance.query(
+            `SELECT turn.id, conversation.id AS conversation_id
+             FROM "${TABLE_NAME}" turn
+             LEFT JOIN "${CONVERSATION_TABLE}" conversation
+               ON conversation.id = turn.conversation_id
+             WHERE turn.id = $1
+             FOR UPDATE OF turn`,
+            [TURN_ID],
+        );
+        expect(selected.rows).toEqual([
+            { id: TURN_ID, conversation_id: CONVERSATION_ID },
+        ]);
+        await firstInstance.query("ROLLBACK");
     });
 
     it("excludes a second instance and allows takeover only after lease expiry", async () => {

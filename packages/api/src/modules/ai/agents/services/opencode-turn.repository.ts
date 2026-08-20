@@ -98,7 +98,10 @@ export class OpencodeTurnRepository {
     ): Promise<AgentOpencodeTurn> {
         const turn = await manager.findOne(AgentOpencodeTurn, {
             where: { id: turnId },
-            lock: { mode: "pessimistic_write" },
+            lock: {
+                mode: "pessimistic_write",
+                tables: ["ai_agent_opencode_turn"],
+            },
             relations: { conversation: true },
         });
         if (!turn) {

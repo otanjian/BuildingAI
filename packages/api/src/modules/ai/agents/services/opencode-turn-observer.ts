@@ -74,6 +74,17 @@ export function decideOpencodeTurnObservation(
     }
 
     if (input.remoteStatus.type === "idle") {
+        if (
+            input.localStatus !== "committing" &&
+            (input.exactTerminalDescendantsVisible || input.exactDescendantErrorVisible)
+        ) {
+            return {
+                kind: "committing",
+                activityChanged,
+                terminalEvidence: true,
+                ...(input.cancelRequested ? { requestedOutcome: "cancelled" as const } : {}),
+            };
+        }
         if (input.exactDescendantErrorVisible) {
             return {
                 kind: "settle",

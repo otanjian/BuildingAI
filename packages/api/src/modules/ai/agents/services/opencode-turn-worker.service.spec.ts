@@ -324,6 +324,38 @@ describe("OpencodeTurnWorkerService", () => {
         );
     });
 
+    it("persists the committing boundary before projecting a terminal descendant", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({
+            turn: turn({ status: "running" }),
+            remoteStatus: { type: "idle" },
+            messages: [
+                {
+                    info: {
+                        id: "msg_assistant",
+                        role: "assistant",
+                        parentID: "msg_user",
+                        finish: "stop",
+                    },
+                    parts: [{ id: "part", type: "text", text: "done" }],
+                },
+            ],
+        });
+
+        await expect(
+            createService(module, harness).runStep({
+                turnId: TURN_ID,
+                leaseToken: LEASE_TOKEN,
+            }),
+        ).resolves.toMatchObject({ action: "committing" });
+        expect(harness.turns.transition).toHaveBeenCalledWith(
+            harness.manager,
+            expect.objectContaining({ to: "committing" }),
+        );
+        expect(harness.commits.commit).not.toHaveBeenCalled();
+    });
+
     it.each([
         ["cancelled", { cancelRequestedAt: new Date() }, "cancelled"],
         [
