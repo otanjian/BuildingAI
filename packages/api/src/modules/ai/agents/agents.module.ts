@@ -6,6 +6,7 @@ import { AgentAssignment } from "@buildingai/db/entities/agent-assignment.entity
 import { AgentChatMessage } from "@buildingai/db/entities/ai-agent-chat-message.entity";
 import { AgentChatMessageFeedback } from "@buildingai/db/entities/ai-agent-chat-message-feedback.entity";
 import { AgentChatRecord } from "@buildingai/db/entities/ai-agent-chat-record.entity";
+import { AgentOpencodeTurn } from "@buildingai/db/entities/ai-agent-opencode-turn.entity";
 import { AiMcpServer } from "@buildingai/db/entities/ai-mcp-server.entity";
 import { AiMcpTool } from "@buildingai/db/entities/ai-mcp-tool.entity";
 import { AiModel } from "@buildingai/db/entities/ai-model.entity";
@@ -73,6 +74,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
             AgentChatRecord,
             AgentChatMessage,
             AgentChatMessageFeedback,
+            AgentOpencodeTurn,
             AiModel,
             AiProvider,
             AiMcpServer,

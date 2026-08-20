@@ -1,5 +1,5 @@
 import { AppEntity } from "../decorators/app-entity.decorator";
-import { Column, Index, JoinColumn, ManyToOne, OneToMany, type Relation } from "../typeorm";
+import { Check, Column, Index, JoinColumn, ManyToOne, OneToMany, type Relation } from "../typeorm";
 import { Agent } from "./ai-agent.entity";
 import { AgentChatMessage } from "./ai-agent-chat-message.entity";
 import { BaseEntity } from "./base";
@@ -9,6 +9,15 @@ import { User } from "./user.entity";
 @Index(["userId", "createdAt"])
 @Index(["isDeleted", "createdAt"])
 @Index(["agentId", "createdAt"])
+@Index("uq_agent_chat_oc_runtime_session", ["opencodeRuntimeHash", "opencodeSessionId"], {
+    unique: true,
+    where: `"opencode_session_id" IS NOT NULL AND "opencode_runtime_hash" IS NOT NULL`,
+})
+@Check(
+    "ck_agent_chat_oc_session_binding",
+    `("opencode_session_id" IS NULL AND "opencode_runtime_hash" IS NULL)
+        OR ("opencode_session_id" IS NOT NULL AND "opencode_runtime_hash" IS NOT NULL)`,
+)
 export class AgentChatRecord extends BaseEntity {
     @Column({ type: "varchar", length: 200, comment: "对话标题", nullable: true })
     title: string;
@@ -49,6 +58,12 @@ export class AgentChatRecord extends BaseEntity {
 
     @Column({ type: "jsonb", nullable: true, comment: "扩展数据字段" })
     metadata?: Record<string, any>;
+
+    @Column({ type: "text", nullable: true, comment: "Bound OpenCode session ID" })
+    opencodeSessionId: string | null;
+
+    @Column({ type: "text", nullable: true, comment: "Bound OpenCode runtime hash" })
+    opencodeRuntimeHash: string | null;
 
     @Column({ type: "jsonb", nullable: true, comment: "对话内点赞/踩汇总" })
     feedbackStatus?: { like: number; dislike: number };
