@@ -7,7 +7,7 @@ jest.mock("callsites", () => ({
 
 import { AgentChatRecord } from "@buildingai/db/entities/ai-agent-chat-record.entity";
 import { getMetadataArgsStorage, type QueryRunner } from "@buildingai/db/typeorm";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const REPOSITORY_ROOT = resolve(__dirname, "../../../../../../..");
@@ -231,6 +231,13 @@ describe("OpenCode durable turn schema", () => {
 });
 
 describe("OpenCode durable turn migration", () => {
+    it("is included in the product version executed by the start-up upgrade runner", () => {
+        const packageJson = JSON.parse(
+            readFileSync(resolve(REPOSITORY_ROOT, "package.json"), "utf8"),
+        ) as { version?: string };
+        expect(packageJson.version).toBe("26.1.5");
+    });
+
     async function captureMigrationSql(direction: "up" | "down"): Promise<string[]> {
         const module = requireCreatedModule<{
             Migration1787270400000: new () => {

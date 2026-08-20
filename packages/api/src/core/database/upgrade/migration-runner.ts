@@ -61,6 +61,20 @@ export class MigrationRunner {
                     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            // Older installations may already have TypeORM's three-column table
+            // under this name. Make it compatible before the custom runner writes.
+            await queryRunner.query(
+                `ALTER TABLE migrations_history
+                 ADD COLUMN IF NOT EXISTS "version" VARCHAR(50) NOT NULL DEFAULT 'legacy'`,
+            );
+            await queryRunner.query(
+                `ALTER TABLE migrations_history
+                 ADD COLUMN IF NOT EXISTS "executed_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+            );
+            await queryRunner.query(
+                `CREATE UNIQUE INDEX IF NOT EXISTS "uq_migrations_history_name"
+                 ON migrations_history ("name")`,
+            );
         } finally {
             await queryRunner.release();
         }
