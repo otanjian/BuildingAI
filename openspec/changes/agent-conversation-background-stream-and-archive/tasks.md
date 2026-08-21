@@ -40,3 +40,6 @@
 - [x] 6.1 Update `docs/DB-EHCS-AI.md` if it documents `ai_agent_chat_record` schema (add `archived_at` row); otherwise note DB change in relevant doc — `docs/DB/DB-EHCS-AI.md` only documents the `ehcs-*` extension tables; the platform table `ai_agent_chat_record` is not covered there, so no edit needed. The authoritative record is the OpenSpec change (`openspec/changes/agent-conversation-background-stream-and-archive/`)
 - [x] 6.2 Check `docs/PRD-EHCS-AI.md` §agent 会话/历史 for behavior changes (background stream + archive) and update if it describes conversation list/delete semantics — `docs/PRD/PRD-EHCS-AI.md` describes only the EHCS extension product (check rules / dashboard / settings), not platform agent conversation list/delete semantics; no edit needed. OpenSpec spec/design already describe the new behavior
 - [x] 6.3 Run `pnpm typecheck` (api + client) and affected unit tests; run lint on touched packages — api `tsc --noEmit` pass, db `check-types` pass, client `tsc -p tsconfig.app.json` shows no errors in touched files (pre-existing errors elsewhere), eslint clean on all touched files
+> Ownership reconciliation (2026-08-21): OpenCode background execution is
+> superseded by `opencode-turn-consistency`; non-OpenCode background streams and all
+> archive behavior remain owned by this change.

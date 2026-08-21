@@ -113,13 +113,13 @@ export interface AssistantContextValue {
   ) => void;
   onLoadMoreMessages: () => void;
   onStop: () => void;
-  onRegenerate: (messageKey: string) => void;
-  onEditMessage: (
+  onRegenerate?: (messageKey: string) => void;
+  onEditMessage?: (
     messageId: string,
     newContent: string,
     files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
   ) => void;
-  onSwitchBranch: (messageId: string) => void;
+  onSwitchBranch?: (messageId: string) => void;
   onSelectModel: (id: string) => void;
   onSelectMcpServers: (ids: string[]) => void;
   onSetFeature: (key: string, value: boolean) => void;

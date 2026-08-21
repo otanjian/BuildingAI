@@ -5,9 +5,11 @@ import {
     type AgentChatMessage,
     AgentChatMessageFeedback,
     AgentChatRecord,
+    AgentOpencodeTurn,
+    OPENCODE_TURN_ACTIVE_STATUSES,
     User,
 } from "@buildingai/db/entities";
-import { In, Repository } from "@buildingai/db/typeorm";
+import { In, Repository, type EntityManager } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatUIMessage } from "@buildingai/types";
 import { Injectable } from "@nestjs/common";
@@ -19,6 +21,19 @@ import { AgentChatMessageService } from "./agent-chat-message.service";
 export type AgentChatRecordWithUser = AgentChatRecord & {
     userName?: string;
     userAvatar?: string;
+    activeTurn: OpencodeActiveTurnSummary | null;
+};
+
+export type OpencodeActiveTurnSummary = {
+    turnId: string;
+    status: AgentOpencodeTurn["status"];
+    lastActivityAt: Date;
+    cancelRequested: boolean;
+};
+
+export type OpencodeTurnConversationProjection = {
+    activeTurn: OpencodeActiveTurnSummary | null;
+    legacyStatus: "running" | "completed" | "aborted" | "timed_out" | null;
 };
 
 export type AgentChatThreadSession = {
@@ -314,7 +329,19 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         });
     }
 
-    async updateStats(conversationId: string): Promise<void> {
+    async updateStats(conversationId: string, manager?: EntityManager): Promise<void> {
+        if (manager) {
+            const stats = await this.agentChatMessageService.getMessageStats(
+                conversationId,
+                manager,
+            );
+            await manager.update(AgentChatRecord, { id: conversationId }, {
+                messageCount: stats.messageCount,
+                totalTokens: stats.totalTokens,
+                consumedPower: stats.totalPower,
+            });
+            return;
+        }
         try {
             const stats = await this.agentChatMessageService.getMessageStats(conversationId);
             await this.chatRecordRepository.update(conversationId, {
@@ -446,15 +473,18 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         const orderBy = query.sortBy === "updatedAt" ? "r.updatedAt" : "r.createdAt";
         qb.orderBy(orderBy, "DESC");
         const result = await this.paginateQueryBuilder(qb, query);
+        const records = await this.withActiveOpencodeTurnSummaries(
+            result.items as AgentChatRecord[],
+        );
         const userIds = [
             ...new Set(
-                (result.items as AgentChatRecord[])
+                records
                     .map((r) => r.userId)
                     .filter(Boolean) as string[],
             ),
         ];
         if (userIds.length === 0) {
-            return result as PaginationResult<AgentChatRecordWithUser>;
+            return { ...result, items: records };
         }
         const users = await this.userRepository.find({
             where: { id: In(userIds) },
@@ -469,7 +499,7 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
                 },
             ]),
         );
-        const items: AgentChatRecordWithUser[] = (result.items as AgentChatRecord[]).map((r) => ({
+        const items: AgentChatRecordWithUser[] = records.map((r) => ({
             ...r,
             userName: r.userId ? userMap.get(r.userId)?.name : undefined,
             userAvatar: r.userId ? userMap.get(r.userId)?.avatar : undefined,
@@ -478,6 +508,12 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
     }
 
     async softDelete(conversationId: string, userId: string | null): Promise<void> {
+        const activeTurn = await this.findActiveOpencodeTurn(conversationId);
+        if (activeTurn) {
+            throw HttpErrorFactory.conflict(
+                `Conversation has active OpenCode turn ${activeTurn.id}`,
+            );
+        }
         const whereCondition: any = { id: conversationId, isDeleted: false };
         if (userId) {
             whereCondition.userId = userId;
@@ -489,6 +525,115 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         if (result.affected === 0) {
             throw HttpErrorFactory.notFound("对话不存在或无权限删除");
         }
+    }
+
+    async findActiveOpencodeTurn(conversationId: string) {
+        return this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).findOne({
+            where: {
+                conversationId,
+                status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
+            },
+            select: { id: true, status: true },
+        });
+    }
+
+    async getActiveOpencodeTurnSummary(
+        conversationId: string,
+    ): Promise<OpencodeActiveTurnSummary | null> {
+        return (await this.getOpencodeTurnConversationProjection(conversationId)).activeTurn;
+    }
+
+    async getOpencodeTurnConversationProjection(
+        conversationId: string,
+    ): Promise<OpencodeTurnConversationProjection> {
+        const turn = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).findOne({
+            where: { conversationId },
+            select: {
+                id: true,
+                status: true,
+                lastActivityAt: true,
+                cancelRequestedAt: true,
+                errorCode: true,
+            },
+            order: { createdAt: "DESC" },
+        });
+        return this.toOpencodeTurnConversationProjection(turn);
+    }
+
+    async withActiveOpencodeTurnSummaries<T extends AgentChatRecord>(
+        records: T[],
+    ): Promise<Array<T & { activeTurn: OpencodeActiveTurnSummary | null }>> {
+        if (!records.length) return [];
+        const turns = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).find({
+            where: {
+                conversationId: In(records.map((record) => record.id)),
+            },
+            select: {
+                id: true,
+                conversationId: true,
+                status: true,
+                lastActivityAt: true,
+                cancelRequestedAt: true,
+                errorCode: true,
+                createdAt: true,
+            },
+            order: { createdAt: "DESC" },
+        });
+        const byConversation = new Map<string, OpencodeTurnConversationProjection>();
+        for (const turn of turns) {
+            if (!byConversation.has(turn.conversationId)) {
+                byConversation.set(
+                    turn.conversationId,
+                    this.toOpencodeTurnConversationProjection(turn),
+                );
+            }
+        }
+        return records.map((record) => {
+            const projection = byConversation.get(record.id);
+            return {
+                ...record,
+                ...(projection?.legacyStatus
+                    ? {
+                          metadata: {
+                              ...(record.metadata ?? {}),
+                              opencodeTurnStatus: projection.legacyStatus,
+                          },
+                      }
+                    : {}),
+                activeTurn: projection?.activeTurn ?? null,
+            };
+        });
+    }
+
+    private toOpencodeTurnConversationProjection(
+        turn: AgentOpencodeTurn | null,
+    ): OpencodeTurnConversationProjection {
+        if (!turn) return { activeTurn: null, legacyStatus: null };
+        if (OPENCODE_TURN_ACTIVE_STATUSES.includes(turn.status as any)) {
+            return {
+                activeTurn: this.toActiveOpencodeTurnSummary(turn),
+                legacyStatus: "running",
+            };
+        }
+        if (turn.status === "completed") {
+            return { activeTurn: null, legacyStatus: "completed" };
+        }
+        if (turn.status === "cancelled") {
+            return { activeTurn: null, legacyStatus: "aborted" };
+        }
+        return {
+            activeTurn: null,
+            legacyStatus: turn.errorCode?.includes("TIMEOUT") ? "timed_out" : "completed",
+        };
+    }
+
+    private toActiveOpencodeTurnSummary(turn: AgentOpencodeTurn): OpencodeActiveTurnSummary {
+        return {
+            turnId: turn.id,
+            status: turn.status,
+            lastActivityAt: turn.lastActivityAt,
+            cancelRequested: Boolean(turn.cancelRequestedAt),
+        };
     }
 
     /**

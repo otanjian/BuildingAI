@@ -2,6 +2,7 @@ import { speakAgentText, transcribeAgentAudio } from "@buildingai/services/web";
 import type { UIMessage } from "ai";
 import { startTransition, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams } from "react-router-dom";
+import { toast } from "sonner";
 import { validate as isUUID } from "uuid";
 
 import { useFeatureFlags } from "@/components/ask-assistant-ui/hooks/use-feature-flags";
@@ -13,6 +14,8 @@ import type {
   Suggestion,
 } from "@/components/ask-assistant-ui/types";
 
+import type { OpencodeTurnActivity } from "../../_shared/opencode-turn-client";
+import { opencodeDurableUiPolicy } from "../../_shared/opencode-durable-ui-policy";
 import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { useAgentChatStream } from "./use-agent-chat-stream";
 import { useAgentFeedback } from "./use-agent-feedback";
@@ -40,6 +43,8 @@ export interface UseAssistantForAgentOptions {
   disableAutoNavigate?: boolean;
   /** True when the server reports the mapped OpenCode turn is still running. */
   isOpencodeTurnRunning?: boolean;
+  durableOpencodeTurnsEnabled?: boolean;
+  activeOpencodeTurn?: Omit<OpencodeTurnActivity, "conversationId"> | null;
   /** Override available upload types for third-party agents (Coze/Dify). */
   supportedUploadTypes?: Array<"image" | "video" | "audio" | "file">;
 }
@@ -126,6 +131,8 @@ export function useAssistantForAgent(
     conversationId,
     disableAutoNavigate = false,
     isOpencodeTurnRunning = false,
+    durableOpencodeTurnsEnabled = false,
+    activeOpencodeTurn,
     supportedUploadTypes,
   } = options;
   const { uuid: routeConversationId } = useParams<{ uuid?: string }>();
@@ -169,6 +176,8 @@ export function useAssistantForAgent(
     routeConversationId: normalizedConversationId,
     disableAutoNavigate,
     isOpencodeTurnRunning,
+    durableOpencodeTurnsEnabled,
+    activeOpencodeTurn,
   });
 
   const { liked, disliked, onLike, onDislike } = useAgentFeedback(
@@ -219,7 +228,7 @@ export function useAssistantForAgent(
 
   const shouldLoadInitial = Boolean(
     normalizedConversationId &&
-    (status === "ready" || status === "error") &&
+    (durableOpencodeTurnsEnabled || status === "ready" || status === "error") &&
     streamMessages.length === 0 &&
     !editInProgressRef.current,
   );
@@ -301,19 +310,29 @@ export function useAssistantForAgent(
   );
 
   const onSwitchBranch = useCallback(
-    (messageId: string) => switchToBranch(messageId),
-    [switchToBranch],
+    (messageId: string) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable conversations are linear and read-only across branches");
+        return;
+      }
+      switchToBranch(messageId);
+    },
+    [switchToBranch, durableOpencodeTurnsEnabled],
   );
 
   const onRegenerate = useCallback(
     (messageId: string) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable conversations do not support regeneration yet");
+        return;
+      }
       const parentId = getParentId(messageId);
       if (parentId === undefined) return;
 
       setMessages(sliceMessagesUntil(streamMessages, parentId));
       regenerate(parentId ?? messageId);
     },
-    [getParentId, streamMessages, setMessages, regenerate],
+    [getParentId, streamMessages, setMessages, regenerate, durableOpencodeTurnsEnabled],
   );
 
   const onEditMessage = useCallback(
@@ -322,6 +341,10 @@ export function useAssistantForAgent(
       newContent: string,
       files?: Array<{ type: "file"; url: string; mediaType?: string; filename?: string }>,
     ) => {
+      if (durableOpencodeTurnsEnabled) {
+        toast.error("OpenCode durable messages cannot be edited after sending");
+        return;
+      }
       const parentId = getParentId(messageId);
       if (parentId === undefined) return;
 
@@ -331,7 +354,7 @@ export function useAssistantForAgent(
       setMessages(sliced);
       queueMicrotask(() => send(newContent, parentId, files));
     },
-    [getParentId, streamMessages, setMessages, send, resetLastSeenIds],
+    [getParentId, streamMessages, setMessages, send, resetLastSeenIds, durableOpencodeTurnsEnabled],
   );
 
   const onSelectModel = useCallback(() => {}, []);
@@ -391,6 +414,7 @@ export function useAssistantForAgent(
     [stop, setMessages],
   );
 
+  const durableUiPolicy = opencodeDurableUiPolicy(durableOpencodeTurnsEnabled);
   return {
     clearMessages,
     messages: [...repositoryMessages],
@@ -411,9 +435,9 @@ export function useAssistantForAgent(
     onSend,
     onLoadMoreMessages: loadMoreMessages,
     onStop: stop,
-    onRegenerate,
-    onEditMessage,
-    onSwitchBranch,
+    onRegenerate: durableUiPolicy.canRegenerate ? onRegenerate : undefined,
+    onEditMessage: durableUiPolicy.canEditPersistedMessage ? onEditMessage : undefined,
+    onSwitchBranch: durableUiPolicy.canSwitchBranch ? onSwitchBranch : undefined,
     onSelectModel,
     onSelectMcpServers,
     onSetFeature: setFeatureFlag,

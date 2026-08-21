@@ -274,7 +274,10 @@ export class BaseBillingService {
                 // Record power change log
                 await manager.insert(AccountLog, {
                     userId,
-                    accountNo: await generateNo(this.accountLogRepository, "accountNo"),
+                    accountNo: await generateNo(
+                        manager.getRepository(AccountLog),
+                        "accountNo",
+                    ),
                     accountType,
                     action: ACTION.DEC,
                     changeAmount: amount,
@@ -373,7 +376,10 @@ export class BaseBillingService {
                 // 如果有过期时间,设置 availableAmount 用于追踪剩余可用数量
                 await manager.insert(AccountLog, {
                     userId,
-                    accountNo: await generateNo(this.accountLogRepository, "accountNo"),
+                    accountNo: await generateNo(
+                        manager.getRepository(AccountLog),
+                        "accountNo",
+                    ),
                     accountType,
                     action: ACTION.INC,
                     changeAmount: amount,

@@ -2,12 +2,25 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getApiBaseUrl } from "@/utils/api";
 
-import { createPublicHttpClient, fetchPublicJson } from "./public-http";
+import type {
+  AcceptedOpencodeTurn,
+  OpencodeTurnCommand,
+  OpencodeTurnStatusResult,
+} from "../../_shared/opencode-turn-client";
+import { createPublicHttpClient, fetchPublicJson, unwrapPublicEnvelope } from "./public-http";
+
+export type PublicActiveOpencodeTurn = {
+  turnId: string;
+  status: "accepted" | "running" | "committing";
+  lastActivityAt: string;
+  cancelRequested: boolean;
+};
 
 export type PublicConversation = {
   id: string;
   title: string;
-  /** Server-backed OpenCode turn status from conversation metadata */
+  activeTurn: PublicActiveOpencodeTurn | null;
+  /** Legacy-only display compatibility while durable turns are disabled. */
   opencodeTurnStatus?: string;
 };
 
@@ -16,6 +29,7 @@ export type PublicConversationDetail = {
   title?: string | null;
   archivedAt?: string | null;
   metadata?: Record<string, unknown> | null;
+  activeTurn: PublicActiveOpencodeTurn | null;
 };
 
 type PublicConversationListResult = {
@@ -23,6 +37,7 @@ type PublicConversationListResult = {
     id: string;
     title?: string | null;
     metadata?: Record<string, unknown> | null;
+    activeTurn?: PublicActiveOpencodeTurn | null;
   }>;
 };
 
@@ -41,6 +56,7 @@ export async function getPublicConversations(args: {
   return (data.items ?? []).map((item) => ({
     id: item.id,
     title: item.title?.trim() || "新对话",
+    activeTurn: item.activeTurn ?? null,
     opencodeTurnStatus:
       typeof item.metadata?.opencodeTurnStatus === "string"
         ? item.metadata.opencodeTurnStatus
@@ -80,6 +96,50 @@ export async function stopPublicConversation(args: {
   await client.post<void>(url);
 }
 
+export async function acceptPublicOpencodeTurn(args: {
+  input: OpencodeTurnCommand & { conversationId: string; turnId: string };
+  accessToken: string;
+  anonymousIdentifier?: string;
+  signal?: AbortSignal;
+}): Promise<AcceptedOpencodeTurn> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  const payload = await client.post<AcceptedOpencodeTurn | { data?: AcceptedOpencodeTurn }>(
+    `${getApiBaseUrl()}/v1/opencode-turns`,
+    args.input,
+    { signal: args.signal },
+  );
+  return unwrapPublicEnvelope(payload);
+}
+
+export async function getPublicOpencodeTurnStatus(args: {
+  turnId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+  signal?: AbortSignal;
+}): Promise<OpencodeTurnStatusResult> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  const payload = await client.get<OpencodeTurnStatusResult | { data?: OpencodeTurnStatusResult }>(
+    `${getApiBaseUrl()}/v1/opencode-turns/${args.turnId}`,
+    { signal: args.signal },
+  );
+  return unwrapPublicEnvelope(payload);
+}
+
+export async function stopPublicOpencodeTurn(args: {
+  turnId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+  signal?: AbortSignal;
+}): Promise<OpencodeTurnStatusResult> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  const payload = await client.post<OpencodeTurnStatusResult | { data?: OpencodeTurnStatusResult }>(
+    `${getApiBaseUrl()}/v1/opencode-turns/${args.turnId}/stop`,
+    undefined,
+    { signal: args.signal },
+  );
+  return unwrapPublicEnvelope(payload);
+}
+
 export async function getPublicConversationDetail(args: {
   conversationId: string;
   accessToken: string;
@@ -87,6 +147,29 @@ export async function getPublicConversationDetail(args: {
 }): Promise<PublicConversationDetail> {
   const url = `${getApiBaseUrl()}/v1/conversations/${args.conversationId}`;
   return fetchPublicJson<PublicConversationDetail>(url, args.accessToken, args.anonymousIdentifier);
+}
+
+export function usePublicConversationDetail(args: {
+  conversationId?: string;
+  accessToken?: string;
+  anonymousIdentifier?: string;
+}) {
+  return useQuery<PublicConversationDetail>({
+    queryKey: [
+      "public-agent-conversation",
+      args.conversationId ?? "",
+      args.accessToken ?? "",
+      args.anonymousIdentifier ?? "",
+    ],
+    enabled: Boolean(args.conversationId && args.accessToken),
+    queryFn: () =>
+      getPublicConversationDetail({
+        conversationId: args.conversationId!,
+        accessToken: args.accessToken!,
+        anonymousIdentifier: args.anonymousIdentifier,
+      }),
+    refetchInterval: (query) => (query.state.data?.activeTurn ? 4000 : false),
+  });
 }
 
 import type { OpencodeSessionMessage } from "../../_shared/opencode-live-preview";
@@ -121,7 +204,7 @@ export function usePublicConversations(
     refetchOnWindowFocus: true,
     refetchInterval: (query) => {
       const items = query.state.data ?? [];
-      return items.some((c) => c.opencodeTurnStatus === "running") ? 4000 : false;
+      return items.some((c) => c.activeTurn || c.opencodeTurnStatus === "running") ? 4000 : false;
     },
     retry: false,
     queryFn: () =>

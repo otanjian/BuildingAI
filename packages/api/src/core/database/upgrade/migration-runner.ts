@@ -19,6 +19,16 @@ export interface MigrationFile {
     timestamp: number;
 }
 
+export function parseMigrationFilename(
+    file: string,
+): Omit<MigrationFile, "path"> | null {
+    const match = file.match(/^(\d+)-([^-]+)-(.+)\.js$/);
+    if (!match) return null;
+    const [, timestamp, version] = match;
+    if (!semver.valid(version)) return null;
+    return { name: file, version, timestamp: Number(timestamp) };
+}
+
 interface MigrationConstructor {
     new (...args: any[]): {
         up: (queryRunner: QueryRunner) => Promise<void>;
@@ -61,6 +71,20 @@ export class MigrationRunner {
                     executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            // Older installations may already have TypeORM's three-column table
+            // under this name. Make it compatible before the custom runner writes.
+            await queryRunner.query(
+                `ALTER TABLE migrations_history
+                 ADD COLUMN IF NOT EXISTS "version" VARCHAR(50) NOT NULL DEFAULT 'legacy'`,
+            );
+            await queryRunner.query(
+                `ALTER TABLE migrations_history
+                 ADD COLUMN IF NOT EXISTS "executed_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+            );
+            await queryRunner.query(
+                `CREATE UNIQUE INDEX IF NOT EXISTS "uq_migrations_history_name"
+                 ON migrations_history ("name")`,
+            );
         } finally {
             await queryRunner.release();
         }
@@ -113,14 +137,11 @@ export class MigrationRunner {
 
                 // File format: timestamp-version-description.js
                 // Example: 1762769127629-25.0.1-add-extension-identifier.js
-                const match = file.match(/^(\d+)-([^-]+)-(.+)\.js$/);
-                if (match) {
-                    const [, timestamp, version] = match;
+                const parsed = parseMigrationFilename(file);
+                if (parsed) {
                     migrationFiles.push({
-                        name: file,
+                        ...parsed,
                         path: path.join(this.migrationsDir, file),
-                        version: version,
-                        timestamp: parseInt(timestamp, 10),
                     });
                 }
             }

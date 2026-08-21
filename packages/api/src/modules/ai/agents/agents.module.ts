@@ -6,12 +6,14 @@ import { AgentAssignment } from "@buildingai/db/entities/agent-assignment.entity
 import { AgentChatMessage } from "@buildingai/db/entities/ai-agent-chat-message.entity";
 import { AgentChatMessageFeedback } from "@buildingai/db/entities/ai-agent-chat-message-feedback.entity";
 import { AgentChatRecord } from "@buildingai/db/entities/ai-agent-chat-record.entity";
+import { AgentOpencodeTurn } from "@buildingai/db/entities/ai-agent-opencode-turn.entity";
 import { AiMcpServer } from "@buildingai/db/entities/ai-mcp-server.entity";
 import { AiMcpTool } from "@buildingai/db/entities/ai-mcp-tool.entity";
 import { AiModel } from "@buildingai/db/entities/ai-model.entity";
 import { AiProvider } from "@buildingai/db/entities/ai-provider.entity";
 import { AiUserMcpServer } from "@buildingai/db/entities/ai-user-mcp-server.entity";
 import { Datasets } from "@buildingai/db/entities/datasets.entity";
+import { File } from "@buildingai/db/entities/file.entity";
 import { Secret } from "@buildingai/db/entities/secret.entity";
 import { SecretTemplate } from "@buildingai/db/entities/secret-template.entity";
 import { Tag } from "@buildingai/db/entities/tag.entity";
@@ -33,6 +35,7 @@ import { AgentAnnotationWebController } from "./controllers/web/agent-annotation
 import { AgentChatWebController } from "./controllers/web/agent-chat.controller";
 import { AgentPublishWebController } from "./controllers/web/agent-publish.controller";
 import { AgentsWebController } from "./controllers/web/agents.controller";
+import { OpencodeTurnWebController } from "./controllers/web/opencode-turn.controller";
 import { AgentBillingHandler } from "./handlers/agent-billing";
 import { AnnotationReplyHandler } from "./handlers/annotation-reply";
 import { FollowUpSuggestionsHandler } from "./handlers/follow-up-suggestions";
@@ -57,7 +60,18 @@ import { AgentChatRecordService } from "./services/agent-chat-record.service";
 import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
+import { OpencodeArtifactBaselineService } from "./services/opencode-artifact-baseline.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
+import { OpencodeLegacyBindingMigrationService } from "./services/opencode-legacy-binding-migration";
+import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
+import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
+import { OpencodeTurnInvariantService } from "./services/opencode-turn-invariant.service";
+import { OpencodeTurnMutationCoordinator } from "./services/opencode-turn-mutation-coordinator";
+import { OpencodeTurnReconcilerService } from "./services/opencode-turn-reconciler.service";
+import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
+import { OpencodeTurnTerminalCommitService } from "./services/opencode-turn-terminal-commit";
+import { OpencodeTurnTelemetryService } from "./services/opencode-turn-telemetry.service";
+import { OpencodeTurnWorkerService } from "./services/opencode-turn-worker.service";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
@@ -73,6 +87,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
             AgentChatRecord,
             AgentChatMessage,
             AgentChatMessageFeedback,
+            AgentOpencodeTurn,
             AiModel,
             AiProvider,
             AiMcpServer,
@@ -80,6 +95,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
             AiUserMcpServer,
             Secret,
             SecretTemplate,
+            File,
         ]),
         forwardRef(() => AiDatasetsModule),
         AiMemoryModule,
@@ -92,6 +108,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         AgentChatWebController,
         AgentPublishWebController,
         AgentAnnotationWebController,
+        OpencodeTurnWebController,
         // AgentOpenApiController,
     ],
     providers: [
@@ -122,7 +139,18 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         DifyChatProvider,
         OpencodeApiService,
         OpencodeChatProvider,
+        OpencodeArtifactBaselineService,
         OpencodeArtifactService,
+        OpencodeLegacyBindingMigrationService,
+        OpencodeTurnAcceptanceService,
+        OpencodeTurnRepository,
+        OpencodeTurnLeaseRepository,
+        OpencodeTurnInvariantService,
+        OpencodeTurnMutationCoordinator,
+        OpencodeTurnReconcilerService,
+        OpencodeTurnTerminalCommitService,
+        OpencodeTurnTelemetryService,
+        OpencodeTurnWorkerService,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,

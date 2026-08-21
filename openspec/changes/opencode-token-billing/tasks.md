@@ -18,4 +18,7 @@
 ## 4. Verification
 
 - [x] 4.1 Run unit tests for the new token-usage util
-- [ ] 4.2 Manual or integration smoke: OpenCode chat turn shows non-zero Token用量; with points>0, power decreases and MessageUsage 积分 matches
+- [ ] 4.2 Superseded verification: durable usage/deduction smoke is tracked by `opencode-turn-consistency` 9.4/9.5
+> Ownership reconciliation (2026-08-21): OpenCode terminal usage, deduction, and
+> billing verification are superseded by `opencode-turn-consistency` 5.1-5.5 and
+> 9.4-9.5. The utilities implemented here remain legacy-path compatibility code.

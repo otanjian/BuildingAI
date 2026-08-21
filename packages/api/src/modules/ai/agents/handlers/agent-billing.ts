@@ -3,6 +3,7 @@ import {
     ACCOUNT_LOG_TYPE,
 } from "@buildingai/constants/shared/account-log.constants";
 import { AppBillingService } from "@buildingai/core/modules";
+import type { EntityManager } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { Injectable, Logger } from "@nestjs/common";
 
@@ -18,6 +19,7 @@ export interface AgentBillingDeductParams {
     usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
     billingRule: { power: number; tokens: number } | undefined;
     isGuest?: boolean;
+    associationNo?: string;
 }
 
 @Injectable()
@@ -47,7 +49,7 @@ export class AgentBillingHandler {
         return Math.ceil((totalTokens / billingRule.tokens) * billingRule.power);
     }
 
-    async deduct(params: AgentBillingDeductParams): Promise<number> {
+    async deduct(params: AgentBillingDeductParams, manager?: EntityManager): Promise<number> {
         const { userId, conversationId, usage, billingRule, isGuest } = params;
         if (!userId || !billingRule?.tokens) return 0;
 
@@ -71,8 +73,8 @@ export class AgentBillingHandler {
                     agentId: params.agentId,
                 },
                 remark: "智能体对话消耗",
-                associationNo: conversationId,
-            });
+                associationNo: params.associationNo ?? conversationId,
+            }, manager);
             return amount;
         } catch (error) {
             this.logger.warn(

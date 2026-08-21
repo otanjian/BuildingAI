@@ -38,7 +38,7 @@ export function createPublicHttpClient(accessToken: string, anonymousIdentifier?
   });
 }
 
-function unwrapEnvelope<T>(payload: ApiEnvelope<T> | T): T {
+export function unwrapPublicEnvelope<T>(payload: ApiEnvelope<T> | T): T {
   if (payload && typeof payload === "object" && "data" in payload) {
     return (payload as ApiEnvelope<T>).data as T;
   }
@@ -57,7 +57,7 @@ export async function fetchPublicJson<T>(
 
   try {
     const payload = await client.get<ApiEnvelope<T> | T>(url);
-    return unwrapEnvelope(payload);
+    return unwrapPublicEnvelope(payload);
   } catch (error) {
     if (isAxiosError(error)) {
       const data = error.response?.data as { code?: number; message?: string } | undefined;

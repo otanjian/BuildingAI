@@ -18,6 +18,7 @@ import {
     deriveUploadTypesFromModelFeatures,
     type UploadMediaType,
 } from "../../utils/derive-upload-types";
+import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
 
 const SENSITIVE_KEYS = [
     "createBy",
@@ -78,6 +79,7 @@ export class AgentPublishWebController {
         const stats = await this.agentChatRecordService.getStats(agentId, playground.id);
         const raw = agent as unknown as Record<string, unknown>;
         const out = toPublishedDetail(raw, stats) as Record<string, unknown>;
+        out.durableOpencodeTurnsEnabled = isOpencodeDurableTurnsEnabled(agent);
         const createBy = raw.createBy as string | undefined;
         if (createBy) {
             const user = await this.userRepository.findOne({

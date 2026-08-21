@@ -1,7 +1,7 @@
 import { BaseService, type PaginationResult } from "@buildingai/base";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { AgentChatMessage, AgentChatMessageFeedback } from "@buildingai/db/entities";
-import { In, Repository } from "@buildingai/db/typeorm";
+import { In, Repository, type EntityManager } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatUIMessage } from "@buildingai/types";
 import { Injectable } from "@nestjs/common";
@@ -141,16 +141,17 @@ export class AgentChatMessageService extends BaseService<AgentChatMessage> {
         };
     }
 
-    async getMessageStats(conversationId: string): Promise<{
+    async getMessageStats(conversationId: string, manager?: EntityManager): Promise<{
         messageCount: number;
         totalTokens: number;
         totalPower: number;
     }> {
-        const messageCount = await this.messageRepository.count({
+        const repository = manager?.getRepository(AgentChatMessage) ?? this.messageRepository;
+        const messageCount = await repository.count({
             where: { conversationId },
         });
 
-        const stats = await this.messageRepository
+        const stats = await repository
             .createQueryBuilder("msg")
             .select("COALESCE(SUM((msg.message->'usage'->>'totalTokens')::int), 0)", "totalTokens")
             .addSelect("COALESCE(SUM((msg.message->>'userConsumedPower')::int), 0)", "totalPower")

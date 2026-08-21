@@ -32,5 +32,8 @@
 - [ ] 5.2 Manual: return to A mid-turn → transcript shows continuous live progress (not empty / stale BA-only)
 - [ ] 5.3 Manual: background stream completes → only that conversation’s generating badge clears; focused UI unaffected
 - [ ] 5.4 Manual: hit concurrent cap → new send refused with clear message; existing streams continue
-- [ ] 5.5 Manual: OpenCode refresh mid-turn → refocus → live rehydrate until persist; Stop still aborts only the targeted conversation
+- [ ] 5.5 Superseded OpenCode verification: durable refresh/refocus and exact-turn Stop are tracked by `opencode-turn-consistency` 9.2/9.4
 - [x] 5.6 Run targeted client unit tests + `openspec validate agent-multi-conversation-live-streams`
+> Ownership reconciliation (2026-08-21): OpenCode rehydrate, registry ownership,
+> and OpenCode portions of verification are superseded by `opencode-turn-consistency`.
+> Generic/Dify/Coze registry streaming and concurrent-cap behavior remain owned here.

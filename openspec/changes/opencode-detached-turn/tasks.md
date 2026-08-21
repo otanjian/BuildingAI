@@ -27,12 +27,12 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Manual: start OpenCode turn → refresh mid-turn → wait for settle → reopen shows persisted assistant (not only Aborted)
-- [ ] 5.2 Manual: start turn → explicit Stop → OpenCode aborted and BA shows stopped/aborted; spinner clears
-- [ ] 5.3 Manual: reproduce hung OC (`finish: null`) after BA timeout → reopen or next send recovers (abort + optional heal); session accepts a new prompt
-- [ ] 5.4 Manual: OC completed ahead of BA → reopen thin-heals assistant into BA without duplicating on second reopen
-- [ ] 5.5 Manual: second send while running is rejected; one turn remains
-- [ ] 5.6 Manual: open two sessions → send in both → switch back and forth → each shows its own generating progress / final assistant
+- [ ] 5.1 Superseded verification: refresh/reopen persistence is tracked by `opencode-turn-consistency` 9.2/9.4
+- [ ] 5.2 Superseded verification: exact-turn Stop is tracked by `opencode-turn-consistency` 9.2/9.4
+- [ ] 5.3 Superseded behavior: lease recovery replaces legacy hung-session thin-heal; tracked by `opencode-turn-consistency` 9.1/9.4
+- [ ] 5.4 Superseded behavior: atomic terminal projection replaces reopen thin-heal; tracked by `opencode-turn-consistency` 9.1/9.4
+- [ ] 5.5 Superseded verification: active-turn uniqueness is tracked by `opencode-turn-consistency` 9.1
+- [ ] 5.6 Superseded verification: parallel conversation turns are tracked by `opencode-turn-consistency` 9.1/9.2
 - [x] 5.7 `openspec validate opencode-detached-turn` (+ unit tests from 3.4)
 
 ## 6. Client: re-render detached turn after session switch
@@ -51,3 +51,7 @@
 - [x] 7.4 Client site-chat: same SSE upgrade for public agent
 - [x] 7.5 Keep polling as fallback; no duplicate assistants between SSE preview and final persisted message
 - [x] 7.6 Unit tests for event mapping + SSE lifecycle; manual two-session switch test shows real-time progress
+> Ownership reconciliation (2026-08-21): OpenCode lifecycle, recovery, Stop, rehydrate,
+> and the remaining OpenCode manual scenarios below are superseded by
+> `opencode-turn-consistency` tasks 9.1, 9.2, 9.4, and 9.5. Do not extend the legacy
+> runner/SSE/metadata path here.

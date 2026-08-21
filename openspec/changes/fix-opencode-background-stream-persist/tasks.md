@@ -20,8 +20,12 @@
 
 ## 4. Verification
 
-- [ ] 4.1 Manual: conversation A generating → 新对话 / send on B → both complete → A and B sidebar generating indicators clear (site-chat OpenCode agent)
-- [ ] 4.2 Manual: OpenCode turn completes → immediately reopen A from sidebar → latest user + assistant turns present
-- [ ] 4.3 Manual: mid-turn switch away and reopen A → at least user message present; after finish (while viewing A) assistant appears without full page reload
-- [ ] 4.4 Manual smoke on detail chat for 4.1–4.3; confirm non-OpenCode agent chat still streams and clears indicator
+- [ ] 4.1 Superseded OpenCode verification: tracked by `opencode-turn-consistency` 9.1/9.2
+- [ ] 4.2 Superseded OpenCode verification: tracked by `opencode-turn-consistency` 9.2/9.4
+- [ ] 4.3 Superseded OpenCode verification: tracked by `opencode-turn-consistency` 9.2/9.4
+- [ ] 4.4 Retained scope: confirm non-OpenCode detail chat still streams and clears its indicator (OpenCode portion is superseded)
 - [x] 4.5 Run `openspec validate fix-opencode-background-stream-persist` (and `--strict` if used in repo)
+> Ownership reconciliation (2026-08-21): OpenCode persistence, generating status,
+> refresh/switch behavior, and its remaining manual scenarios are superseded by
+> `opencode-turn-consistency` 9.1, 9.2, and 9.4. The non-OpenCode smoke portion of
+> 4.4 remains owned by this change.

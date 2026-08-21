@@ -39,9 +39,9 @@ import { AgentChatRecordService } from "../../services/agent-chat-record.service
 import { AgentVoiceService } from "../../services/agent-voice.service";
 import { AgentsService } from "../../services/agents.service";
 import { OpencodeArtifactService } from "../../services/opencode-artifact.service";
-import { OpencodeSessionRecoverService } from "../../services/opencode-session-recover.service";
 import { OpencodeWorkspaceService } from "../../services/opencode-workspace.service";
 import { OpencodeChatProvider } from "../../providers/opencode-chat.provider";
+import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
@@ -56,7 +56,6 @@ export class AgentChatWebController {
         private readonly opencodeArtifactService: OpencodeArtifactService,
         private readonly opencodeWorkspaceService: OpencodeWorkspaceService,
         private readonly opencodeChatProvider: OpencodeChatProvider,
-        private readonly opencodeSessionRecover: OpencodeSessionRecoverService,
     ) {}
 
     /**
@@ -111,6 +110,28 @@ export class AgentChatWebController {
                 throw HttpErrorFactory.forbidden("无权访问该对话");
             }
             if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权访问该对话");
+        }
+
+        const agent = await this.agentsService.findOneById(agentId);
+        if (dto.conversationId && isUUID(dto.conversationId)) {
+            const activeTurn = await this.agentChatRecordService.findActiveOpencodeTurn(
+                dto.conversationId,
+            );
+            if (activeTurn) {
+                throw HttpErrorFactory.conflict(
+                    `Conversation has active durable OpenCode turn ${activeTurn.id}`,
+                );
+            }
+        }
+        if (isOpencodeDurableTurnsEnabled(agent)) {
+            if (dto.trigger === "regenerate-message" || dto.parentId) {
+                throw HttpErrorFactory.badRequest(
+                    "OpenCode durable regeneration and historical branch sends are unsupported",
+                );
+            }
+            throw HttpErrorFactory.conflict(
+                "OpenCode durable turns require the opencode-turns endpoint",
+            );
         }
 
         if (dto.responseMode === "blocking") {
@@ -417,15 +438,6 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
-        const agent = await this.agentsService.findOneById(agentId);
-        if (agent?.createMode === "opencode") {
-            await this.opencodeSessionRecover.recoverConversation({
-                agent,
-                conversationId,
-                userId: playground.id,
-                anonymousIdentifier,
-            });
-        }
         return this.agentChatMessageService.listConversationMessages(
             conversationId,
             query,
@@ -637,6 +649,12 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权操作该对话");
         }
+        const activeTurn = await this.agentChatRecordService.findActiveOpencodeTurn(conversationId);
+        if (activeTurn) {
+            throw HttpErrorFactory.conflict(
+                `OpenCode turn ${activeTurn.id} requires the turn-scoped Stop endpoint`,
+            );
+        }
         const agent = await this.agentsService.findOneById(agentId);
         if (!agent || agent.createMode !== "opencode") {
             throw HttpErrorFactory.badRequest("Stop is only supported for OpenCode agents");
@@ -729,10 +747,20 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
+        const turnProjection = await this.agentChatRecordService.getOpencodeTurnConversationProjection(
+            conversationId,
+        );
         return {
             id: record.id,
             title: record.title,
             archivedAt: record.archivedAt ?? null,
+            metadata: turnProjection.legacyStatus
+                ? {
+                      ...(record.metadata ?? {}),
+                      opencodeTurnStatus: turnProjection.legacyStatus,
+                  }
+                : record.metadata,
+            activeTurn: turnProjection.activeTurn,
         };
     }
 

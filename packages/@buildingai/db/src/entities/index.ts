@@ -5,6 +5,13 @@ export { AgentAssignment } from "./agent-assignment.entity";
 export { AgentChatMessage } from "./ai-agent-chat-message.entity";
 export { AgentChatMessageFeedback } from "./ai-agent-chat-message-feedback.entity";
 export { AgentChatRecord } from "./ai-agent-chat-record.entity";
+export {
+    AgentOpencodeTurn,
+    OPENCODE_TURN_ACTIVE_STATUSES,
+    OPENCODE_TURN_STATUSES,
+    OPENCODE_TURN_TERMINAL_STATUSES,
+    type OpencodeTurnStatus,
+} from "./ai-agent-opencode-turn.entity";
 export { AgentMemory } from "./ai-agent-memory.entity";
 export { AiChatFeedback } from "./ai-chat-feedback.entity";
 export { AiChatMessage } from "./ai-chat-message.entity";
