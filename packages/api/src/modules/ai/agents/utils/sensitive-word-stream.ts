@@ -2,150 +2,205 @@ import type { SensitiveWordConfig } from "@buildingai/types/ai/agent-config.inte
 
 import { createSensitiveWordFilter, SensitiveWordFilter } from "./sensitive-word-filter";
 
-/**
- * Thin adapters that apply a `SensitiveWordFilter` to AI SDK UI message streams.
- *
- * - `createSensitiveWordWriter`: wraps a `writer.write`-style function. Used by
- *   the third-party providers (opencode / coze / dify) which emit chunks via
- *   `writer.write`.
- * - `createSensitiveWordTransformStream`: a `TransformStream` used by the direct
- *   (ToolLoop) path, which merges an external UI message stream via
- *   `writer.merge(...)` (merge bypasses `writer.write`, so a transform is needed).
- *
- * Both adapters share the streaming filter instance; the held-back tail is
- * flushed right before `text-end` so the live stream ends with the same text as
- * the batch-filtered persisted message.
- *
- * A `*FromFilter` variant is provided for callers that already hold a filter
- * instance (needed for batch-filtering persisted parts with the same automaton).
- */
+type MessageChunk = Record<string, any>;
+type PartKind = "text" | "reasoning";
 
-type WritePart = Record<string, any>;
-type WriterLike = { write: (part: WritePart) => void };
-
-export interface SensitiveWordWriter {
-    write: (part: WritePart) => void;
-    /** Flush any held-back text as a `text-delta` immediately. */
-    flush: () => void;
+interface PartState {
+    key: string;
+    kind: PartKind;
+    id: string;
+    stream: ReturnType<SensitiveWordFilter["createStream"]> | null;
+    latestDelta: MessageChunk | null;
 }
 
-function shouldFilterPart(type: string | undefined, applyToReasoning: boolean): boolean {
-    if (type === "text-delta") return true;
-    if (type === "reasoning-delta") return applyToReasoning;
-    return false;
-}
+const OPEN_PART_LIMIT = 32;
+const STREAM_INVALID_ERROR = "Assistant response stream is invalid.";
+const BOUNDARY_TYPES = new Set(["start", "start-step", "finish-step", "finish", "abort", "error"]);
+const TERMINAL_TYPES = new Set(["finish", "abort", "error"]);
 
-/** Wrap a write-style writer; disabled filters return a passthrough writer. */
-export function createSensitiveWordWriter(
-    writer: WriterLike,
-    config: SensitiveWordConfig | null | undefined,
-): SensitiveWordWriter {
-    return createSensitiveWordWriterFromFilter(
-        writer,
-        createSensitiveWordFilter(config),
-        config?.applyToReasoning !== false,
-    );
-}
-
-export function createSensitiveWordWriterFromFilter(
-    writer: WriterLike,
-    filter: SensitiveWordFilter,
-    applyToReasoning = true,
-): SensitiveWordWriter {
-    if (!filter.enabled) {
-        return {
-            write: (part) => writer.write(part),
-            flush: () => {},
-        };
+function partKind(type: unknown): PartKind | null {
+    if (type === "text-start" || type === "text-delta" || type === "text-end") return "text";
+    if (type === "reasoning-start" || type === "reasoning-delta" || type === "reasoning-end") {
+        return "reasoning";
     }
-    const stream = filter.createStream();
-    let lastTextId = "txt-0";
+    return null;
+}
 
-    const emitHeldBack = () => {
-        const rest = stream.flush();
-        for (const delta of rest) {
-            writer.write({ type: "text-delta", id: lastTextId, delta });
+function partAction(type: unknown): "start" | "delta" | "end" | null {
+    if (type === "text-start" || type === "reasoning-start") return "start";
+    if (type === "text-delta" || type === "reasoning-delta") return "delta";
+    if (type === "text-end" || type === "reasoning-end") return "end";
+    return null;
+}
+
+function partKey(kind: PartKind, id: string): string {
+    return `${kind}:${id}`;
+}
+
+function usablePartId(value: unknown): value is string {
+    return typeof value === "string" && value.trim().length > 0;
+}
+
+function filterDisplayChunk(chunk: MessageChunk, filter: SensitiveWordFilter): MessageChunk {
+    if (chunk.type === "error" && typeof chunk.errorText === "string") {
+        return { ...chunk, errorText: filter.filterText(chunk.errorText) };
+    }
+    if (
+        chunk.type === "data-follow-up-suggestions" &&
+        Array.isArray(chunk.data) &&
+        chunk.data.every((value: unknown) => typeof value === "string")
+    ) {
+        return { ...chunk, data: chunk.data.map((value: string) => filter.filterText(value)) };
+    }
+    if (
+        (chunk.type === "data-custom-reply" || chunk.type === "data-annotation-reply") &&
+        chunk.data &&
+        typeof chunk.data === "object" &&
+        typeof chunk.data.text === "string"
+    ) {
+        return { ...chunk, data: { ...chunk.data, text: filter.filterText(chunk.data.text) } };
+    }
+    return chunk;
+}
+
+function createProjector(
+    filter: SensitiveWordFilter,
+    applyToReasoning: boolean,
+    enqueue: (chunk: MessageChunk) => void,
+) {
+    const states = new Map<string, PartState>();
+    let terminal = false;
+
+    const emitStateDelta = (state: PartState, delta: string) => {
+        if (!delta) return;
+        const base = state.latestDelta ?? {};
+        enqueue({ ...base, type: `${state.kind}-delta`, id: state.id, delta });
+    };
+
+    const closeState = (state: PartState, explicitEnd?: MessageChunk) => {
+        for (const delta of state.stream?.flush() ?? []) emitStateDelta(state, delta);
+        enqueue(explicitEnd ?? { type: `${state.kind}-end`, id: state.id });
+        states.delete(state.key);
+    };
+
+    const closeAll = () => {
+        for (const state of [...states.values()]) closeState(state);
+    };
+
+    const terminateInvalid = () => {
+        closeAll();
+        enqueue({ type: "error", errorText: STREAM_INVALID_ERROR });
+        terminal = true;
+    };
+
+    const openState = (kind: PartKind, id: string, startChunk: MessageChunk): PartState | null => {
+        const key = partKey(kind, id);
+        const existing = states.get(key);
+        if (existing) closeState(existing);
+        if (states.size >= OPEN_PART_LIMIT) {
+            terminateInvalid();
+            return null;
         }
+        const shouldFilter = kind === "text" || applyToReasoning;
+        const state: PartState = {
+            key,
+            kind,
+            id,
+            stream: shouldFilter ? filter.createStream() : null,
+            latestDelta: null,
+        };
+        states.set(key, state);
+        enqueue(startChunk);
+        return state;
     };
 
     return {
-        write(part) {
-            const type = part?.type;
-            if (shouldFilterPart(type, applyToReasoning)) {
-                if (type === "text-delta" && typeof part.id === "string") {
-                    lastTextId = part.id;
+        write(chunk: MessageChunk) {
+            if (terminal || !chunk || typeof chunk !== "object") return;
+            const type = chunk.type;
+            const kind = partKind(type);
+            const action = partAction(type);
+
+            if (kind && action) {
+                if (!usablePartId(chunk.id)) {
+                    if (action === "end") return;
+                    terminateInvalid();
+                    return;
                 }
-                const deltas = stream.push(typeof part.delta === "string" ? part.delta : "");
-                for (const delta of deltas) {
-                    writer.write({ ...part, delta });
+                const key = partKey(kind, chunk.id);
+
+                if (action === "start") {
+                    openState(kind, chunk.id, chunk);
+                    return;
+                }
+                if (action === "end") {
+                    const state = states.get(key);
+                    if (!state) return;
+                    closeState(state, chunk);
+                    return;
+                }
+
+                let state = states.get(key);
+                if (!state) {
+                    state = openState(kind, chunk.id, { type: `${kind}-start`, id: chunk.id });
+                    if (!state) return;
+                }
+                state.latestDelta = chunk;
+                if (!state.stream) {
+                    enqueue(chunk);
+                    return;
+                }
+                for (const delta of state.stream.push(typeof chunk.delta === "string" ? chunk.delta : "")) {
+                    emitStateDelta(state, delta);
                 }
                 return;
             }
-            if (type === "text-end") {
-                emitHeldBack();
-                writer.write(part);
+
+            if (BOUNDARY_TYPES.has(type)) closeAll();
+            if (type === "error" && typeof chunk.errorText !== "string") {
+                enqueue({ type: "error", errorText: STREAM_INVALID_ERROR });
+                terminal = true;
                 return;
             }
-            writer.write(part);
+            enqueue(filterDisplayChunk(chunk, filter));
+            if (TERMINAL_TYPES.has(type)) terminal = true;
         },
-        flush: emitHeldBack,
+        flush() {
+            if (!terminal) closeAll();
+        },
     };
 }
 
-/** TransformStream variant for the direct (ToolLoop) path. */
-export function createSensitiveWordTransformStream(
+export function createSensitiveWordTransformStream<Chunk extends MessageChunk = MessageChunk>(
     config: SensitiveWordConfig | null | undefined,
-): TransformStream<any, any> {
+): TransformStream<Chunk, Chunk> {
+    const filter = createSensitiveWordFilter(config);
     return createSensitiveWordTransformStreamFromFilter(
-        createSensitiveWordFilter(config),
-        config?.applyToReasoning !== false,
+        filter,
+        filter.policy.applyToReasoning,
     );
 }
 
 export function createSensitiveWordTransformStreamFromFilter(
     filter: SensitiveWordFilter,
+    applyToReasoning?: boolean,
+): TransformStream<any, any>;
+export function createSensitiveWordTransformStreamFromFilter<Chunk extends MessageChunk>(
+    filter: SensitiveWordFilter,
     applyToReasoning = true,
-): TransformStream<any, any> {
-    if (!filter.enabled) {
-        return new TransformStream<any, any>({
-            transform: (chunk, controller) => controller.enqueue(chunk),
-        });
-    }
-    const stream = filter.createStream();
-    let lastTextId = "txt-0";
-
-    return new TransformStream<any, any>({
-        transform(chunk, controller) {
-            const type = chunk?.type;
-            if (shouldFilterPart(type, applyToReasoning)) {
-                if (type === "text-delta" && typeof chunk.id === "string") {
-                    lastTextId = chunk.id;
-                }
-                const deltas = stream.push(typeof chunk.delta === "string" ? chunk.delta : "");
-                for (const delta of deltas) {
-                    controller.enqueue({ ...chunk, delta });
-                }
-                return;
-            }
-            if (type === "text-end") {
-                const rest = stream.flush();
-                for (const delta of rest) {
-                    controller.enqueue({
-                        type: "text-delta",
-                        id: typeof chunk.id === "string" ? chunk.id : lastTextId,
-                        delta,
-                    });
-                }
-                controller.enqueue(chunk);
-                return;
-            }
-            controller.enqueue(chunk);
+): TransformStream<Chunk, Chunk> {
+    return new TransformStream<Chunk, Chunk>({
+        start(controller) {
+            const projector = createProjector(filter, applyToReasoning, (chunk) =>
+                controller.enqueue(chunk as Chunk),
+            );
+            (this as { projector?: typeof projector }).projector = projector;
         },
-        flush(controller) {
-            const rest = stream.flush();
-            for (const delta of rest) {
-                controller.enqueue({ type: "text-delta", id: lastTextId, delta });
-            }
+        transform(chunk) {
+            (this as { projector: ReturnType<typeof createProjector> }).projector.write(chunk);
+        },
+        flush() {
+            (this as { projector: ReturnType<typeof createProjector> }).projector.flush();
         },
     });
 }

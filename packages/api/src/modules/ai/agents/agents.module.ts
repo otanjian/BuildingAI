@@ -57,6 +57,7 @@ import { AgentChatRecordService } from "./services/agent-chat-record.service";
 import { AgentDashboardService } from "./services/agent-dashboard.service";
 import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
+import { SensitiveWordConfigService } from "./services/sensitive-word-config.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
@@ -98,6 +99,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         AgentAliasRewriteMiddleware,
         // Agent CRUD
         AgentsService,
+        SensitiveWordConfigService,
         AgentAnnotationService,
         AgentDashboardService,
         // Chat completion

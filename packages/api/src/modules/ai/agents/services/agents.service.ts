@@ -24,6 +24,12 @@ import { UpdateAgentDto } from "../dto/web/agent/update-agent.dto";
 import type { UpdatePublishConfigDto } from "../dto/web/publish/update-publish-config.dto";
 import { CozeAgentSyncService } from "../integrations/coze-agent-sync.service";
 import { DifyAgentSyncService } from "../integrations/dify-agent-sync.service";
+import {
+    copyThirdPartyDiscriminator,
+    projectCopyContent,
+    projectSquareCard,
+} from "../utils/agent-public-projection";
+import { SensitiveWordConfigService } from "./sensitive-word-config.service";
 
 type AgentPublishConfigWithCopy = NonNullable<Agent["publishConfig"]> & {
     allowCopy?: boolean;
@@ -48,6 +54,7 @@ export class AgentsService extends BaseService<Agent> {
         private readonly cozeAgentSyncService: CozeAgentSyncService,
         private readonly difyAgentSyncService: DifyAgentSyncService,
         private readonly agentConfigService: AgentConfigService,
+        private readonly sensitiveWordConfigService: SensitiveWordConfigService,
     ) {
         super(agentRepository);
     }
@@ -115,7 +122,6 @@ export class AgentsService extends BaseService<Agent> {
             avatar: dto.avatar || this.defaultAvatar,
             createMode,
             modelConfig: createMode === "direct" ? dto.modelConfig : undefined,
-            sensitiveWordConfig: dto.sensitiveWordConfig,
             thirdPartyIntegration,
             showContext: true,
             showReference: true,
@@ -177,9 +183,7 @@ export class AgentsService extends BaseService<Agent> {
             relations: ["tags"],
         });
         if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
-        if (!agent.publishedToSquare && agent.createBy !== user.id) {
-            throw HttpErrorFactory.forbidden("无权限查看该智能体");
-        }
+        if (agent.createBy !== user.id) throw HttpErrorFactory.forbidden("无权限查看该智能体");
         return agent;
     }
 
@@ -232,7 +236,6 @@ export class AgentsService extends BaseService<Agent> {
             contextConfig: dto.contextConfig,
             voiceConfig: dto.voiceConfig,
             annotationConfig: dto.annotationConfig,
-            sensitiveWordConfig: dto.sensitiveWordConfig,
         } satisfies Partial<Agent>;
 
         Object.assign(agent, next);
@@ -261,8 +264,23 @@ export class AgentsService extends BaseService<Agent> {
             agent.thirdPartyIntegration = normalized;
         }
 
+        if (dto.sensitiveWordConfig !== undefined) {
+            this.sensitiveWordConfigService.assertCompatibilityUpdate(
+                agent.sensitiveWordConfig,
+                dto.sensitiveWordConfig,
+            );
+        }
+
         await this.syncAgentTags(agent, dto.tagIds);
-        const savedAgent = await this.agentRepository.save(agent);
+        let savedAgent = await this.agentRepository.save(agent);
+        if (dto.sensitiveWordConfig !== undefined) {
+            const sensitiveWordConfig = await this.sensitiveWordConfigService.applyCompatibilityUpdate(
+                user.id,
+                agentId,
+                dto.sensitiveWordConfig,
+            );
+            savedAgent = Object.assign(savedAgent, { sensitiveWordConfig });
+        }
 
         if (savedAgent.createMode === "coze" && dto.thirdPartyIntegration !== undefined) {
             const syncResult = await this.cozeAgentSyncService.syncAgentInfo(savedAgent.id);
@@ -620,7 +638,8 @@ export class AgentsService extends BaseService<Agent> {
             );
         }
 
-        return this.paginateQueryBuilder(qb, paginationDto);
+        const result = await this.paginateQueryBuilder(qb, paginationDto);
+        return { ...result, items: result.items.map(projectSquareCard) };
     }
 
     async listMyAgents(userId: string, dto: ListMyAgentsDto) {
@@ -762,6 +781,7 @@ export class AgentsService extends BaseService<Agent> {
         }
 
         const name = await this.generateUniqueName(source.name);
+        const projectedContent = projectCopyContent(source);
 
         const availableMcpServerIds =
             source.mcpServerIds && source.mcpServerIds.length
@@ -810,7 +830,7 @@ export class AgentsService extends BaseService<Agent> {
             description: source.description,
             avatar: source.avatar || this.defaultAvatar,
             createMode: source.createMode || "direct",
-            thirdPartyIntegration: source.thirdPartyIntegration || {},
+            thirdPartyIntegration: copyThirdPartyDiscriminator(source.thirdPartyIntegration),
             rolePrompt: source.rolePrompt,
             showContext: source.showContext,
             showReference: source.showReference,
@@ -828,12 +848,11 @@ export class AgentsService extends BaseService<Agent> {
             annotationConfig: source.annotationConfig,
             maxSteps: source.maxSteps,
             datasetIds: availableDatasetIds,
-            openingStatement: source.openingStatement,
+            openingStatement: projectedContent.openingStatement,
             openingQuestions: source.openingQuestions,
-            quickCommands: source.quickCommands,
+            quickCommands: projectedContent.quickCommands,
             autoQuestions: source.autoQuestions,
             formFields: source.formFields,
-            formFieldsInputs: source.formFieldsInputs,
             mcpServerIds: availableMcpServerIds,
             publishedToSquare: false,
             publishedAt: null,

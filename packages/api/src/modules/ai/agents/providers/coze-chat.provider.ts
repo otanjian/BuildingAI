@@ -30,7 +30,8 @@ import type { AgentChatCompletionParams } from "../services/agent-chat-completio
 import { AgentChatMessageService } from "../services/agent-chat-message.service";
 import { AgentChatRecordService } from "../services/agent-chat-record.service";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
-import { createSensitiveWordWriterFromFilter } from "../utils/sensitive-word-stream";
+import { projectAssistantParts } from "../utils/sensitive-word-projector";
+import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
     write: (part: Record<string, any>) => void;
@@ -77,18 +78,15 @@ export class CozeChatProvider {
             });
             localConversationId = record.id;
         }
+        const policyFilter =
+            params.sensitiveWordFilter ??
+            createSensitiveWordFilter(agent.sensitiveWordConfig, agent.id);
 
         const stream = createUIMessageStream({
             execute: async ({ writer }) => {
-                const sensitiveWordFilter = createSensitiveWordFilter(agent.sensitiveWordConfig);
-                const filteredWriter = createSensitiveWordWriterFromFilter(
-                    writer,
-                    sensitiveWordFilter,
-                    agent.sensitiveWordConfig?.applyToReasoning !== false,
-                );
-
+                const sensitiveWordFilter = policyFilter;
                 if (localConversationId) {
-                    filteredWriter.write({
+                    writer.write({
                         type: "data-conversation-id",
                         data: localConversationId,
                         transient: true,
@@ -96,8 +94,8 @@ export class CozeChatProvider {
                 }
 
                 const assistantMessageId = generateId();
-                filteredWriter.write({ type: "start", messageId: assistantMessageId });
-                filteredWriter.write({ type: "start-step" });
+                writer.write({ type: "start", messageId: assistantMessageId });
+                writer.write({ type: "start-step" });
 
                 const textId = "txt-0";
                 let textStarted = false;
@@ -189,7 +187,7 @@ export class CozeChatProvider {
                             // 首次出现：发送 tool-input-available
                             if (!emittedToolInputIds.has(toolPart.toolCallId)) {
                                 emittedToolInputIds.add(toolPart.toolCallId);
-                                filteredWriter.write({
+                                writer.write({
                                     type: "tool-input-available",
                                     toolCallId: toolPart.toolCallId,
                                     toolName: toolPart.toolName,
@@ -203,7 +201,7 @@ export class CozeChatProvider {
                                 toolPart.state === "output-available" &&
                                 toolPart.output !== undefined
                             ) {
-                                filteredWriter.write({
+                                writer.write({
                                     type: "tool-output-available",
                                     toolCallId: toolPart.toolCallId,
                                     output: toolPart.output,
@@ -213,7 +211,7 @@ export class CozeChatProvider {
 
                             // 有错误：发送 tool-output-error
                             if (toolPart.state === "output-error" && toolPart.errorText) {
-                                filteredWriter.write({
+                                writer.write({
                                     type: "tool-output-error",
                                     toolCallId: toolPart.toolCallId,
                                     errorText: toolPart.errorText,
@@ -229,11 +227,11 @@ export class CozeChatProvider {
                         );
                         if (deltaText) {
                             if (!textStarted) {
-                                filteredWriter.write({ type: "text-start", id: textId });
+                                writer.write({ type: "text-start", id: textId });
                                 textStarted = true;
                             }
                             fullText += deltaText;
-                            filteredWriter.write({
+                            writer.write({
                                 type: "text-delta",
                                 id: textId,
                                 delta: deltaText,
@@ -256,26 +254,26 @@ export class CozeChatProvider {
                 if (!fullText && completedText) {
                     fullText = completedText;
                     if (!textStarted) {
-                        filteredWriter.write({ type: "text-start", id: textId });
+                        writer.write({ type: "text-start", id: textId });
                         textStarted = true;
                     }
-                    filteredWriter.write({ type: "text-delta", id: textId, delta: completedText });
+                    writer.write({ type: "text-delta", id: textId, delta: completedText });
                 }
 
                 // 确保 text-start / text-end 配对
                 if (!textStarted) {
-                    filteredWriter.write({ type: "text-start", id: textId });
+                    writer.write({ type: "text-start", id: textId });
                 }
-                filteredWriter.write({ type: "text-end", id: textId });
+                writer.write({ type: "text-end", id: textId });
                 if (localConversationId) {
-                    filteredWriter.write({
+                    writer.write({
                         type: "data-stream-complete",
                         data: localConversationId,
                         transient: true,
                     } as any);
                 }
-                filteredWriter.write({ type: "finish-step" });
-                filteredWriter.write({ type: "finish", finishReason: "stop" });
+                writer.write({ type: "finish-step" });
+                writer.write({ type: "finish", finishReason: "stop" });
 
                 let userConsumedPower = 0;
                 if (
@@ -294,7 +292,7 @@ export class CozeChatProvider {
                         billingRule,
                     });
                 }
-                filteredWriter.write({
+                writer.write({
                     type: "data-usage",
                     data: {
                         inputTokens: usage?.inputTokens ?? 0,
@@ -310,23 +308,29 @@ export class CozeChatProvider {
                 });
 
                 const toolCallParts = Array.from(toolParts.values());
-                const filteredFullText = sensitiveWordFilter.filterText(fullText);
                 const responseMessage: UIMessage = {
                     id: assistantMessageId,
                     role: "assistant",
                     parts: [
                         ...toolCallParts,
                         ...(fullText || toolCallParts.length === 0
-                            ? [{ type: "text", text: filteredFullText }]
+                            ? [{ type: "text", text: fullText }]
                             : []),
                     ] as unknown as UIMessage["parts"],
                 };
-                const finished = [...params.messages, responseMessage];
-                filteredWriter.write({
+                const displayResponse = {
+                    ...responseMessage,
+                    parts: projectAssistantParts(
+                        responseMessage.parts as Record<string, any>[],
+                        sensitiveWordFilter,
+                        sensitiveWordFilter.policy.applyToReasoning,
+                    ),
+                } as UIMessage;
+                writer.write({
                     type: "data-conversation-context",
                     data: {
                         messageId: assistantMessageId,
-                        messages: finished.map((message) => ({
+                        messages: [...params.messages, displayResponse].map((message) => ({
                             role: message.role,
                             content:
                                 extractTextFromParts(message.parts ?? []).fullText ||
@@ -347,6 +351,7 @@ export class CozeChatProvider {
                         writer,
                         lastUser,
                         responseMessage,
+                        sensitiveWordFilter,
                         usage,
                         userConsumedPower,
                         metadata: {
@@ -365,7 +370,15 @@ export class CozeChatProvider {
             },
         });
 
-        pipeUIMessageStreamToResponse({ stream, response });
+        pipeUIMessageStreamToResponse({
+            stream: stream.pipeThrough(
+                createSensitiveWordTransformStreamFromFilter(
+                    policyFilter,
+                    policyFilter.policy.applyToReasoning,
+                ),
+            ),
+            response,
+        });
     }
 
     private async resolveLocalConversationId(
@@ -420,6 +433,7 @@ export class CozeChatProvider {
         writer: ProviderWriter;
         lastUser?: UIMessage;
         responseMessage: UIMessage;
+        sensitiveWordFilter: ReturnType<typeof createSensitiveWordFilter>;
         usage?: CozeChatUsage;
         userConsumedPower?: number;
         metadata?: Record<string, any>;
@@ -430,6 +444,7 @@ export class CozeChatProvider {
             writer,
             lastUser,
             responseMessage,
+            sensitiveWordFilter,
             usage,
             userConsumedPower,
         } = params;
@@ -470,6 +485,11 @@ export class CozeChatProvider {
             userId: chatParams.userId,
             message: {
                 ...(responseMessage as ChatUIMessage),
+                parts: projectAssistantParts(
+                    responseMessage.parts as Record<string, any>[],
+                    sensitiveWordFilter,
+                    sensitiveWordFilter.policy.applyToReasoning,
+                ),
                 ...(usage ? { usage } : {}),
                 ...(userConsumedPower != null ? { userConsumedPower } : {}),
             } as ChatUIMessage,

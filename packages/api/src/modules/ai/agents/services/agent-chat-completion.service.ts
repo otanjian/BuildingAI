@@ -63,6 +63,11 @@ import { DifyChatProvider } from "../providers/dify-chat.provider";
 import { OpencodeChatProvider } from "../providers/opencode-chat.provider";
 import type { SensitiveWordFilter } from "../utils/sensitive-word-filter";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
+import {
+    mergeApprovalDecisions,
+    mergeTrustedApprovalContinuation,
+} from "../utils/approval-continuation";
+import { projectAssistantParts } from "../utils/sensitive-word-projector";
 import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 import { AgentChatMessageService } from "./agent-chat-message.service";
 import { AgentChatRecordService } from "./agent-chat-record.service";
@@ -97,6 +102,7 @@ export interface AgentChatCompletionParams {
     regenerateParentId?: string;
     parentId?: string;
     isToolApprovalFlow?: boolean;
+    sensitiveWordFilter?: SensitiveWordFilter;
 }
 
 interface ResolvedModel {
@@ -156,6 +162,8 @@ export class AgentChatCompletionService {
                 where: { id: params.agentId },
             });
             if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
+            const policyFilter = createSensitiveWordFilter(agent.sensitiveWordConfig, agent.id);
+            const turnParams = { ...params, sensitiveWordFilter: policyFilter };
             if (
                 agent.createMode === "coze" ||
                 agent.createMode === "dify" ||
@@ -163,7 +171,7 @@ export class AgentChatCompletionService {
             ) {
                 const quickCommandResult = await this.preHandleQuickCommandReply({
                     agent,
-                    params,
+                    params: turnParams,
                     response,
                     conversationId,
                     saveConversation,
@@ -177,7 +185,7 @@ export class AgentChatCompletionService {
                 await this.cozeChatProvider.streamChat(
                     agent,
                     {
-                        ...params,
+                        ...turnParams,
                         ...(conversationId ? { conversationId } : {}),
                     },
                     response,
@@ -188,7 +196,7 @@ export class AgentChatCompletionService {
                 await this.difyChatProvider.streamChat(
                     agent,
                     {
-                        ...params,
+                        ...turnParams,
                         ...(conversationId ? { conversationId } : {}),
                     },
                     response,
@@ -199,7 +207,7 @@ export class AgentChatCompletionService {
                 await this.opencodeChatProvider.streamChat(
                     agent,
                     {
-                        ...params,
+                        ...turnParams,
                         ...(conversationId ? { conversationId } : {}),
                     },
                     response,
@@ -225,11 +233,8 @@ export class AgentChatCompletionService {
             const stream = createUIMessageStream({
                 ...(params.isToolApprovalFlow ? { originalMessages: params.messages } : {}),
                 execute: async ({ writer }) => {
-                    const sensitiveWordFilter = createSensitiveWordFilter(
-                        agent.sensitiveWordConfig,
-                    );
-                    const applySensitiveToReasoning =
-                        agent.sensitiveWordConfig?.applyToReasoning !== false;
+                    const sensitiveWordFilter = policyFilter;
+                    const applySensitiveToReasoning = sensitiveWordFilter.policy.applyToReasoning;
 
                     if (conversationId) {
                         writer.write({
@@ -278,9 +283,10 @@ export class AgentChatCompletionService {
                                     ...ctx,
                                     params: ctx.params as AgentChatCompletionParams,
                                     writer: ctx.writer as unknown as DataWriter,
+                                    sensitiveWordFilter,
                                 }),
                             serializeContextForDisplay: (msgs) =>
-                                this.serializeContextForDisplay(msgs),
+                                this.serializeContextForDisplay(msgs, sensitiveWordFilter, true),
                         });
                         return;
                     }
@@ -308,9 +314,10 @@ export class AgentChatCompletionService {
                                     ...ctx,
                                     params: ctx.params as AgentChatCompletionParams,
                                     writer: ctx.writer as unknown as DataWriter,
+                                    sensitiveWordFilter,
                                 }),
                             serializeContextForDisplay: (msgs) =>
-                                this.serializeContextForDisplay(msgs),
+                                this.serializeContextForDisplay(msgs, sensitiveWordFilter, true),
                         });
                         return;
                     }
@@ -595,7 +602,11 @@ export class AgentChatCompletionService {
                                         data: {
                                             messageId: assistantMessageId,
                                             messages:
-                                                this.serializeContextForDisplay(finalMessages),
+                                                this.serializeContextForDisplay(
+                                                    finalMessages,
+                                                    sensitiveWordFilter,
+                                                    true,
+                                                ),
                                         },
                                     });
 
@@ -606,6 +617,7 @@ export class AgentChatCompletionService {
                                             await this.saveApprovalMessages(
                                                 finished,
                                                 conversationId,
+                                                sensitiveWordFilter,
                                                 totalUsage,
                                                 userConsumedPower,
                                             );
@@ -613,15 +625,7 @@ export class AgentChatCompletionService {
                                             await this.saveMessages({
                                                 finished,
                                                 responseMsg: responseMsg
-                                                    ? {
-                                                          ...responseMsg,
-                                                          id: assistantMessageId,
-                                                          parts: this.filterResponseMessageParts(
-                                                              responseMsg.parts,
-                                                              sensitiveWordFilter,
-                                                              applySensitiveToReasoning,
-                                                          ),
-                                                      }
+                                                    ? { ...responseMsg, id: assistantMessageId }
                                                     : responseMsg,
                                                 params,
                                                 conversationId,
@@ -629,6 +633,7 @@ export class AgentChatCompletionService {
                                                 userConsumedPower,
                                                 aborted,
                                                 writer: writer as unknown as DataWriter,
+                                                sensitiveWordFilter,
                                             });
                                         }
                                     }
@@ -681,14 +686,7 @@ export class AgentChatCompletionService {
                             },
                         });
 
-                        writer.merge(
-                            uiMessageStream.pipeThrough(
-                                createSensitiveWordTransformStreamFromFilter(
-                                    sensitiveWordFilter,
-                                    applySensitiveToReasoning,
-                                ),
-                            ),
-                        );
+                        writer.merge(uiMessageStream);
                     } catch (error) {
                         await closeMcpClients(mcpClients);
                         throw error;
@@ -696,7 +694,15 @@ export class AgentChatCompletionService {
                 },
             });
 
-            pipeUIMessageStreamToResponse({ stream, response });
+            pipeUIMessageStreamToResponse({
+                stream: stream.pipeThrough(
+                    createSensitiveWordTransformStreamFromFilter(
+                        policyFilter,
+                        policyFilter.policy.applyToReasoning,
+                    ),
+                ),
+                response,
+            });
         } catch (error) {
             this.logger.error(
                 `Agent stream chat error: ${this.errMsg(error)}`,
@@ -756,8 +762,13 @@ export class AgentChatCompletionService {
 
     private serializeContextForDisplay(
         messages: Array<{ role: string; content: unknown }>,
+        filter?: SensitiveWordFilter,
+        projectLastAssistant = false,
     ): Array<{ role: string; content: string }> {
-        return messages.map((m) => {
+        const lastAssistantIndex = projectLastAssistant
+            ? messages.findLastIndex((message) => message.role === "assistant")
+            : -1;
+        return messages.map((m, index) => {
             const raw =
                 typeof m.content === "string"
                     ? m.content
@@ -766,7 +777,8 @@ export class AgentChatCompletionService {
                             .map((p) => (p?.type === "text" ? (p.text ?? "") : ""))
                             .join("\n")
                       : "";
-            return { role: m.role, content: raw || "(无文本内容)" };
+            const content = index === lastAssistantIndex && filter ? filter.filterText(raw) : raw;
+            return { role: m.role, content: content || "(无文本内容)" };
         });
     }
 
@@ -779,16 +791,11 @@ export class AgentChatCompletionService {
         filter: SensitiveWordFilter,
         applyToReasoning: boolean,
     ): UIMessage["parts"] {
-        if (!filter.enabled) return parts;
-        return parts.map((part) => {
-            if (part.type === "text" && typeof part.text === "string") {
-                return { ...part, text: filter.filterText(part.text) };
-            }
-            if (applyToReasoning && part.type === "reasoning" && typeof part.text === "string") {
-                return { ...part, text: filter.filterText(part.text) };
-            }
-            return part;
-        });
+        return projectAssistantParts(
+            parts as Record<string, any>[],
+            filter,
+            applyToReasoning,
+        ) as UIMessage["parts"];
     }
 
     private buildTools(
@@ -1003,7 +1010,7 @@ export class AgentChatCompletionService {
         return history.map((m) => {
             const msg = m.message;
             return this.needsApproval(msg as UIMessage) && approvalMsg?.role === "assistant"
-                ? approvalMsg
+                ? mergeApprovalDecisions(msg as UIMessage, approvalMsg)
                 : (msg as UIMessage);
         });
     }
@@ -1011,6 +1018,7 @@ export class AgentChatCompletionService {
     private async saveApprovalMessages(
         finished: UIMessage[],
         conversationId: string,
+        filter: SensitiveWordFilter,
         usage?: ChatMessageUsage,
         userConsumedPower?: number,
     ): Promise<void> {
@@ -1024,8 +1032,17 @@ export class AgentChatCompletionService {
 
         if (!approvalMsg || !lastAssistant) return;
 
-        const cleanedParts = lastAssistant.parts?.filter((part) => !part.type?.startsWith("data-"));
         const previousMessage = approvalMsg.message as ChatUIMessage;
+        const continuation = mergeTrustedApprovalContinuation(previousMessage, lastAssistant);
+        const appended = projectAssistantParts(
+            continuation.appendedParts.filter((part) => !part.type?.startsWith("data-")),
+            filter,
+            filter.policy.applyToReasoning,
+        );
+        const cleanedParts = [
+            ...continuation.mergedParts.slice(0, previousMessage.parts.length),
+            ...appended,
+        ];
         const mergedUsage = this.mergeUsage(previousMessage.usage, usage);
         const mergedUserConsumedPower =
             previousMessage.userConsumedPower != null || userConsumedPower != null
@@ -1093,9 +1110,18 @@ export class AgentChatCompletionService {
         userConsumedPower?: number;
         aborted: boolean;
         writer: DataWriter;
+        sensitiveWordFilter?: SensitiveWordFilter;
     }): Promise<void> {
-        const { finished, responseMsg, params, conversationId, usage, userConsumedPower, writer } =
-            ctx;
+        const {
+            finished,
+            responseMsg,
+            params,
+            conversationId,
+            usage,
+            userConsumedPower,
+            writer,
+            sensitiveWordFilter,
+        } = ctx;
 
         let userMsgId: string | undefined;
         if (params.isRegenerate) {
@@ -1125,10 +1151,22 @@ export class AgentChatCompletionService {
                 .findLast((m) => m.role === "user")
                 ?.parts?.filter((part) => part.type?.startsWith("data-file-parse-"));
 
+            const policyFilter = sensitiveWordFilter ?? createSensitiveWordFilter(null);
+            const projectedResponse = {
+                ...responseMsg,
+                parts: this.filterResponseMessageParts(
+                    responseMsg.parts,
+                    policyFilter,
+                    policyFilter.policy.applyToReasoning,
+                ),
+            };
             const messageToSave: ChatUIMessage = {
                 ...(fileParseParts?.length && responseMsg.parts
-                    ? { ...responseMsg, parts: [...fileParseParts, ...responseMsg.parts] }
-                    : responseMsg),
+                    ? {
+                          ...projectedResponse,
+                          parts: [...fileParseParts, ...projectedResponse.parts],
+                      }
+                    : projectedResponse),
                 usage,
                 ...(userConsumedPower != null && { userConsumedPower }),
             } as ChatUIMessage;
@@ -1186,6 +1224,9 @@ export class AgentChatCompletionService {
             conversationId = record.id;
         }
 
+        const policyFilter =
+            chatParams.sensitiveWordFilter ??
+            createSensitiveWordFilter(agent.sensitiveWordConfig, agent.id);
         const stream = createUIMessageStream({
             ...(chatParams.isToolApprovalFlow ? { originalMessages: chatParams.messages } : {}),
             execute: async ({ writer }) => {
@@ -1220,14 +1261,26 @@ export class AgentChatCompletionService {
                             ...ctx,
                             params: ctx.params as AgentChatCompletionParams,
                             writer: ctx.writer as unknown as DataWriter,
+                            sensitiveWordFilter:
+                                chatParams.sensitiveWordFilter ??
+                                createSensitiveWordFilter(agent.sensitiveWordConfig, agent.id),
                         }),
-                    serializeContextForDisplay: (msgs) => this.serializeContextForDisplay(msgs),
+                    serializeContextForDisplay: (msgs) =>
+                        this.serializeContextForDisplay(msgs, policyFilter, true),
                 });
             },
             onError: (error) => this.errMsg(error),
         });
 
-        pipeUIMessageStreamToResponse({ stream, response });
+        pipeUIMessageStreamToResponse({
+            stream: stream.pipeThrough(
+                createSensitiveWordTransformStreamFromFilter(
+                    policyFilter,
+                    policyFilter.policy.applyToReasoning,
+                ),
+            ),
+            response,
+        });
 
         return {
             handled: true,
@@ -1298,10 +1351,18 @@ export class AgentChatCompletionService {
     }
 
     private handleError(error: unknown, response: ServerResponse): void {
-        if (response.headersSent) return;
-        response.writeHead(500, { "Content-Type": "text/event-stream" });
-        response.write(`data: ${JSON.stringify({ type: "error", error: this.errMsg(error) })}\n\n`);
-        response.end();
+        if (response.headersSent) {
+            if (!response.writableEnded) {
+                response.write(
+                    `data: ${JSON.stringify({ type: "error", errorText: "Assistant response failed." })}\n\n`,
+                );
+                response.end();
+            }
+            return;
+        }
+        response.statusCode = 500;
+        response.setHeader("Content-Type", "application/json; charset=utf-8");
+        response.end(JSON.stringify({ message: this.errMsg(error), statusCode: 500 }));
     }
 
     /**

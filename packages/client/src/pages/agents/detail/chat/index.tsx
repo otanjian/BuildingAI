@@ -216,7 +216,7 @@ function AgentInfoPanel({
   const conversationCount = agent?.conversationCount ?? 0;
   const messageCount = agent?.messageCount ?? 0;
   const creatorName = agent?.creator?.nickname ?? "未知用户";
-  const canCopyAgent = agent?.publishConfig?.allowCopy === true;
+  const canCopyAgent = agent?.allowCopy === true;
   const publishedAgent = agent as
     | (PublishedAgentDetail & {
         chatBillingRule?: AgentChatBillingRule;

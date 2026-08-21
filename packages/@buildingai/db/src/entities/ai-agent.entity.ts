@@ -160,7 +160,7 @@ export class Agent extends BaseEntity {
      * 敏感词过滤配置
      * 开启后对智能体 AI 回复（正文与深度思考）做敏感词替换
      */
-    @Column({ type: "json", nullable: true, comment: "敏感词过滤配置" })
+    @Column({ type: "json", nullable: true, update: false, comment: "敏感词过滤配置" })
     sensitiveWordConfig?: SensitiveWordConfig;
 
     /**

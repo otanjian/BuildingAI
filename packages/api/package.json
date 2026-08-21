@@ -122,6 +122,9 @@
         "ms": "2.1.0"
     },
     "jest": {
+        "moduleNameMapper": {
+            "^@buildingai/utils/sensitive-word-config$": "<rootDir>/../../@buildingai/utils/src/sensitive-word-config.ts"
+        },
         "moduleFileExtensions": [
             "js",
             "json",
@@ -130,7 +133,16 @@
         "rootDir": "src",
         "testRegex": ".*\\.spec\\.ts$",
         "transform": {
-            "^.+\\.(t|j)s$": "ts-jest"
+            "^.+\\.(t|j)s$": [
+                "ts-jest",
+                {
+                    "tsconfig": {
+                        "module": "CommonJS",
+                        "moduleResolution": "Node",
+                        "resolvePackageJsonExports": false
+                    }
+                }
+            ]
         },
         "collectCoverageFrom": [
             "**/*.(t|j)s"

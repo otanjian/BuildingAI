@@ -1,6 +1,7 @@
 import { useDocumentHead } from "@buildingai/hooks";
 import {
   updateAgentConfig,
+  updateAgentSensitiveWordConfig,
   useAgentDetailQuery,
   useAiProvidersQuery,
   usePublishAgentToSquareMutation,
@@ -18,9 +19,10 @@ import { Button } from "@buildingai/ui/components/ui/button";
 import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
 import { TooltipProvider } from "@buildingai/ui/components/ui/tooltip";
+import { projectSensitiveWordRichText } from "@buildingai/utils/sensitive-word-config";
 import { ArrowBigUp, Loader2, RefreshCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useBlocker, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import OrchestrationLayout from "../../_layouts";
@@ -42,6 +44,14 @@ import {
   StarterQuestions,
   WelcomeMessage,
 } from "./interface";
+import {
+  buildSensitiveWordRequest,
+  hydrateSensitiveWordDraft,
+} from "./interface/sensitive-word-draft";
+import {
+  createSensitiveWordSaveQueue,
+  reconcileSensitiveWordSave,
+} from "./interface/sensitive-word-save-queue";
 import { ModelSelector, VoiceConfigDefaultsSync, VoiceConfigSelector } from "./model";
 import { PublishDialog } from "./publish-dialog";
 
@@ -230,6 +240,8 @@ function fromApiFormFields(input: unknown): FormVariable[] {
 export default function Configuration() {
   const { id } = useParams();
   const agentId = id ?? "";
+  const activeAgentIdRef = useRef(agentId);
+  activeAgentIdRef.current = agentId;
   const { data: agent, refetch: refetchAgentDetail } = useAgentDetailQuery(id, {
     refetchOnWindowFocus: false,
   });
@@ -243,11 +255,19 @@ export default function Configuration() {
   const [isSaving, setIsSaving] = useState(false);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const hydratedRef = useRef(false);
+  const hydratedAgentIdRef = useRef("");
   const skipNextAutoSaveRef = useRef(false);
   const saveConfigRef = useRef<(next: ConfigState) => Promise<void>>(null!);
+  const sensitiveSaveQueueRef = useRef(createSensitiveWordSaveQueue());
+  const flushSensitiveSaveRef = useRef<() => Promise<boolean>>(async () => true);
+  const sensitiveEditVersionRef = useRef(0);
+  const acknowledgedSensitiveRef = useRef<SensitiveWordConfig | null>(null);
 
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState(false);
+  const [sensitiveSaveError, setSensitiveSaveError] = useState(false);
+  const [sensitiveDirty, setSensitiveDirty] = useState(false);
+  const navigationBlocker = useBlocker(sensitiveDirty);
 
   const createMode = agent?.createMode ?? "direct";
   const isThirdPartyMode =
@@ -298,6 +318,7 @@ export default function Configuration() {
   const saveConfig = useCallback(
     async (next: ConfigState) => {
       if (!agentId) return;
+      const capturedAgentId = agentId;
       setIsSaving(true);
 
       setSaveError(false);
@@ -328,7 +349,6 @@ export default function Configuration() {
           showContext: next.showContext,
           showReference: next.showReference,
           annotationConfig: next.annotationConfig ?? null,
-          sensitiveWordConfig: next.sensitiveWordConfig ?? null,
           enableWebSearch: next.enableWebSearch,
           enableFileUpload: next.enableFileUpload,
           chatAvatarEnabled: next.chatAvatarEnabled,
@@ -347,7 +367,7 @@ export default function Configuration() {
           payload.thirdPartyIntegration = next.thirdPartyIntegration ?? undefined;
         }
 
-        const savedAgent = await updateAgentConfig(agentId, payload as any);
+        const savedAgent = await updateAgentConfig(capturedAgentId, payload as any);
         const extConfig = (savedAgent?.thirdPartyIntegration as any)?.extendedConfig;
 
         if (
@@ -377,19 +397,23 @@ export default function Configuration() {
               : savedAgent;
 
           if (latestAgent) {
+            if (capturedAgentId !== activeAgentIdRef.current) return;
             skipNextAutoSaveRef.current = true;
-            setConfig(createConfigFromAgent(latestAgent));
+            setConfig((current) => ({
+              ...createConfigFromAgent(latestAgent),
+              sensitiveWordConfig: current.sensitiveWordConfig,
+            }));
           }
         } else {
-          void refetchAgentDetail();
+          if (capturedAgentId === activeAgentIdRef.current) void refetchAgentDetail();
         }
 
-        setLastSavedAt(new Date());
+        if (capturedAgentId === activeAgentIdRef.current) setLastSavedAt(new Date());
       } catch (error) {
-        setSaveError(true);
+        if (capturedAgentId === activeAgentIdRef.current) setSaveError(true);
         console.error("Failed to save agent config:", error);
       } finally {
-        setIsSaving(false);
+        if (capturedAgentId === activeAgentIdRef.current) setIsSaving(false);
       }
     },
     [agentId, agent?.createMode, createConfigFromAgent, refetchAgentDetail],
@@ -401,6 +425,18 @@ export default function Configuration() {
     date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const formFieldsForDebug = useMemo(() => config.formFields, [config.formFields]);
+  const openingStatementForDebug = useMemo(() => {
+    const draft = hydrateSensitiveWordDraft(config.sensitiveWordConfig);
+    const validation = buildSensitiveWordRequest(draft);
+    const previewConfig = validation.request
+      ? config.sensitiveWordConfig
+      : {
+          ...acknowledgedSensitiveRef.current,
+          enabled: draft.enabled,
+          applyToReasoning: draft.applyToReasoning,
+        };
+    return projectSensitiveWordRichText(config.openingStatement, previewConfig);
+  }, [config.openingStatement, config.sensitiveWordConfig]);
 
   const { data: providers = [] } = useAiProvidersQuery({ supportedModelTypes: "llm" });
   const publishSquareMutation = usePublishAgentToSquareMutation(agentId);
@@ -427,14 +463,164 @@ export default function Configuration() {
   }, [providers, config.modelConfig?.id]);
 
   useEffect(() => {
-    if (!agent || hydratedRef.current) return;
+    if (!agent || agent.id !== agentId || hydratedAgentIdRef.current === agentId) return;
     setConfig(createConfigFromAgent(agent));
+    acknowledgedSensitiveRef.current =
+      (agent.sensitiveWordConfig as SensitiveWordConfig | null | undefined) ?? null;
     hydratedRef.current = true;
-  }, [agent, createConfigFromAgent]);
+    hydratedAgentIdRef.current = agentId;
+    sensitiveEditVersionRef.current = 0;
+    setSensitiveDirty(false);
+  }, [agent, agentId, createConfigFromAgent]);
+
+  useEffect(() => {
+    if (
+      !hydratedRef.current ||
+      hydratedAgentIdRef.current !== agentId ||
+      !agentId ||
+      !config.sensitiveWordConfig ||
+      !sensitiveDirty
+    ) {
+      flushSensitiveSaveRef.current = async () => true;
+      return;
+    }
+    const draft = hydrateSensitiveWordDraft(config.sensitiveWordConfig);
+    flushSensitiveSaveRef.current = async () => false;
+    const requestResult = buildSensitiveWordRequest(draft);
+    const acknowledged = hydrateSensitiveWordDraft(acknowledgedSensitiveRef.current);
+    const switchOnlyDraft =
+      draft.enabled !== acknowledged.enabled ||
+      draft.applyToReasoning !== acknowledged.applyToReasoning
+        ? { ...draft, rules: acknowledged.rules }
+        : draft;
+    const saveResult = requestResult.request
+      ? requestResult
+      : draft.enabled !== acknowledged.enabled ||
+          draft.applyToReasoning !== acknowledged.applyToReasoning
+        ? buildSensitiveWordRequest(switchOnlyDraft)
+        : requestResult;
+    if (!saveResult.request) return;
+    if (
+      JSON.stringify({ ...draft, revision: acknowledged.revision }) === JSON.stringify(acknowledged)
+    ) {
+      setSensitiveDirty(false);
+      flushSensitiveSaveRef.current = async () => true;
+      return;
+    }
+
+    const capturedAgentId = agentId;
+    const capturedEditVersion = sensitiveEditVersionRef.current;
+    let flushPromise: Promise<boolean> | null = null;
+    const flush = () => {
+      if (flushPromise) return flushPromise;
+      flushPromise = sensitiveSaveQueueRef.current
+        .enqueue(`${capturedAgentId}:${capturedEditVersion}`, async () => {
+          let savedCurrentDraft = false;
+          const latestAcknowledged = hydrateSensitiveWordDraft(acknowledgedSensitiveRef.current);
+          const latestDraft = hydrateSensitiveWordDraft(config.sensitiveWordConfig);
+          const switchChanged =
+            latestDraft.enabled !== latestAcknowledged.enabled ||
+            latestDraft.applyToReasoning !== latestAcknowledged.applyToReasoning;
+          const latestValidation = buildSensitiveWordRequest({
+            ...latestDraft,
+            revision: latestAcknowledged.revision,
+          });
+          const latestRequest = latestValidation.request
+            ? latestValidation
+            : switchChanged
+              ? buildSensitiveWordRequest({
+                  ...latestDraft,
+                  revision: latestAcknowledged.revision,
+                  rules: latestAcknowledged.rules,
+                })
+              : latestValidation;
+          if (!latestRequest.request) return;
+          const savedRules = latestValidation.request
+            ? latestDraft.rules
+            : latestAcknowledged.rules;
+          const keptInvalidDraft = !latestValidation.request && switchChanged;
+          const saved = await updateAgentSensitiveWordConfig(
+            capturedAgentId,
+            latestRequest.request,
+          );
+          if (capturedAgentId === activeAgentIdRef.current) {
+            acknowledgedSensitiveRef.current = saved;
+            savedCurrentDraft = capturedEditVersion === sensitiveEditVersionRef.current;
+            if (savedCurrentDraft && !keptInvalidDraft) setSensitiveDirty(false);
+            setConfig((current) => ({
+              ...current,
+              sensitiveWordConfig: reconcileSensitiveWordSave({
+                current: current.sensitiveWordConfig,
+                saved,
+                savedRules,
+                isCurrentEdit: savedCurrentDraft,
+                keepInvalidDraft: keptInvalidDraft,
+              }),
+            }));
+            setLastSavedAt(new Date());
+            setSensitiveSaveError(false);
+          }
+          savedCurrentDraft = savedCurrentDraft && !keptInvalidDraft;
+          return savedCurrentDraft;
+        })
+        .catch((error) => {
+          if (capturedAgentId === activeAgentIdRef.current) {
+            setSensitiveSaveError(true);
+            setSensitiveDirty(true);
+          }
+          console.error("Failed to save sensitive word config:", error);
+          return false;
+        });
+      return flushPromise;
+    };
+    flushSensitiveSaveRef.current = flush;
+    const timer = window.setTimeout(() => void flush(), 800);
+    return () => window.clearTimeout(timer);
+  }, [agentId, config.sensitiveWordConfig, sensitiveDirty]);
+
+  useEffect(() => {
+    if (navigationBlocker.state !== "blocked") return;
+    void flushSensitiveSaveRef.current().then((saved) => {
+      if (saved) {
+        navigationBlocker.proceed();
+        return;
+      }
+      const discard = window.confirm("敏感词替换尚未保存。是否放弃本次修改并离开？");
+      if (discard) {
+        setSensitiveDirty(false);
+        navigationBlocker.proceed();
+      } else {
+        navigationBlocker.reset();
+      }
+    });
+  }, [navigationBlocker, sensitiveDirty]);
+
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      const acknowledged = hydrateSensitiveWordDraft(acknowledgedSensitiveRef.current);
+      const draft = hydrateSensitiveWordDraft(config.sensitiveWordConfig);
+      if (
+        !sensitiveDirty &&
+        JSON.stringify({ ...draft, revision: acknowledged.revision }) ===
+          JSON.stringify(acknowledged)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [config.sensitiveWordConfig, sensitiveDirty]);
+
+  const generalConfigFingerprint = useMemo(() => {
+    const { sensitiveWordConfig: _sensitiveWordConfig, ...generalConfig } = config;
+    return JSON.stringify(generalConfig);
+  }, [config]);
 
   useEffect(() => {
     if (!autoSave) return;
-    if (!hydratedRef.current) return;
+    if (!hydratedRef.current || hydratedAgentIdRef.current !== agentId) return;
     if (!agentId) return;
     if (skipNextAutoSaveRef.current) {
       skipNextAutoSaveRef.current = false;
@@ -444,9 +630,31 @@ export default function Configuration() {
       void saveConfigRef.current(config);
     }, 800);
     return () => window.clearTimeout(t);
-  }, [agentId, autoSave, config]);
+    // Sensitive-word changes have their own revisioned endpoint and save queue.
+  }, [agentId, autoSave, generalConfigFingerprint]);
 
   const publishLoading = publishSquareMutation.isPending || unpublishSquareMutation.isPending;
+
+  const reloadSensitiveWordConfig = useCallback(async () => {
+    const capturedAgentId = agentId;
+    const result = await refetchAgentDetail();
+    if (
+      result.error ||
+      !result.data ||
+      capturedAgentId !== activeAgentIdRef.current ||
+      result.data.id !== capturedAgentId
+    ) {
+      setSensitiveSaveError(true);
+      return;
+    }
+    const reloaded =
+      (result.data.sensitiveWordConfig as SensitiveWordConfig | null | undefined) ?? null;
+    acknowledgedSensitiveRef.current = reloaded;
+    sensitiveEditVersionRef.current += 1;
+    setConfig((current) => ({ ...current, sensitiveWordConfig: reloaded }));
+    setSensitiveDirty(false);
+    setSensitiveSaveError(false);
+  }, [agentId, refetchAgentDetail]);
 
   const handleConfirmSquarePublish = useCallback(
     async (publishToSquare: boolean, tagIds?: string[], allowCopy?: boolean) => {
@@ -509,9 +717,11 @@ export default function Configuration() {
                     </>
                   )}
 
-                  {!isSaving && saveError && <span className="text-red-500">保存失败</span>}
+                  {!isSaving && (saveError || sensitiveSaveError) && (
+                    <span className="text-red-500">保存失败</span>
+                  )}
 
-                  {!isSaving && !saveError && lastSavedAt && (
+                  {!isSaving && !saveError && !sensitiveSaveError && lastSavedAt && (
                     <span>草稿已保存于 {formatTime(lastSavedAt)}</span>
                   )}
                 </div>
@@ -631,8 +841,38 @@ export default function Configuration() {
                     />
                     <SensitiveWordFilterConfig
                       value={config.sensitiveWordConfig}
-                      onChange={(v) => updateConfig("sensitiveWordConfig", v)}
+                      onChange={(v) => {
+                        sensitiveEditVersionRef.current += 1;
+                        setSensitiveDirty(true);
+                        updateConfig("sensitiveWordConfig", v);
+                      }}
                     />
+                    {sensitiveSaveError && sensitiveDirty ? (
+                      <div className="border-destructive/40 bg-destructive/5 flex items-center justify-between rounded-md border px-3 py-2 text-xs">
+                        <span>敏感词替换尚未保存，请修正规则或重试。</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setConfig((current) => ({
+                              ...current,
+                              sensitiveWordConfig: { ...current.sensitiveWordConfig! },
+                            }))
+                          }
+                        >
+                          重试
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void reloadSensitiveWordConfig()}
+                        >
+                          重新加载
+                        </Button>
+                      </div>
+                    ) : null}
                     <ChatAvatar
                       value={config.chatAvatar}
                       enabled={config.chatAvatarEnabled}
@@ -682,7 +922,7 @@ export default function Configuration() {
                 voiceConfig={config.voiceConfig ?? null}
                 showConversationContext={config.showContext}
                 showReference={config.showReference}
-                openingStatement={config.openingStatement}
+                openingStatement={openingStatementForDebug}
                 openingQuestions={config.openingQuestions}
                 quickCommands={config.quickCommands.map((x) => ({
                   name: x.name,

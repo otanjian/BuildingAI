@@ -14,6 +14,7 @@ import { Injectable } from "@nestjs/common";
 import { generateId } from "ai";
 
 import type { ListAgentConversationsDto } from "../dto/web/chat/list-agent-conversations.dto";
+import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
 import { AgentChatMessageService } from "./agent-chat-message.service";
 
 export type AgentChatRecordWithUser = AgentChatRecord & {
@@ -350,10 +351,16 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         );
         const lastMessage = recentMessages.at(-1);
 
+        const agent = await this.agentRepository.findOne({ where: { id: params.agentId } });
+        if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
+        const projectedContent = createSensitiveWordFilter(
+            agent.sensitiveWordConfig,
+            agent.id,
+        ).filterText(trimmed);
         const message: ChatUIMessage = {
             id: generateId(),
             role: "assistant",
-            parts: [{ type: "text", text: trimmed }],
+            parts: [{ type: "text", text: projectedContent }],
             metadata: {
                 source: "operator",
                 operatorId: params.operatorId,

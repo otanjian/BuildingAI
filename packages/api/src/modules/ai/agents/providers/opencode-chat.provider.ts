@@ -41,7 +41,8 @@ import { extractOpencodePermissionAsk } from "../utils/opencode-permission";
 import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
 import { mergeOpencodeTurnMetadata } from "../utils/opencode-turn-status";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
-import { createSensitiveWordWriterFromFilter } from "../utils/sensitive-word-stream";
+import { projectAssistantParts } from "../utils/sensitive-word-projector";
+import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
     write: (part: Record<string, any>) => void;
@@ -158,6 +159,9 @@ export class OpencodeChatProvider {
                 );
             }
         }
+        const policyFilter =
+            params.sensitiveWordFilter ??
+            createSensitiveWordFilter(agent.sensitiveWordConfig, agent.id);
 
         const stream = createUIMessageStream({
             execute: async ({ writer }) => {
@@ -200,13 +204,7 @@ export class OpencodeChatProvider {
                 let turnHandle: ReturnType<OpencodeTurnRunnerService["start"]> | undefined;
                 let timedOut = false;
 
-                const sensitiveWordFilter = createSensitiveWordFilter(agent.sensitiveWordConfig);
-                const filteredWriter = createSensitiveWordWriterFromFilter(
-                    { write: safeWrite },
-                    sensitiveWordFilter,
-                    agent.sensitiveWordConfig?.applyToReasoning !== false,
-                );
-
+                const sensitiveWordFilter = policyFilter;
                 const billingRule = await this.getBillingRule();
                 const shouldCharge = params.isDebug !== true;
                 if (shouldCharge && params.userId && billingRule) {
@@ -217,7 +215,7 @@ export class OpencodeChatProvider {
                     chunks: ReturnType<OpencodeAssistantPartRouter["onDelta"]>,
                 ) => {
                     for (const chunk of chunks) {
-                        filteredWriter.write(chunk as any);
+                        safeWrite(chunk as any);
                     }
                 };
 
@@ -622,21 +620,13 @@ export class OpencodeChatProvider {
                             });
 
                             const toolCallParts = Array.from(toolParts.values());
-                            const reasoningParts = partRouter
-                                .getPersistedReasoningParts()
-                                .map((part) => ({
-                                    ...part,
-                                    text: sensitiveWordFilter.filterText(part.text),
-                                }));
-                            const filteredFullText = sensitiveWordFilter.filterText(
-                                partRouter.fullText,
-                            );
+                            const reasoningParts = partRouter.getPersistedReasoningParts();
                             const responseParts: any[] = [...reasoningParts, ...toolCallParts];
                             if (
                                 partRouter.fullText ||
                                 (toolCallParts.length === 0 && reasoningParts.length === 0)
                             ) {
-                                responseParts.push({ type: "text", text: filteredFullText });
+                                responseParts.push({ type: "text", text: partRouter.fullText });
                             }
                             if (htmlArtifact) {
                                 responseParts.push({
@@ -683,6 +673,7 @@ export class OpencodeChatProvider {
                                     lastUser: lastUserMessage,
                                     savedUserMessageId: earlySavedUserMessageId,
                                     responseMessage,
+                                    sensitiveWordFilter,
                                     usage,
                                     userConsumedPower,
                                     metadata: {
@@ -771,7 +762,15 @@ export class OpencodeChatProvider {
             },
         });
 
-        pipeUIMessageStreamToResponse({ stream, response });
+        pipeUIMessageStreamToResponse({
+            stream: stream.pipeThrough(
+                createSensitiveWordTransformStreamFromFilter(
+                    policyFilter,
+                    policyFilter.policy.applyToReasoning,
+                ),
+            ),
+            response,
+        });
     }
 
     private async resolveLocalConversationId(
@@ -1006,6 +1005,7 @@ export class OpencodeChatProvider {
         /** When set, skip creating the user message (already persisted earlier this turn). */
         savedUserMessageId?: string;
         responseMessage: UIMessage;
+        sensitiveWordFilter: ReturnType<typeof createSensitiveWordFilter>;
         usage?: ChatMessageUsage;
         userConsumedPower?: number;
         metadata?: Record<string, any>;
@@ -1017,6 +1017,7 @@ export class OpencodeChatProvider {
             lastUser,
             savedUserMessageId,
             responseMessage,
+            sensitiveWordFilter,
             usage,
             userConsumedPower,
         } = params;
@@ -1048,6 +1049,11 @@ export class OpencodeChatProvider {
             anonymousIdentifier: chatParams.anonymousIdentifier,
             message: {
                 ...(responseMessage as ChatUIMessage),
+                parts: projectAssistantParts(
+                    responseMessage.parts as Record<string, any>[],
+                    sensitiveWordFilter,
+                    sensitiveWordFilter.policy.applyToReasoning,
+                ),
                 ...(usage ? { usage } : {}),
                 ...(userConsumedPower != null ? { userConsumedPower } : {}),
             } as ChatUIMessage,

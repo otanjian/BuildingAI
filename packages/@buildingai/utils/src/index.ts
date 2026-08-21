@@ -17,5 +17,6 @@ export * from "./message-content.utils.js";
 export * from "./parse-package-name.js";
 export * from "./path-validator.js";
 export * from "./security.js";
+export * from "./sensitive-word-config.js";
 export * from "./stream-utils.js";
 export * from "./version.js";
