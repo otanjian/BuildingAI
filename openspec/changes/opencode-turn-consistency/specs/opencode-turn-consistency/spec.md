@@ -43,10 +43,6 @@ The system MUST accept exactly one current user command under client-generated c
 - **WHEN** an accepted turn loses its original API process before an OpenCode prompt is sent
 - **THEN** a recovery worker reconstructs the same validated prompt, system instructions, and model selection from the persisted credential-free dispatch snapshot and persists an artifact baseline before any prompt is sent
 
-#### Scenario: Session creation response is lost
-- **WHEN** OpenCode creates the first session but the API process loses the response or exits before persisting the mapping
-- **THEN** recovery finds the unprompted session by the accepted turn receipt, reuses exactly one matching session, and removes duplicate unmapped matches instead of creating a context fork
-
 #### Scenario: OpenCode runtime binding changes
 - **WHEN** the endpoint or workspace binding no longer matches the fingerprint persisted for an accepted turn or mapped session
 - **THEN** the system fails explicitly and MUST NOT send the turn or a control request to the mismatched runtime

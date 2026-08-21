@@ -37,7 +37,7 @@ Add `ai_agent_opencode_turn` with a UUID primary key and these normalized respon
 | Identity | client-generated `id` (also the idempotency key), `conversation_id`, `request_hash` |
 | Dispatch | credential-free `dispatch_snapshot`, nullable `artifact_baseline`, `runtime_config_hash` |
 | Message links | `input_message_id`, nullable `assistant_message_id`, `opencode_user_message_id` |
-| Lifecycle | `status`, `last_activity_at`, nullable internal `remote_evidence_hash`, terminal `error_code/error_message` |
+| Lifecycle | `status`, `last_activity_at`, terminal `error_code/error_message` |
 | Lease/control | `lease_token`, `lease_expires_at`, `cancel_requested_at` |
 | Times | `started_at`, `completed_at`, standard created/updated timestamps |
 
@@ -100,9 +100,9 @@ accepted/running -> committing -> cancelled
 accepted/running/committing -> failed
 ```
 
-`cancel_requested_at` is a control flag, not another public state, and is exposed only as `cancelRequested` in authorized status. State-changing commands lock the turn row. Every worker-owned transition, including an active same-state retry, requires the exact current `lease_token`; terminal idempotency uses a separate read/no-op path after the terminal row has cleared its lease. Transition patches expose only lifecycle evidence fields and cannot replace turn identity, the frozen dispatch snapshot, or lease ownership. A freshly generated `lease_token` fences worker writes so an expired worker cannot mutate a turn after another worker claims it. `session.idle` only causes `running -> committing`. A cancellation or timeout remains active until exact remote evidence shows the shared session settled; an ambiguous abort never opens the conversation for another turn. A turn is active until its terminal database transaction commits.
+`cancel_requested_at` is a control flag, not another public state, and is exposed only as `cancelRequested` in authorized status. State-changing commands lock the turn row. A freshly generated `lease_token` fences worker writes so an expired worker cannot mutate a turn after another worker claims it. `session.idle` only causes `running -> committing`. A cancellation or timeout remains active until exact remote evidence shows the shared session settled; an ambiguous abort never opens the conversation for another turn. A turn is active until its terminal database transaction commits.
 
-The worker stores a compact hash of the last normalized remote evidence in `remote_evidence_hash` and advances `last_activity_at` only when that hash changes: status transition, session update time, exact descendant/message change, or a new permission/question request. The hash contains no prompt, response, credential, or interaction content and is cleared at terminal commit. Re-reading the same `busy` status does not count as activity, including after process restart. After the inactivity threshold, the worker performs one final bounded evidence read and may abort a stale-busy exact session; a `retry` with a future provider deadline remains valid until that deadline plus grace. There is no unconditional wall-clock abort for a productive turn. Pending permissions preserve the existing automatic server policy. A pending question is rejected, the exact session is stopped if needed, and the turn commits a visible unsupported-interaction failure; interactive question state is not part of this capability. A turn stopped before dispatch may enter `committing` without an artifact baseline only when `cancel_requested_at` is present and `started_at` is still null; every other running or committing turn requires the persisted baseline. Every terminal transition clears the lease, `remote_evidence_hash`, and `cancel_requested_at` together with the recovery snapshots.
+The worker advances `last_activity_at` only when remote evidence changes: status transition, session update time, exact descendant/message change, or a new permission/question request. Re-reading the same `busy` status does not count as activity. After the inactivity threshold, the worker performs one final bounded evidence read and may abort a stale-busy exact session; a `retry` with a future provider deadline remains valid until that deadline plus grace. There is no unconditional wall-clock abort for a productive turn. Pending permissions preserve the existing automatic server policy. A pending question is rejected, the exact session is stopped if needed, and the turn commits a visible unsupported-interaction failure; interactive question state is not part of this capability.
 
 ### 5. Commit the terminal outcome in one PostgreSQL transaction
 
@@ -119,13 +119,13 @@ Any error rolls back every step. Retrying locks the same turn; a terminal turn i
 
 ### 6. Recover expired leases with remote evidence
 
-An in-process fast path starts the accepted turn when the instance has capacity. A small configured per-instance worker pool bounds concurrent observation loops. A periodic reconciler claims no more rows than its free slots from active rows whose lease is absent/expired using `FOR UPDATE SKIP LOCKED`, sets a short renewable lease, and executes the same worker. Selection and token assignment share one caller-owned PostgreSQL transaction; the repository rejects non-transactional claim calls and compares the selected row's original lease state during assignment. Excess turns remain claimable by another instance or cycle. This is a database queue, not a second job system or a product-level acceptance quota.
+An in-process fast path starts the accepted turn when the instance has capacity. A small configured per-instance worker pool bounds concurrent observation loops. A periodic reconciler claims no more rows than its free slots from active rows whose lease is absent/expired using `FOR UPDATE SKIP LOCKED`, sets a short renewable lease, and executes the same worker. Excess turns remain claimable by another instance or cycle. This is a database queue, not a second job system or a product-level acceptance quota.
 
 Recovery matrix:
 
 | Local evidence | OpenCode evidence | Action |
 |---|---|---|
-| accepted, no session | matching runtime binding | recover an unprompted session by the turn receipt or create/map one, then correlation-check and dispatch from the persisted snapshot |
+| accepted, no session | matching runtime binding | create/map session, then correlation-check and dispatch from the persisted snapshot |
 | accepted/active | runtime binding mismatch | perform no remote action; commit an explicit configuration-change failure |
 | active with missing mapped session | prior local turns exist | do not rebuild context; commit an explicit session-lost failure requiring a new conversation |
 | active with session | busy/retry | keep bounded status polling; never abort because the prior process disappeared |
@@ -136,29 +136,6 @@ Recovery matrix:
 | committing | exact descendants not yet readable | keep active and retry within the bounded settle/recovery policy |
 | ambiguous dispatch | exact user ID exists | observe without redispatch |
 | ambiguous dispatch | exact user ID absent after grace period | dispatch once with stored ID |
-
-Both `accepted` and `running` recovery claims pass through the same stable-user-message
-correlation before status observation. This is required because the first dispatch persists
-`running` before `prompt_async`; process loss or an ambiguous response in that interval must
-not bypass correlation on restart. A correlated remote user message continues into normal
-observation in the same bounded step, while an absent message waits through the ambiguity
-window and then reuses the stored ID.
-
-The first remote session is created with the accepted `turnId` as a non-secret OpenCode
-metadata receipt. Before creating it, recovery searches for the exact receipt, reuses one
-matching unprompted session, and removes duplicate unmapped matches. This closes the
-create-response/persist-mapping crash window without adding a local outbox, another table, or
-a provider-specific session ledger. Stable prompt `messageID` is the provider idempotency key;
-the deployed OpenCode 1.17.13 contract was fault-probed with duplicate asynchronous submissions
-and produced one user message plus one assistant descendant.
-
-Deterministic recovery failures are not left active for endless retries. A changed runtime
-binding, a lost mapped session, or an invalid/missing frozen snapshot commits one non-blank,
-zero-usage `failed` projection with the current lease through the existing atomic terminal
-transaction. Transient transport/deadline failures and lease loss remain retryable. This uses
-the already allowed `accepted/running -> failed` state-machine edges and does not add another
-recovery state or error queue. A pre-dispatch cancellation is also inherently zero-usage and
-can commit without reading billing fields from a damaged snapshot.
 
 History endpoints never invoke this matrix. Stop locks the exact turn and sets `cancel_requested_at` only in `accepted` or `running`; in `committing` or a terminal state it returns the current result without remote action. The lease owner performs the remote abort, observes remote settlement, and only then commits one local cancellation outcome. A retry after an ambiguous abort response may repeat the remote abort call, but the turn remains active and cannot target a newer turn or duplicate local effects. The same settlement rule applies to timeout and unsupported-question aborts.
 
