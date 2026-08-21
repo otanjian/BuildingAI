@@ -9,10 +9,14 @@ Sensitive-word replacement is already used on all agent types, so ambiguous conf
 ## What Changes
 
 - Replace the shared word-list/global-value editor with explicit per-word replacement rules.
-- Preserve existing `words` plus `replacement` JSON configurations and normalize them into rule mappings without a database migration.
+- Preserve existing `words` plus `replacement` JSON configurations and dual-write a fail-closed legacy mask so rolling deploys and rollbacks never disable replacement.
 - Support distinct values per word and intentional removal through an empty replacement value.
 - Reject blank words, case-insensitive duplicate words, oversized rules, and malformed nested configuration at the API boundary; surface equivalent validation in the UI.
-- Keep text and reasoning stream state independent, flush each channel at its own end event, and make live output match persisted history while respecting the reasoning toggle.
+- Isolate stream state by part type and ID, flush safely on part and terminal boundaries, and make live output match persisted history while respecting the reasoning toggle.
+- Apply the policy to chat replies and assistant-generated display strings, including model text/reasoning, quick-command, annotation and operator replies, follow-up suggestions, and top-level errors, while leaving tool payloads and artifacts untouched.
+- Close public-read bypasses by projecting opening content and never returning the dictionary from ordinary detail, published detail, or square-list responses.
+- Preserve replacement invariants during tool-approval continuations and save sensitive rules through a revisioned subresource that is isolated from full-page autosave.
+- Make the sensitive JSON column immutable to ordinary ORM updates so unrelated saves and delayed third-party synchronization cannot restore a stale rule revision.
 - Keep matching literal, ASCII case-insensitive, longest-first, non-overlapping, and non-cascading.
 
 ## Capabilities
@@ -30,7 +34,7 @@ _None._
 - Shared agent config types and nested API DTO validation.
 - Sensitive-word matching engine and AI SDK stream adapters.
 - Agent configuration UI and autosave normalization.
-- Existing provider wiring remains in place and continues using the shared engine.
+- Five provider HTTP stream boundaries, assistant-message persistence, and agent update paths.
 - No new dependency, table, column, or destructive data migration.
 
 ## Non-goals
