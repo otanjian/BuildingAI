@@ -7,6 +7,8 @@ import type {
     ListSquareAgentsParams,
     PublishedAgentDetail,
     SpeechOptions,
+    SensitiveWordConfig,
+    SensitiveWordConfigUpdate,
     TranscribeResult,
     UpdateAgentConfigParams,
 } from "@buildingai/types";
@@ -81,6 +83,16 @@ export async function updateAgentConfig(
     params: UpdateAgentConfigParams,
 ): Promise<Agent> {
     return apiHttpClient.patch<Agent>(`/ai-agents/${agentId}`, params);
+}
+
+export async function updateAgentSensitiveWordConfig(
+    agentId: string,
+    params: SensitiveWordConfigUpdate,
+): Promise<SensitiveWordConfig> {
+    return apiHttpClient.patch<SensitiveWordConfig>(
+        `/ai-agents/${agentId}/sensitive-word-config`,
+        params,
+    );
 }
 
 export async function getAgent(agentId: string): Promise<Agent> {

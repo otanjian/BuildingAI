@@ -75,6 +75,7 @@ import { OpencodeTurnWorkerService } from "./services/opencode-turn-worker.servi
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
+import { SensitiveWordConfigService } from "./services/sensitive-word-config.service";
 @Module({
     imports: [
         TypeOrmModule.forFeature([
@@ -115,6 +116,7 @@ import { OpencodeWorkspaceService } from "./services/opencode-workspace.service"
         AgentAliasRewriteMiddleware,
         // Agent CRUD
         AgentsService,
+        SensitiveWordConfigService,
         AgentAnnotationService,
         AgentDashboardService,
         // Chat completion

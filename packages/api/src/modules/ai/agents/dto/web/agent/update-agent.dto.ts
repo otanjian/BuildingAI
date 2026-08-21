@@ -6,7 +6,6 @@ import type {
     ModelConfig,
     ModelRouting,
     QuickCommandConfig,
-    SensitiveWordConfig,
     ThirdPartyIntegrationConfig,
     ToolConfig,
     VoiceConfig,
@@ -24,7 +23,10 @@ import {
     Max,
     Min,
     ValidateNested,
+    ValidateIf,
 } from "class-validator";
+
+import { SensitiveWordCompatibilityConfigDto } from "./sensitive-word-config.dto";
 
 export class MemoryConfigDto {
     @IsOptional()
@@ -159,8 +161,10 @@ export class UpdateAgentDto {
     annotationConfig?: AnnotationConfig;
 
     @IsOptional()
-    @IsObject()
-    sensitiveWordConfig?: SensitiveWordConfig;
+    @ValidateIf((_object, value) => value !== null)
+    @ValidateNested()
+    @Type(() => SensitiveWordCompatibilityConfigDto)
+    sensitiveWordConfig?: SensitiveWordCompatibilityConfigDto | null;
 
     @IsOptional()
     @IsInt()

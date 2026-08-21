@@ -4,6 +4,7 @@ import { AiModel, Datasets, User } from "@buildingai/db/entities";
 import { In, Repository } from "@buildingai/db/typeorm";
 import { BuildFileUrl } from "@buildingai/decorators";
 import { Playground } from "@buildingai/decorators/playground.decorator";
+import { HttpErrorFactory } from "@buildingai/errors";
 import { AgentApiKey } from "@common/decorators/agent-public-access.decorator";
 import { WebController } from "@common/decorators/controller.decorator";
 import { AiModelService } from "@modules/ai/model/services/ai-model.service";
@@ -18,35 +19,8 @@ import {
     deriveUploadTypesFromModelFeatures,
     type UploadMediaType,
 } from "../../utils/derive-upload-types";
+import { projectPublishedAgent } from "../../utils/agent-public-projection";
 import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
-
-const SENSITIVE_KEYS = [
-    "createBy",
-    "squareReviewedBy",
-    "squareReviewedAt",
-    "thirdPartyIntegration",
-    "sensitiveWordConfig",
-] as const;
-
-function toPublishedDetail(
-    agent: Record<string, unknown>,
-    stats: { conversationCount: number; messageCount: number },
-) {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(agent)) {
-        if (SENSITIVE_KEYS.includes(k as (typeof SENSITIVE_KEYS)[number])) continue;
-        if (k === "publishConfig" && v && typeof v === "object" && !Array.isArray(v)) {
-            const config = { ...(v as Record<string, unknown>) };
-            delete config.apiKey;
-            out[k] = config;
-            continue;
-        }
-        out[k] = v;
-    }
-    out.conversationCount = stats.conversationCount;
-    out.messageCount = stats.messageCount;
-    return out;
-}
 
 @WebController("ai-agents")
 export class AgentPublishWebController {
@@ -75,11 +49,18 @@ export class AgentPublishWebController {
     @AgentApiKey()
     @BuildFileUrl(["**.avatar", "**.chatAvatar", "**.creator.avatar"])
     async getPublishDetail(@Param("id") agentId: string, @Playground() playground: UserPlayground) {
-        const agent = await this.agentsService.getAgentDetail(playground, agentId);
+        const agent = await this.agentsService.getAgentByIdOrThrow(agentId);
+        if (!agent.publishedToSquare && agent.createBy !== playground.id) {
+            throw HttpErrorFactory.notFound("智能体不存在或未发布");
+        }
         const stats = await this.agentChatRecordService.getStats(agentId, playground.id);
         const raw = agent as unknown as Record<string, unknown>;
-        const out = toPublishedDetail(raw, stats) as Record<string, unknown>;
-        out.durableOpencodeTurnsEnabled = isOpencodeDurableTurnsEnabled(agent);
+        const out = {
+            ...projectPublishedAgent(agent),
+            conversationCount: stats.conversationCount,
+            messageCount: stats.messageCount,
+            durableOpencodeTurnsEnabled: isOpencodeDurableTurnsEnabled(agent),
+        } as Record<string, unknown>;
         const createBy = raw.createBy as string | undefined;
         if (createBy) {
             const user = await this.userRepository.findOne({

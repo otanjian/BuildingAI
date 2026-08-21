@@ -244,18 +244,41 @@ export interface AnnotationConfig {
     vectorModelId?: string;
 }
 
+/** A single literal sensitive-word replacement rule. */
+export interface SensitiveWordReplacementRule {
+    /** Literal source word. */
+    word: string;
+    /** Replacement text. An empty string intentionally removes the match. */
+    replacement: string;
+}
+
 /**
- * 敏感词过滤配置
+ * Sensitive-word replacement configuration.
+ *
+ * `rules` and `revision` are authoritative for canonical configurations.
+ * `words` and `replacement` are retained as a deprecated compatibility shadow.
  */
 export interface SensitiveWordConfig {
     /** 是否开启敏感词替换 */
     enabled: boolean;
-    /** 敏感词列表（支持中英文，Latin 匹配大小写不敏感） */
-    words: string[];
-    /** 替换串，默认 "***" */
+    /** Authoritative per-word replacement rules. */
+    rules?: SensitiveWordReplacementRule[];
+    /** Server-managed canonical revision. Legacy configurations use revision 0 implicitly. */
+    revision?: number;
+    /** @deprecated Compatibility word list for legacy clients and servers. */
+    words?: string[];
+    /** @deprecated Compatibility replacement value. Canonical storage always uses "***". */
     replacement?: string;
     /** 是否同时过滤深度思考（reasoning）输出，默认 true */
     applyToReasoning?: boolean;
+}
+
+/** Canonical sensitive-word subresource request. */
+export interface SensitiveWordConfigUpdate {
+    enabled: boolean;
+    rules: SensitiveWordReplacementRule[];
+    applyToReasoning: boolean;
+    expectedRevision: number;
 }
 
 /**
@@ -440,7 +463,6 @@ export type UpdateAgentConfigParams = Partial<
         | "voiceConfig"
         | "toolConfig"
         | "annotationConfig"
-        | "sensitiveWordConfig"
         | "maxSteps"
         | "memoryConfig"
         | "datasetIds"
@@ -458,10 +480,26 @@ export type UpdateAgentConfigParams = Partial<
     createMode?: "direct" | "coze" | "dify" | "opencode";
 };
 
-export interface PublishedAgentDetail extends Omit<
-    AgentCore,
-    "createBy" | "squareReviewedBy" | "squareReviewedAt" | "thirdPartyIntegration" | "creator"
-> {
+export interface PublishedAgentDetail {
+    id: string;
+    name: string;
+    description?: string | null;
+    tags?: Array<{ id: string; name: string }>;
+    avatar?: string | null;
+    chatAvatar?: string | null;
+    chatAvatarEnabled?: boolean;
+    createMode?: "direct" | "coze" | "dify" | "opencode" | null;
+    showContext?: boolean;
+    showReference?: boolean;
+    enableFileUpload?: boolean;
+    openingStatement?: string | null;
+    openingQuestions?: string[] | null;
+    formFields?: FormFieldConfig[] | null;
+    modelConfig?: { id?: string } | null;
+    voiceConfig?: VoiceConfig | null;
+    createdAt: string;
+    updatedAt: string;
+    allowCopy: boolean;
     conversationCount: number;
     messageCount: number;
     durableOpencodeTurnsEnabled?: boolean;
@@ -496,4 +534,7 @@ export interface PublishedAgentDetail extends Omit<
             supportedUploadTypes: Array<"image" | "video" | "audio" | "file">;
         };
     }>;
+    uploadCapability?: {
+        supportedUploadTypes: Array<"image" | "video" | "audio" | "file">;
+    };
 }

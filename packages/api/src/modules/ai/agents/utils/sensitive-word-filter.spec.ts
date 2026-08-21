@@ -1,3 +1,5 @@
+import { Logger } from "@nestjs/common";
+
 import { createSensitiveWordFilter, SensitiveWordFilter } from "./sensitive-word-filter";
 
 describe("SensitiveWordFilter (batch)", () => {
@@ -88,6 +90,84 @@ describe("SensitiveWordFilter (batch)", () => {
         expect(filter.filterText("敏感词")).toBe("***词");
         expect(filter.filterText("敏 感")).toBe("敏 感");
     });
+
+    it("uses a distinct replacement for every canonical rule", () => {
+        const filter = createSensitiveWordFilter({
+            enabled: true,
+            revision: 1,
+            rules: [
+                { word: "机密", replacement: "【内部信息】" },
+                { word: "apikey", replacement: "***" },
+            ],
+            words: ["机密", "apikey"],
+            replacement: "***",
+        });
+        expect(filter.filterText("机密 APIKEY 机密")).toBe("【内部信息】 *** 【内部信息】");
+    });
+
+    it("supports intentional removal with an empty replacement", () => {
+        const filter = createSensitiveWordFilter({
+            enabled: true,
+            revision: 1,
+            rules: [{ word: "remove", replacement: "" }],
+            words: ["remove"],
+            replacement: "***",
+        });
+        expect(filter.filterText("a remove b")).toBe("a  b");
+    });
+
+    it("uses the longest same-start rule and its own replacement", () => {
+        const filter = createSensitiveWordFilter({
+            enabled: true,
+            revision: 1,
+            rules: [
+                { word: "敏感", replacement: "SHORT" },
+                { word: "敏感词", replacement: "LONG" },
+            ],
+            words: ["敏感", "敏感词"],
+            replacement: "***",
+        });
+        expect(filter.filterText("敏感词")).toBe("LONG");
+    });
+
+    it("does not cascade replacement output into another rule", () => {
+        const filter = createSensitiveWordFilter({
+            enabled: true,
+            revision: 1,
+            rules: [
+                { word: "alpha", replacement: "beta" },
+                { word: "beta", replacement: "masked" },
+            ],
+            words: ["alpha", "beta"],
+            replacement: "***",
+        });
+        expect(filter.filterText("alpha beta")).toBe("beta masked");
+    });
+
+    it("logs only agent identity and reason codes for unsafe stored configuration", () => {
+        const warn = jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+
+        expect(() =>
+            createSensitiveWordFilter(
+                {
+                    enabled: true,
+                    revision: 2,
+                    rules: [{ word: "do-not-log", replacement: "also-private" } as any, null as any],
+                    words: ["do-not-log"],
+                    replacement: "unsafe-shared-value",
+                },
+                "agent-safe-id",
+            ),
+        ).toThrow("Sensitive word replacement configuration is invalid");
+
+        const diagnostic = String(warn.mock.calls.at(-1)?.[0]);
+        expect(diagnostic).toContain("agentId=agent-safe-id");
+        expect(diagnostic).toContain("canonical_rules_invalid");
+        expect(diagnostic).not.toContain("do-not-log");
+        expect(diagnostic).not.toContain("also-private");
+        expect(diagnostic).not.toContain("unsafe-shared-value");
+        warn.mockRestore();
+    });
 });
 
 describe("SensitiveWordFilter (streaming)", () => {
@@ -97,12 +177,11 @@ describe("SensitiveWordFilter (streaming)", () => {
             words: ["敏感词"],
         });
         const stream = filter.createStream();
-        // "这是敏": "这" is safe (no word starts there); "是敏" stays held back.
-        expect(stream.push("这是敏")).toEqual(["这"]);
-        expect(stream.push("感")).toEqual(["是"]);
+        expect(stream.push("这是敏")).toEqual(["这是"]);
+        expect(stream.push("感")).toEqual([]);
         const out = stream.push("词和后面");
-        expect(out.join("")).toBe("***和");
-        expect(stream.flush()).toEqual(["后面"]);
+        expect(out.join("")).toBe("***和后面");
+        expect(stream.flush()).toEqual([]);
     });
 
     it("streaming result equals batch result for the same corpus", () => {
@@ -141,23 +220,19 @@ describe("SensitiveWordFilter (streaming)", () => {
     it("flush emits trailing buffered text", () => {
         const filter = new SensitiveWordFilter({ enabled: true, words: ["敏感词"] });
         const stream = filter.createStream();
-        expect(stream.push("尾")).toEqual([]);
-        // "尾巴敏": "尾" is safe (no word starts with it); "巴敏" stays held back.
-        expect(stream.push("巴敏")).toEqual(["尾"]);
-        expect(stream.flush()).toEqual(["巴敏"]);
+        expect(stream.push("尾")).toEqual(["尾"]);
+        expect(stream.push("巴敏")).toEqual(["巴"]);
+        expect(stream.flush()).toEqual(["敏"]);
     });
 
     it("a word crossing the safe prefix boundary is fully held back", () => {
         const filter = new SensitiveWordFilter({ enabled: true, words: ["敏感词"] });
         const stream = filter.createStream();
-        expect(stream.push("前敏")).toEqual([]);
-        // "前敏" + "感": "前" is safe, "敏感" is held back (prefix of 敏感词).
-        expect(stream.push("感")).toEqual(["前"]);
-        // "敏感" + "词后": word 敏感词 now ends inside the holdback → nothing emits.
-        expect(stream.push("词后")).toEqual([]);
-        // "敏感词后" + "面": word is fully inside the flushed prefix → replaced.
-        expect(stream.push("面").join("")).toBe("***");
-        expect(stream.flush()).toEqual(["后面"]);
+        expect(stream.push("前敏")).toEqual(["前"]);
+        expect(stream.push("感")).toEqual([]);
+        expect(stream.push("词后")).toEqual(["***后"]);
+        expect(stream.push("面").join("")).toBe("面");
+        expect(stream.flush()).toEqual([]);
         // Streaming result equals the batch result for the whole corpus.
         expect(filter.filterText("前敏感词后面")).toBe("前***后面");
     });
@@ -165,6 +240,46 @@ describe("SensitiveWordFilter (streaming)", () => {
     it("disabled stream passes everything through", () => {
         const stream = createSensitiveWordFilter(null).createStream();
         expect(stream.push("敏感词")).toEqual(["敏感词"]);
+        expect(stream.flush()).toEqual([]);
+    });
+
+    it("streams canonical rules equivalently across every code-point split", () => {
+        const filter = createSensitiveWordFilter({
+            enabled: true,
+            revision: 1,
+            rules: [
+                { word: "敏感词", replacement: "SAFE" },
+                { word: "apikey", replacement: "" },
+            ],
+            words: ["敏感词", "apikey"],
+            replacement: "***",
+        });
+        const input = "😀前敏感词后APIKEY尾🎉";
+        const expected = filter.filterText(input);
+
+        for (let split = 0; split <= [...input].length; split += 1) {
+            const cps = [...input];
+            const stream = filter.createStream();
+            const output = [
+                ...stream.push(cps.slice(0, split).join("")),
+                ...stream.push(cps.slice(split).join("")),
+                ...stream.flush(),
+            ].join("");
+            expect(output).toBe(expected);
+        }
+    });
+
+    it("releases unrelated text immediately even with a long configured rule", () => {
+        const filter = createSensitiveWordFilter({
+            enabled: true,
+            revision: 1,
+            rules: [{ word: "a".repeat(128), replacement: "mask" }],
+            words: ["a".repeat(128)],
+            replacement: "***",
+        });
+        const stream = filter.createStream();
+
+        expect(stream.push("ordinary text")).toEqual(["ordinary text"]);
         expect(stream.flush()).toEqual([]);
     });
 });

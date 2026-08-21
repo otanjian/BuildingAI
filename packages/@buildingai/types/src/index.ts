@@ -60,6 +60,8 @@ export type {
     PublishedAgentDetail,
     QuickCommandConfig,
     SensitiveWordConfig,
+    SensitiveWordConfigUpdate,
+    SensitiveWordReplacementRule,
     SpeechOptions,
     ThirdPartyIntegrationConfig,
     TokenUsage,

@@ -16,6 +16,7 @@ import { CopyAgentFromSquareDto } from "../../dto/web/agent/copy-agent-from-squa
 import { CreateAgentDto } from "../../dto/web/agent/create-agent.dto";
 import { ListMyAgentsDto } from "../../dto/web/agent/list-my-agents.dto";
 import { ListSquareAgentsDto } from "../../dto/web/agent/list-square-agents.dto";
+import { UpdateSensitiveWordConfigDto } from "../../dto/web/agent/sensitive-word-config.dto";
 import { UpdateAgentDto } from "../../dto/web/agent/update-agent.dto";
 import { PublishToSquareDto } from "../../dto/web/publish/square-publish.dto";
 import {
@@ -23,6 +24,8 @@ import {
     AgentDashboardService,
 } from "../../services/agent-dashboard.service";
 import { AgentsService } from "../../services/agents.service";
+import { SensitiveWordConfigService } from "../../services/sensitive-word-config.service";
+import type { AgentSquareCardProjection } from "../../utils/agent-public-projection";
 
 const AGENT_MANAGE_PERMISSION = { code: "agent.manage", name: "管理智能体", description: "创建和管理自己的智能体" };
 
@@ -31,6 +34,7 @@ export class AgentsWebController {
     constructor(
         private readonly agentsService: AgentsService,
         private readonly agentDashboardService: AgentDashboardService,
+        private readonly sensitiveWordConfigService: SensitiveWordConfigService,
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
     ) {}
@@ -69,7 +73,7 @@ export class AgentsWebController {
         @Query() query: ListSquareAgentsDto,
     ): Promise<
         PaginationResult<
-            Agent & {
+            AgentSquareCardProjection & {
                 creator: { id: string; nickname: string | null; avatar: string | null } | null;
             }
         >
@@ -127,6 +131,16 @@ export class AgentsWebController {
         @Body() dto: UpdateAgentDto,
     ): Promise<Agent> {
         return this.agentsService.updateAgent(user, id, dto);
+    }
+
+    @Patch(":id/sensitive-word-config")
+    @Permissions(AGENT_MANAGE_PERMISSION)
+    async updateSensitiveWordConfig(
+        @Playground() user: UserPlayground,
+        @Param("id") id: string,
+        @Body() dto: UpdateSensitiveWordConfigDto,
+    ) {
+        return this.sensitiveWordConfigService.updateCanonical(user.id, id, dto);
     }
 
     @Post(":id/publish-to-square")
