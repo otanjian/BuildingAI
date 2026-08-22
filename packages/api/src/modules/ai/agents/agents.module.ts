@@ -72,6 +72,15 @@ import { OpencodeTurnRepository } from "./services/opencode-turn.repository";
 import { OpencodeTurnTerminalCommitService } from "./services/opencode-turn-terminal-commit";
 import { OpencodeTurnTelemetryService } from "./services/opencode-turn-telemetry.service";
 import { OpencodeTurnWorkerService } from "./services/opencode-turn-worker.service";
+import { OpencodeTurnProjectorService } from "./services/opencode-turn-projector.service";
+import {
+    OPENCODE_RUNTIME_EVENT_HUB,
+    OPENCODE_TURN_RECONCILER,
+    OPENCODE_TURN_PROJECTION_REFRESH,
+    OpencodeTurnEventsService,
+} from "./services/opencode-turn-events.service";
+import { OpencodeRuntimeEventHubService } from "./services/opencode-runtime-event-hub.service";
+import { OpencodeTurnProjectionRefreshService } from "./services/opencode-turn-projection-refresh.service";
 import { OpencodeSessionRecoverService } from "./services/opencode-session-recover.service";
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
@@ -152,6 +161,16 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
         OpencodeTurnReconcilerService,
         OpencodeTurnTerminalCommitService,
         OpencodeTurnTelemetryService,
+        OpencodeTurnProjectorService,
+        OpencodeTurnEventsService,
+        OpencodeRuntimeEventHubService,
+        OpencodeTurnProjectionRefreshService,
+        { provide: OPENCODE_RUNTIME_EVENT_HUB, useExisting: OpencodeRuntimeEventHubService },
+        { provide: OPENCODE_TURN_RECONCILER, useExisting: OpencodeTurnReconcilerService },
+        {
+            provide: OPENCODE_TURN_PROJECTION_REFRESH,
+            useExisting: OpencodeTurnProjectionRefreshService,
+        },
         OpencodeTurnWorkerService,
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,

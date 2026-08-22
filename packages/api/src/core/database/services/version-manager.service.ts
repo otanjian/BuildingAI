@@ -49,6 +49,7 @@ export class VersionManagerService implements OnModuleInit {
             const versionInfo = await this.versionDetector.detect();
 
             if (!versionInfo.needsUpgrade) {
+                await this.migrationRunner.runPendingMigrationsForVersion(versionInfo.current);
                 this.logger.log(`✅ Version is up to date: ${versionInfo.current}`);
                 return;
             }
@@ -107,7 +108,10 @@ export class VersionManagerService implements OnModuleInit {
      * 2. Execute upgrade script for this version
      * 3. Write version file to mark completion
      */
-    private async executeVersionUpgrade(fromVersion: string | null, version: string): Promise<void> {
+    private async executeVersionUpgrade(
+        fromVersion: string | null,
+        version: string,
+    ): Promise<void> {
         try {
             this.logger.log(`\n${"=".repeat(60)}`);
             this.logger.log(`🔄 Upgrading to version: ${version}`);

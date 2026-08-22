@@ -69,4 +69,37 @@ describe("subscribeOpencodeSessionEvents", () => {
     expect(last[0].info).toMatchObject({ id: "m1", role: "assistant" });
     expect(last[0].parts).toEqual([{ id: "p1", messageID: "m1", type: "text", text: "hi" }]);
   });
+
+  it("normalizes v2 question events whose payload is under data", async () => {
+    const encoder = new TextEncoder();
+    const body = [
+      'data: {"type":"question.v2.asked","properties":{"data":{"id":"q1","sessionID":"s1","questions":[{"question":"范围？","header":"范围","options":[]}]}}}\n\n',
+      'data: {"type":"question.v2.replied","properties":{"data":{"id":"q1","sessionID":"s1"}}}\n\n',
+    ]
+      .map((chunk) => encoder.encode(chunk))
+      .values();
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            const next = body.next();
+            return next.done ? { done: true } : { done: false, value: next.value };
+          },
+        }),
+      },
+    });
+
+    const questions: unknown[] = [];
+    await subscribeOpencodeSessionEvents({
+      url: "http://example.com/events",
+      headers: {},
+      signal: new AbortController().signal,
+      onQuestion: (question) => questions.push(question),
+    });
+
+    expect(questions[0]).toMatchObject({ data: { id: "q1", sessionID: "s1" } });
+    expect(questions[1]).toBeNull();
+  });
 });

@@ -1,6 +1,4 @@
-import type {
-    OpencodeSessionStatus,
-} from "../integrations/opencode-api.service";
+import type { OpencodeSessionStatus } from "../integrations/opencode-api.service";
 
 export type OpencodeTurnEvidence = {
     statusKey: string;
@@ -44,10 +42,9 @@ export type OpencodeTurnObservationDecision =
       }
     | { kind: "reply-permission"; activityChanged: boolean; requestId: string }
     | {
-          kind: "reject-question";
+          kind: "await-question";
           activityChanged: boolean;
           requestId: string;
-          errorCode: string;
       }
     | { kind: "abort-cancelled"; activityChanged: boolean };
 
@@ -64,12 +61,11 @@ export function decideOpencodeTurnObservation(
     }
 
     const questionId = input.pendingQuestionIds[0];
-    if (questionId && activityChanged) {
+    if (questionId) {
         return {
-            kind: "reject-question",
-            activityChanged: true,
+            kind: "await-question",
+            activityChanged,
             requestId: questionId,
-            errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
         };
     }
 

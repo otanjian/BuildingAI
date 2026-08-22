@@ -18,7 +18,55 @@ export type OpencodeTurnStatusResult = {
   startedAt: string | null;
   completedAt: string | null;
   lastActivityAt: string | null;
+  liveProjection?: Record<string, unknown> | null;
+  projectionVersion?: string;
+  projectionUpdatedAt?: string | null;
+  pendingQuestion?: OpencodePendingQuestion | null;
 };
+
+export type OpencodePendingQuestion = {
+  requestId: string;
+  sessionId: string;
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiple: boolean;
+    custom: boolean;
+  }>;
+};
+
+export function normalizeOpencodePendingQuestion(value: unknown): OpencodePendingQuestion | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const requestId = String(row.requestId ?? row.id ?? "");
+  const sessionId = String(row.sessionId ?? row.sessionID ?? "");
+  if (!requestId || !sessionId || !Array.isArray(row.questions)) return null;
+  const questions = row.questions.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const q = item as Record<string, unknown>;
+    if (typeof q.question !== "string" || typeof q.header !== "string") return [];
+    const options = Array.isArray(q.options)
+      ? q.options.flatMap((option) => {
+          if (!option || typeof option !== "object") return [];
+          const o = option as Record<string, unknown>;
+          return typeof o.label === "string" && typeof o.description === "string"
+            ? [{ label: o.label, description: o.description }]
+            : [];
+        })
+      : [];
+    return [
+      {
+        question: q.question,
+        header: q.header,
+        options,
+        multiple: q.multiple === true,
+        custom: q.custom !== false,
+      },
+    ];
+  });
+  return questions.length ? { requestId, sessionId, questions } : null;
+}
 
 export type OpencodeTurnActivity = Pick<
   OpencodeTurnStatusResult,
@@ -75,6 +123,7 @@ type OpencodeTurnClientOptions = {
   retryMaxMs?: number;
   onTerminal?: (status: OpencodeTurnStatusResult) => void | Promise<void>;
   onAccepted?: (turn: AcceptedOpencodeTurn) => void | Promise<void>;
+  onStatus?: (status: OpencodeTurnStatusResult) => void | Promise<void>;
 };
 
 const ACTIVE_STATUSES = new Set<OpencodeTurnStatus>(["accepted", "running", "committing"]);
@@ -87,11 +136,13 @@ export class DeterministicOpencodeTurnClient {
   private readonly retryMaxMs: number;
   private readonly onTerminal?: OpencodeTurnClientOptions["onTerminal"];
   private readonly onAccepted?: OpencodeTurnClientOptions["onAccepted"];
+  private readonly onStatus?: OpencodeTurnClientOptions["onStatus"];
   private readonly activities = new Map<string, OpencodeTurnActivity>();
   private readonly conversationTurns = new Map<string, string>();
   private readonly inFlight = new Map<string, Promise<OpencodeTurnStatusResult | undefined>>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly failures = new Map<string, number>();
+  private readonly realtimeHealthy = new Set<string>();
   private readonly terminalNotified = new Set<string>();
   private readonly acceptedNotified = new Set<string>();
   private readonly pendingAccepts = new Map<string, PreparedOpencodeTurn>();
@@ -107,6 +158,7 @@ export class DeterministicOpencodeTurnClient {
     this.retryMaxMs = options.retryMaxMs ?? 10_000;
     this.onTerminal = options.onTerminal;
     this.onAccepted = options.onAccepted;
+    this.onStatus = options.onStatus;
   }
 
   getSnapshot = (): OpencodeTurnClientSnapshot => this.snapshot;
@@ -236,6 +288,13 @@ export class DeterministicOpencodeTurnClient {
     return status;
   }
 
+  setRealtimeHealthy(turnId: string, healthy: boolean): void {
+    if (!this.activities.has(turnId)) return;
+    if (healthy) this.realtimeHealthy.add(turnId);
+    else this.realtimeHealthy.delete(turnId);
+    this.schedule(turnId, healthy ? this.pollIntervalMs * 5 : this.pollIntervalMs);
+  }
+
   dispose(): void {
     this.disposed = true;
     for (const timer of this.timers.values()) clearTimeout(timer);
@@ -244,6 +303,11 @@ export class DeterministicOpencodeTurnClient {
   }
 
   private async applyStatus(status: OpencodeTurnStatusResult): Promise<void> {
+    try {
+      await this.onStatus?.(status);
+    } catch (error) {
+      console.warn("OpenCode status projection callback failed", error);
+    }
     if (ACTIVE_STATUSES.has(status.status)) {
       this.setActivity({
         conversationId: status.conversationId,
@@ -252,7 +316,10 @@ export class DeterministicOpencodeTurnClient {
         cancelRequested: status.cancelRequested,
         lastActivityAt: status.lastActivityAt,
       });
-      this.schedule(status.turnId, this.pollIntervalMs);
+      this.schedule(
+        status.turnId,
+        this.realtimeHealthy.has(status.turnId) ? this.pollIntervalMs * 5 : this.pollIntervalMs,
+      );
       return;
     }
 
@@ -285,6 +352,7 @@ export class DeterministicOpencodeTurnClient {
     const removed = this.activities.delete(turnId);
     this.clearTimer(turnId);
     this.failures.delete(turnId);
+    this.realtimeHealthy.delete(turnId);
     this.pendingAccepts.delete(turnId);
     if (removed) this.emit();
   }

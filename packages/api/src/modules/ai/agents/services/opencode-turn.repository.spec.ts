@@ -44,6 +44,9 @@ function makeTurn(status: (typeof STATUSES)[number], overrides: Record<string, u
         leaseToken: "22222222-2222-4222-8222-222222222222",
         leaseExpiresAt: new Date("2026-08-21T01:00:00.000Z"),
         remoteEvidenceHash: status === "accepted" ? null : "evidence-hash",
+        liveProjection: status === "accepted" ? null : { status: "running", parts: [] },
+        projectionVersion: status === "accepted" ? "0" : "3",
+        projectionUpdatedAt: status === "accepted" ? null : new Date(),
         ...overrides,
     };
 }
@@ -88,6 +91,8 @@ describe("OpencodeTurnRepository state machine", () => {
                 leaseExpiresAt: null,
                 leaseToken: null,
                 remoteEvidenceHash: null,
+                liveProjection: null,
+                projectionUpdatedAt: null,
             });
         }
         const manager = makeManager(initialTurn);
@@ -327,6 +332,8 @@ describe("OpencodeTurnRepository state machine", () => {
             dispatchSnapshot: null,
             leaseExpiresAt: null,
             leaseToken: null,
+            liveProjection: null,
+            projectionUpdatedAt: null,
         });
         const manager = makeManager(terminal);
         const repository = new module.OpencodeTurnRepository();

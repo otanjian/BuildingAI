@@ -127,6 +127,7 @@ function makeHarness(options: {
         })),
     };
     const turns = {
+        recordPendingQuestion: jest.fn(async () => ({ changed: true, version: "1", turn: currentTurn })),
         transition: jest.fn(async (_manager: any, input: any) => {
             currentTurn.status = input.to;
             return { changed: true, turn: currentTurn };
@@ -366,13 +367,13 @@ describe("OpencodeTurnWorkerService", () => {
         );
     });
 
-    it("preserves a question failure intent when later remote evidence changes", async () => {
+    it("preserves an existing control failure intent when later remote evidence changes", async () => {
         const module = loadModule();
         if (!module) return;
         const harness = makeHarness({
             turn: turn({
-                errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
-                errorMessage: "OpenCode interactive questions are unsupported",
+                errorCode: "OPENCODE_INACTIVITY_TIMEOUT",
+                errorMessage: "OpenCode turn timed out",
                 remoteEvidenceHash: "previous-evidence",
             }),
         });
@@ -383,8 +384,8 @@ describe("OpencodeTurnWorkerService", () => {
         expect(harness.turns.recordActiveEvidence).toHaveBeenCalledWith(
             harness.manager,
             expect.objectContaining({
-                errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
-                errorMessage: "OpenCode interactive questions are unsupported",
+                errorCode: "OPENCODE_INACTIVITY_TIMEOUT",
+                errorMessage: "OpenCode turn timed out",
             }),
         );
     });
@@ -409,15 +410,6 @@ describe("OpencodeTurnWorkerService", () => {
             "cancelled",
             { cancelRequestedAt: new Date(), status: "committing" },
             "cancelled",
-        ],
-        [
-            "unsupported question",
-            {
-                status: "committing",
-                errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
-                errorMessage: "Interactive questions are unsupported",
-            },
-            "failed",
         ],
         [
             "timeout",
@@ -522,14 +514,6 @@ describe("OpencodeTurnWorkerService", () => {
 
     it.each([
         ["cancelled", { cancelRequestedAt: new Date() }, "cancelled"],
-        [
-            "failed question",
-            {
-                errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
-                errorMessage: "Interactive questions are unsupported",
-            },
-            "failed",
-        ],
     ])("preserves the %s terminal intent when remote settlement appears", async (_case, intent, outcome) => {
         const module = loadModule();
         if (!module) return;
@@ -564,7 +548,7 @@ describe("OpencodeTurnWorkerService", () => {
         );
     });
 
-    it("handles exact permission and question requests as one mutation per step", async () => {
+    it("handles exact permission requests and leaves questions pending", async () => {
         const module = loadModule();
         if (!module) return;
         const permission = makeHarness({ permissions: [{ id: "per_1", sessionID: "ses_1" }] });
@@ -576,15 +560,19 @@ describe("OpencodeTurnWorkerService", () => {
             expect.objectContaining({ requestId: "per_1" }),
         );
 
-        const question = makeHarness({ questions: [{ id: "q_1", sessionID: "ses_1" }] });
+        const question = makeHarness({
+            questions: [{
+                id: "q_1",
+                sessionID: "ses_1",
+                questions: [{ question: "Pick one", header: "Choice", options: [], multiple: false, custom: true }],
+            }],
+        });
         await createService(module, question).runStep({
             turnId: TURN_ID,
             leaseToken: LEASE_TOKEN,
         });
-        expect(question.mutations.rejectQuestion).toHaveBeenCalledWith(
-            expect.objectContaining({ requestId: "q_1" }),
-        );
-        expect(question.mutations.abort).toHaveBeenCalledTimes(1);
+        expect(question.mutations.rejectQuestion).not.toHaveBeenCalled();
+        expect(question.mutations.abort).not.toHaveBeenCalled();
     });
 
     it("does not repeat an exact permission mutation after its evidence was recorded", async () => {
@@ -607,33 +595,23 @@ describe("OpencodeTurnWorkerService", () => {
         expect(harness.mutations.replyPermission).not.toHaveBeenCalled();
     });
 
-    it("records one visible failed outcome after rejecting an exact question", async () => {
+    it("keeps a question turn active until the remote question is resolved", async () => {
         const module = loadModule();
         if (!module) return;
         const harness = makeHarness();
         harness.api.listPendingQuestions
-            .mockResolvedValueOnce([{ id: "q_1", sessionID: "ses_1" }])
+            .mockResolvedValueOnce([{ id: "q_1", sessionID: "ses_1", questions: [] }])
             .mockResolvedValueOnce([]);
         harness.api.getSessionStatus
             .mockResolvedValueOnce({ type: "busy" })
             .mockResolvedValueOnce({ type: "idle" });
 
         const service = createService(module, harness);
-        await expect(
-            service.runStep({ turnId: TURN_ID, leaseToken: LEASE_TOKEN }),
-        ).resolves.toMatchObject({ action: "reject-question" });
-        await expect(
-            service.runStep({ turnId: TURN_ID, leaseToken: LEASE_TOKEN }),
-        ).resolves.toMatchObject({ action: "settled" });
-
-        expect(harness.mutations.rejectQuestion).toHaveBeenCalledTimes(1);
-        expect(harness.commits.commit).toHaveBeenCalledTimes(1);
-        expect(harness.commits.commit).toHaveBeenCalledWith(
-            expect.objectContaining({
-                outcome: "failed",
-                errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
-            }),
-        );
+        await expect(service.runStep({ turnId: TURN_ID, leaseToken: LEASE_TOKEN }))
+            .resolves.toMatchObject({ action: "await-question" });
+        expect(harness.mutations.rejectQuestion).not.toHaveBeenCalled();
+        expect(harness.mutations.abort).not.toHaveBeenCalled();
+        expect(harness.commits.commit).not.toHaveBeenCalled();
     });
 
     it("aborts stale busy only after a final evidence check", async () => {

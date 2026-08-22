@@ -1,3 +1,4 @@
+import { type ConversationPage, fetchAllConversationPages } from "@buildingai/services/web";
 import { useQuery } from "@tanstack/react-query";
 
 import { getApiBaseUrl } from "@/utils/api";
@@ -32,26 +33,53 @@ export type PublicConversationDetail = {
   activeTurn: PublicActiveOpencodeTurn | null;
 };
 
-type PublicConversationListResult = {
-  items: Array<{
-    id: string;
-    title?: string | null;
-    metadata?: Record<string, unknown> | null;
-    activeTurn?: PublicActiveOpencodeTurn | null;
-  }>;
-};
+export async function replyLegacyPublicOpencodeQuestion(args: {
+  conversationId: string;
+  requestId: string;
+  answers: string[][];
+  accessToken: string;
+  anonymousIdentifier?: string;
+}): Promise<void> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  await client.post(
+    `${getApiBaseUrl()}/v1/conversations/${args.conversationId}/opencode-question/reply`,
+    { requestId: args.requestId, answers: args.answers },
+  );
+}
+
+export async function rejectLegacyPublicOpencodeQuestion(args: {
+  conversationId: string;
+  requestId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+}): Promise<void> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  await client.post(
+    `${getApiBaseUrl()}/v1/conversations/${args.conversationId}/opencode-question/reject`,
+    { requestId: args.requestId },
+  );
+}
+
+type PublicConversationListResult = ConversationPage<{
+  id: string;
+  title?: string | null;
+  metadata?: Record<string, unknown> | null;
+  activeTurn?: PublicActiveOpencodeTurn | null;
+}>;
 
 export async function getPublicConversations(args: {
   agentId: string;
   accessToken: string;
   anonymousIdentifier?: string;
 }): Promise<PublicConversation[]> {
-  const url = `${getApiBaseUrl()}/v1/conversations?page=1&pageSize=30&sortBy=updatedAt`;
-  const data = await fetchPublicJson<PublicConversationListResult>(
-    url,
-    args.accessToken,
-    args.anonymousIdentifier,
-  );
+  const data = await fetchAllConversationPages((page) => {
+    const url = `${getApiBaseUrl()}/v1/conversations?page=${page}&pageSize=30&sortBy=updatedAt`;
+    return fetchPublicJson<PublicConversationListResult>(
+      url,
+      args.accessToken,
+      args.anonymousIdentifier,
+    );
+  });
 
   return (data.items ?? []).map((item) => ({
     id: item.id,
@@ -140,6 +168,39 @@ export async function stopPublicOpencodeTurn(args: {
   return unwrapPublicEnvelope(payload);
 }
 
+export async function replyPublicOpencodeTurnQuestion(args: {
+  turnId: string;
+  requestId: string;
+  answers: string[][];
+  accessToken: string;
+  anonymousIdentifier?: string;
+  signal?: AbortSignal;
+}): Promise<OpencodeTurnStatusResult> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  const payload = await client.post<OpencodeTurnStatusResult | { data?: OpencodeTurnStatusResult }>(
+    `${getApiBaseUrl()}/v1/opencode-turns/${args.turnId}/question/reply`,
+    { requestId: args.requestId, answers: args.answers },
+    { signal: args.signal },
+  );
+  return unwrapPublicEnvelope(payload);
+}
+
+export async function rejectPublicOpencodeTurnQuestion(args: {
+  turnId: string;
+  requestId: string;
+  accessToken: string;
+  anonymousIdentifier?: string;
+  signal?: AbortSignal;
+}): Promise<OpencodeTurnStatusResult> {
+  const client = createPublicHttpClient(args.accessToken, args.anonymousIdentifier);
+  const payload = await client.post<OpencodeTurnStatusResult | { data?: OpencodeTurnStatusResult }>(
+    `${getApiBaseUrl()}/v1/opencode-turns/${args.turnId}/question/reject`,
+    { requestId: args.requestId },
+    { signal: args.signal },
+  );
+  return unwrapPublicEnvelope(payload);
+}
+
 export async function getPublicConversationDetail(args: {
   conversationId: string;
   accessToken: string;
@@ -153,6 +214,7 @@ export function usePublicConversationDetail(args: {
   conversationId?: string;
   accessToken?: string;
   anonymousIdentifier?: string;
+  enabled?: boolean;
 }) {
   return useQuery<PublicConversationDetail>({
     queryKey: [
@@ -161,7 +223,7 @@ export function usePublicConversationDetail(args: {
       args.accessToken ?? "",
       args.anonymousIdentifier ?? "",
     ],
-    enabled: Boolean(args.conversationId && args.accessToken),
+    enabled: args.enabled !== false && Boolean(args.conversationId && args.accessToken),
     queryFn: () =>
       getPublicConversationDetail({
         conversationId: args.conversationId!,

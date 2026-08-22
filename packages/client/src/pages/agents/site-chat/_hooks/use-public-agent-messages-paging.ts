@@ -1,7 +1,10 @@
 import type { UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { shouldApplyHistoryPageToChat } from "../../_shared/history-page-overwrite";
+import {
+  mergeHistoryPageWithLiveMessages,
+  shouldApplyHistoryPageToChat,
+} from "../../_shared/history-page-overwrite";
 import { getPublicConversationMessages } from "../services/public-conversation-messages";
 
 const PAGE_SIZE = 50;
@@ -33,6 +36,7 @@ export interface UsePublicAgentMessagesPagingOptions {
   /** When true, refetch messages periodically (detached OpenCode turn in progress). */
   pollWhileRunning?: boolean;
   getLiveMessageCount?: () => number;
+  getDbMessageId: (clientMessageId: string) => string | undefined;
   onLoadError?: () => void;
 }
 
@@ -55,6 +59,7 @@ export function usePublicAgentMessagesPaging(
     shouldLoadInitial,
     pollWhileRunning = false,
     getLiveMessageCount,
+    getDbMessageId,
     onLoadError,
   } = options;
 
@@ -80,12 +85,11 @@ export function usePublicAgentMessagesPaging(
       pageSize: PAGE_SIZE,
     }).then((res) => {
       if (prevConversationIdRef.current !== requestConversationId) return;
-      if ((getLiveMessageCountRef.current?.() ?? 0) > 0) return;
       setHasMoreMessages(res.page < res.totalPages);
       nextPageRef.current = Math.max(2, res.page + 1);
-      setMessages(res.items);
+      setMessages((live) => mergeHistoryPageWithLiveMessages(res.items, live, getDbMessageId));
     });
-  }, [agentId, accessToken, anonymousIdentifier, conversationId, setMessages]);
+  }, [agentId, accessToken, anonymousIdentifier, conversationId, setMessages, getDbMessageId]);
 
   useEffect(() => {
     const prevId = prevConversationIdRef.current;

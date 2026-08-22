@@ -7,6 +7,13 @@ import {
 import type { EntityManager } from "@buildingai/db/typeorm";
 import { Injectable } from "@nestjs/common";
 
+import {
+    sanitizeOpencodeLiveProjection,
+    type OpencodeLiveProjection,
+    type OpencodeLiveProjectionInput,
+} from "./opencode-turn-live-projection";
+import type { OpencodePendingQuestion } from "../integrations/opencode-api.service";
+
 const ALLOWED_TRANSITIONS: Readonly<Record<OpencodeTurnStatus, readonly OpencodeTurnStatus[]>> = {
     accepted: ["running", "committing", "failed"],
     running: ["committing", "failed"],
@@ -90,12 +97,29 @@ export type OpencodeTurnActiveEvidenceInput = {
     errorMessage?: string | null;
 };
 
+export type OpencodeTurnLiveProjectionInput = {
+    turnId: string;
+    leaseToken: string;
+    projection: OpencodeLiveProjectionInput;
+    updatedAt?: Date;
+};
+
+export type OpencodeTurnLiveProjectionResult = {
+    changed: boolean;
+    version: string;
+    turn: AgentOpencodeTurn;
+};
+
+export type OpencodeTurnPendingQuestionInput = {
+    turnId: string;
+    leaseToken: string;
+    pendingQuestion: OpencodePendingQuestion | null;
+    updatedAt?: Date;
+};
+
 @Injectable()
 export class OpencodeTurnRepository {
-    async findLocked(
-        manager: EntityManager,
-        turnId: string,
-    ): Promise<AgentOpencodeTurn> {
+    async findLocked(manager: EntityManager, turnId: string): Promise<AgentOpencodeTurn> {
         const turn = await manager.findOne(AgentOpencodeTurn, {
             where: { id: turnId },
             lock: {
@@ -134,6 +158,8 @@ export class OpencodeTurnRepository {
                 leaseToken: null,
                 leaseExpiresAt: null,
                 remoteEvidenceHash: null,
+                liveProjection: null,
+                projectionUpdatedAt: null,
             });
         }
         this.assertInvariants(next);
@@ -180,15 +206,85 @@ export class OpencodeTurnRepository {
         return manager.save(AgentOpencodeTurn, turn);
     }
 
+    async recordLiveProjection(
+        manager: EntityManager,
+        input: OpencodeTurnLiveProjectionInput,
+    ): Promise<OpencodeTurnLiveProjectionResult> {
+        const turn = await this.findLocked(manager, input.turnId);
+        if (!OPENCODE_TURN_ACTIVE_STATUSES.includes(turn.status as any)) {
+            throw new OpencodeTurnInvariantError(
+                "OpenCode live projection can only update an active turn",
+            );
+        }
+        this.assertLease(turn, input.leaseToken);
+        const currentPendingQuestion =
+            turn.liveProjection && "pendingQuestion" in turn.liveProjection
+                ? (turn.liveProjection.pendingQuestion as OpencodePendingQuestion | null)
+                : undefined;
+        const projection = sanitizeOpencodeLiveProjection({
+            ...input.projection,
+            ...(input.projection.pendingQuestion === undefined &&
+            currentPendingQuestion !== undefined
+                ? { pendingQuestion: currentPendingQuestion }
+                : {}),
+        });
+        if (this.sameProjection(turn.liveProjection, projection)) {
+            return { changed: false, version: turn.projectionVersion, turn };
+        }
+
+        turn.liveProjection = projection;
+        turn.projectionVersion = (BigInt(turn.projectionVersion || "0") + 1n).toString();
+        turn.projectionUpdatedAt = input.updatedAt ?? new Date();
+        this.assertInvariants(turn);
+        const saved = await manager.save(AgentOpencodeTurn, turn);
+        return { changed: true, version: saved.projectionVersion, turn: saved };
+    }
+
+    async recordPendingQuestion(
+        manager: EntityManager,
+        input: OpencodeTurnPendingQuestionInput,
+    ): Promise<OpencodeTurnLiveProjectionResult> {
+        const turn = await this.findLocked(manager, input.turnId);
+        if (!OPENCODE_TURN_ACTIVE_STATUSES.includes(turn.status as any)) {
+            throw new OpencodeTurnInvariantError(
+                "OpenCode pending question requires an active turn",
+            );
+        }
+        this.assertLease(turn, input.leaseToken);
+        const current = turn.liveProjection ?? {
+            status: turn.status as OpencodeLiveProjection["status"],
+            parts: [],
+            remoteAssistantMessageIds: [],
+            truncated: false,
+        };
+        const projection = sanitizeOpencodeLiveProjection({
+            status: current.status as OpencodeLiveProjection["status"],
+            parts: Array.isArray(current.parts) ? current.parts : [],
+            remoteAssistantMessageIds: Array.isArray(current.remoteAssistantMessageIds)
+                ? current.remoteAssistantMessageIds.filter(
+                      (item): item is string => typeof item === "string",
+                  )
+                : [],
+            pendingQuestion: input.pendingQuestion,
+        });
+        if (this.sameProjection(turn.liveProjection, projection)) {
+            return { changed: false, version: turn.projectionVersion, turn };
+        }
+        turn.liveProjection = projection;
+        turn.projectionVersion = (BigInt(turn.projectionVersion || "0") + 1n).toString();
+        turn.projectionUpdatedAt = input.updatedAt ?? new Date();
+        this.assertInvariants(turn);
+        const saved = await manager.save(AgentOpencodeTurn, turn);
+        return { changed: true, version: saved.projectionVersion, turn: saved };
+    }
+
     private assertLease(turn: AgentOpencodeTurn, expected: string): void {
         if (turn.leaseToken !== expected) {
             throw new OpencodeTurnLeaseLostError(turn.id);
         }
     }
 
-    private pickPatch(
-        patch: OpencodeTurnTransitionPatch | undefined,
-    ): OpencodeTurnTransitionPatch {
+    private pickPatch(patch: OpencodeTurnTransitionPatch | undefined): OpencodeTurnTransitionPatch {
         if (!patch) return {};
         const safePatch: OpencodeTurnTransitionPatch = {};
         for (const field of TRANSITION_PATCH_FIELDS) {
@@ -237,12 +333,21 @@ export class OpencodeTurnRepository {
                 turn.leaseToken !== null ||
                 turn.leaseExpiresAt !== null ||
                 turn.cancelRequestedAt !== null ||
-                turn.remoteEvidenceHash !== null
+                turn.remoteEvidenceHash !== null ||
+                turn.liveProjection !== null ||
+                turn.projectionUpdatedAt !== null
             ) {
                 throw new OpencodeTurnInvariantError(
                     "Terminal OpenCode turn requires one projection and cleared recovery state",
                 );
             }
         }
+    }
+
+    private sameProjection(
+        current: Record<string, unknown> | null,
+        next: OpencodeLiveProjection,
+    ): boolean {
+        return current !== null && JSON.stringify(current) === JSON.stringify(next);
     }
 }

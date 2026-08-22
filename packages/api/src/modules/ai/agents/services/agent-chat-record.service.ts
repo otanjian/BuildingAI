@@ -673,7 +673,9 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
             .select("COUNT(r.id)", "conversationCount")
             .addSelect("COALESCE(SUM(r.messageCount), 0)", "messageCount")
             .where("r.agentId = :agentId", { agentId })
-            .andWhere("r.isDeleted = :isDeleted", { isDeleted: false });
+            .andWhere("r.isDeleted = :isDeleted", { isDeleted: false })
+            .andWhere("r.archivedAt IS NULL")
+            .andWhere("(r.metadata ->> 'isDebug') IS DISTINCT FROM 'true'");
 
         if (userId) {
             qb.andWhere("r.userId = :userId", { userId });

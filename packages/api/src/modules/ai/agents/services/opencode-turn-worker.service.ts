@@ -10,11 +10,11 @@ import {
     type OpencodeSessionMessage,
     type OpencodeSessionStatus,
 } from "../integrations/opencode-api.service";
-import { OpencodeArtifactBaselineService, type OpencodeArtifactBaseline } from "./opencode-artifact-baseline.service";
 import {
-    decideOpencodeTurnObservation,
-    type OpencodeTurnEvidence,
-} from "./opencode-turn-observer";
+    OpencodeArtifactBaselineService,
+    type OpencodeArtifactBaseline,
+} from "./opencode-artifact-baseline.service";
+import { decideOpencodeTurnObservation, type OpencodeTurnEvidence } from "./opencode-turn-observer";
 import { buildOpencodeTurnProjection } from "./opencode-turn-projection";
 import {
     OpencodeTurnMutationCoordinator,
@@ -23,6 +23,7 @@ import {
 import { OpencodeTurnRepository } from "./opencode-turn.repository";
 import { OpencodeTurnTerminalCommitService } from "./opencode-turn-terminal-commit";
 import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
+import { OpencodeTurnProjectorService } from "./opencode-turn-projector.service";
 
 const DEFAULT_READ_TIMEOUT_MS = 5_000;
 const DEFAULT_INACTIVITY_TIMEOUT_MS = 60_000;
@@ -40,6 +41,8 @@ export class OpencodeTurnWorkerService {
         private readonly turnRepository: OpencodeTurnRepository,
         @Optional()
         private readonly telemetry?: OpencodeTurnTelemetryService,
+        @Optional()
+        private readonly projector?: OpencodeTurnProjectorService,
     ) {}
 
     async runStep(input: {
@@ -51,6 +54,13 @@ export class OpencodeTurnWorkerService {
         retryGraceMs?: number;
     }): Promise<Record<string, unknown>> {
         const turn = await this.loadClaim(input);
+        if (
+            turn.status !== "accepted" &&
+            turn.status !== "running" &&
+            turn.status !== "committing"
+        ) {
+            throw new Error("OpenCode worker cannot observe a terminal turn");
+        }
         if (turn.status === "accepted" && turn.cancelRequestedAt && !turn.startedAt) {
             await this.dataSource.transaction((manager) =>
                 this.turnRepository.transition(manager, {
@@ -136,16 +146,29 @@ export class OpencodeTurnWorkerService {
             }),
         ]);
 
-        let recentMessages: OpencodeSessionMessage[] = [];
-        if (remoteStatus.type === "idle" || turn.status === "committing") {
-            recentMessages = await this.opencodeApiService.listRecentSessionMessages({
-                config,
-                sessionId,
-                limit: 50,
-                signal: input.signal,
-                timeoutMs,
-            });
+        if (questions[0] || (turn.liveProjection && "pendingQuestion" in turn.liveProjection)) {
+            await this.dataSource.transaction((manager) =>
+                this.turnRepository.recordPendingQuestion(manager, {
+                    turnId: turn.id,
+                    leaseToken: input.leaseToken,
+                    pendingQuestion: questions[0]
+                        ? {
+                              requestId: questions[0].id,
+                              sessionId: questions[0].sessionID,
+                              questions: questions[0].questions,
+                          }
+                        : null,
+                }),
+            );
         }
+
+        const recentMessages = await this.opencodeApiService.listRecentSessionMessages({
+            config,
+            sessionId,
+            limit: 50,
+            signal: input.signal,
+            timeoutMs,
+        });
         const descendants = recentMessages.filter(
             (message) =>
                 message.info?.role === "assistant" &&
@@ -157,6 +180,24 @@ export class OpencodeTurnWorkerService {
         const exactDescendantErrorVisible = descendants.some((message) =>
             Boolean(message.info?.error),
         );
+        if (this.projector) {
+            try {
+                await this.projector.project({
+                    turnId: turn.id,
+                    leaseToken: input.leaseToken,
+                    status: turn.status,
+                    remoteUserMessageId: turn.opencodeUserMessageId,
+                    messages: recentMessages,
+                    sensitiveWordConfig: turn.conversation.agent?.sensitiveWordConfig,
+                });
+            } catch (error) {
+                this.telemetry?.increment("projection_write_failure", {
+                    turnId: turn.id,
+                    conversationId: turn.conversationId,
+                    errorKind: error instanceof Error ? error.name : "unknown",
+                });
+            }
+        }
         if (
             remoteStatus.type === "idle" &&
             descendants.length === 0 &&
@@ -198,7 +239,7 @@ export class OpencodeTurnWorkerService {
         if (
             decision.activityChanged &&
             decision.kind !== "reply-permission" &&
-            decision.kind !== "reject-question"
+            decision.kind !== "await-question"
         ) {
             await this.recordEvidence(
                 turn,
@@ -225,26 +266,8 @@ export class OpencodeTurnWorkerService {
                     preserveControlIntent ? turn.errorMessage : null,
                 );
                 return { action: decision.kind, activityChanged: true };
-            case "reject-question":
-                await this.mutationCoordinator.rejectQuestion({
-                    turnId: turn.id,
-                    leaseToken: input.leaseToken,
-                    requestId: decision.requestId,
-                    signal: input.signal,
-                });
-                await this.recordEvidence(
-                    turn,
-                    input.leaseToken,
-                    currentEvidenceHash,
-                    decision.errorCode,
-                    "OpenCode interactive questions are unsupported",
-                );
-                await this.mutationCoordinator.abort({
-                    turnId: turn.id,
-                    leaseToken: input.leaseToken,
-                    signal: input.signal,
-                });
-                return { action: decision.kind, activityChanged: true };
+            case "await-question":
+                return { action: decision.kind, activityChanged: decision.activityChanged };
             case "abort-cancelled":
                 await this.mutationCoordinator.abort({
                     turnId: turn.id,
@@ -281,7 +304,10 @@ export class OpencodeTurnWorkerService {
                         turnId: turn.id,
                         to: "committing",
                         leaseToken: input.leaseToken,
-                        patch: { lastActivityAt: new Date(), remoteEvidenceHash: currentEvidenceHash },
+                        patch: {
+                            lastActivityAt: new Date(),
+                            remoteEvidenceHash: currentEvidenceHash,
+                        },
                     }),
                 );
                 return { action: decision.kind, activityChanged: decision.activityChanged };
@@ -290,11 +316,7 @@ export class OpencodeTurnWorkerService {
                     turn,
                     input,
                     descendants,
-                    turn.cancelRequestedAt
-                        ? "cancelled"
-                        : turn.errorCode === "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED"
-                          ? "failed"
-                          : decision.outcome,
+                    turn.cancelRequestedAt ? "cancelled" : decision.outcome,
                 );
             case "continue":
                 return {
@@ -355,10 +377,7 @@ export class OpencodeTurnWorkerService {
         return { action: "settled", ...result };
     }
 
-    private async commitControlFallback(
-        turn: AgentOpencodeTurn,
-        input: { leaseToken: string },
-    ) {
+    private async commitControlFallback(turn: AgentOpencodeTurn, input: { leaseToken: string }) {
         const cancelled = Boolean(turn.cancelRequestedAt);
         const message = cancelled
             ? "Turn cancelled by user"
@@ -370,7 +389,7 @@ export class OpencodeTurnWorkerService {
             outcome: cancelled ? "cancelled" : "failed",
             parts: [{ type: "text", text: message }],
             usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-            errorCode: cancelled ? "OPENCODE_CANCELLED" : turn.errorCode ?? "OPENCODE_FAILED",
+            errorCode: cancelled ? "OPENCODE_CANCELLED" : (turn.errorCode ?? "OPENCODE_FAILED"),
             errorMessage: message,
         });
         return { action: "settled", ...result };

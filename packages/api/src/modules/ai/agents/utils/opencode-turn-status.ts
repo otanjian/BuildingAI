@@ -7,6 +7,7 @@ export type OpencodeTurnStatus =
     | "completed"
     | "aborted"
     | "timed_out"
+    | "persist_failed"
     | "recovered";
 
 const STATUSES = new Set<string>([
@@ -14,6 +15,7 @@ const STATUSES = new Set<string>([
     "completed",
     "aborted",
     "timed_out",
+    "persist_failed",
     "recovered",
 ]);
 

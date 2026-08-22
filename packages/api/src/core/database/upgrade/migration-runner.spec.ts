@@ -40,4 +40,21 @@ describe("MigrationRunner history compatibility", () => {
         expect(sql).toContain("uq_migrations_history_name");
         expect(queryRunner.release).toHaveBeenCalledTimes(1);
     });
+
+    it("reconciles unexecuted migrations added to the installed product version", async () => {
+        const runner = new MigrationRunner({} as any);
+        (runner as any).ensureMigrationHistoryTable = jest.fn(async () => undefined);
+        (runner as any).getMigrationFiles = jest.fn(async () => [
+            { name: "old.js", version: "26.1.4", timestamp: 1, path: "/old.js" },
+            { name: "base.js", version: "26.1.5", timestamp: 2, path: "/base.js" },
+            { name: "patch.js", version: "26.1.5", timestamp: 3, path: "/patch.js" },
+        ]);
+        (runner as any).executeMigration = jest.fn(async () => undefined);
+
+        await runner.runPendingMigrationsForVersion("26.1.5");
+
+        expect(
+            (runner as any).executeMigration.mock.calls.map(([migration]) => migration.name),
+        ).toEqual(["base.js", "patch.js"]);
+    });
 });

@@ -45,6 +45,53 @@ export type OpencodeSessionMessage = {
     parts?: Array<Record<string, unknown>>;
 };
 
+export type OpencodeQuestionOption = { label: string; description: string };
+export type OpencodePendingQuestionInfo = {
+    question: string;
+    header: string;
+    options: OpencodeQuestionOption[];
+    multiple: boolean;
+    custom: boolean;
+};
+export type OpencodePendingQuestion = {
+    requestId: string;
+    sessionId: string;
+    questions: OpencodePendingQuestionInfo[];
+};
+
+export function normalizeOpencodePendingQuestion(value: unknown): OpencodePendingQuestion | null {
+    if (!value || typeof value !== "object") return null;
+    const row = value as Record<string, unknown>;
+    const requestId = String(row.requestId ?? row.id ?? "");
+    const sessionId = String(row.sessionId ?? row.sessionID ?? "");
+    if (!requestId || !sessionId || !Array.isArray(row.questions)) return null;
+    const questions = row.questions.flatMap((item) => normalizeOpencodeQuestionInfo(item));
+    return questions.length ? { requestId, sessionId, questions } : null;
+}
+
+function normalizeOpencodeQuestionInfo(value: unknown): OpencodePendingQuestionInfo[] {
+    if (!value || typeof value !== "object") return [];
+    const row = value as Record<string, unknown>;
+    if (typeof row.question !== "string" || typeof row.header !== "string") return [];
+    const options = Array.isArray(row.options)
+        ? row.options.flatMap((option) => {
+              if (!option || typeof option !== "object") return [];
+              const item = option as Record<string, unknown>;
+              if (typeof item.label !== "string" || typeof item.description !== "string") return [];
+              return [{ label: item.label, description: item.description }];
+          })
+        : [];
+    return [
+        {
+            question: row.question,
+            header: row.header,
+            options,
+            multiple: row.multiple === true,
+            custom: row.custom !== false,
+        },
+    ];
+}
+
 export type OpencodeApiErrorKind =
     | "cancelled"
     | "deadline"
@@ -94,6 +141,8 @@ export type OpencodeSseHandler = (event: {
     raw: Record<string, any>;
 }) => void | Promise<void>;
 
+export type OpencodeSseReadyHandler = () => void | Promise<void>;
+
 /**
  * OpenCode headless HTTP client.
  */
@@ -101,8 +150,7 @@ export type OpencodeSseHandler = (event: {
 export class OpencodeApiService {
     private readonly logger = new Logger(OpencodeApiService.name);
 
-    readonly defaultBaseUrl =
-        process.env.OPENCODE_BASE_URL?.trim() || "http://127.0.0.1:4096";
+    readonly defaultBaseUrl = process.env.OPENCODE_BASE_URL?.trim() || "http://127.0.0.1:4096";
 
     normalizeConfig(config?: ThirdPartyIntegrationConfig | null): OpencodeNormalizedConfig {
         const extended = { ...(config?.extendedConfig ?? {}) };
@@ -137,9 +185,7 @@ export class OpencodeApiService {
         };
     }
 
-    private parseModel(
-        value: string,
-    ): { providerID: string; modelID: string } | undefined {
+    private parseModel(value: string): { providerID: string; modelID: string } | undefined {
         if (!value) return undefined;
         const slash = value.indexOf("/");
         if (slash <= 0 || slash === value.length - 1) return undefined;
@@ -186,9 +232,7 @@ export class OpencodeApiService {
                 method: "POST",
                 body: JSON.stringify({
                     title: sessionTitle,
-                    ...(receipt
-                        ? { metadata: { buildingaiTurnReceipt: receipt } }
-                        : {}),
+                    ...(receipt ? { metadata: { buildingaiTurnReceipt: receipt } } : {}),
                 }),
             },
             { operation, ...options },
@@ -340,7 +384,10 @@ export class OpencodeApiService {
         }
         const message = body as OpencodeSessionMessage;
         if (message.info?.id !== params.messageId) {
-            throw this.invalidResponse(operation, "Exact message response has the wrong identifier");
+            throw this.invalidResponse(
+                operation,
+                "Exact message response has the wrong identifier",
+            );
         }
         return message;
     }
@@ -369,17 +416,19 @@ export class OpencodeApiService {
         return body as OpencodeSessionMessage[];
     }
 
-    async promptAsync(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        sessionId: string;
-        messageId?: string;
-        /** @deprecated Prefer `parts` when attachments are present */
-        text?: string;
-        /** OpenCode prompt parts (text + optional FilePartInput for images) */
-        parts?: Array<Record<string, unknown>>;
-        system?: string;
-        model?: { providerID: string; modelID: string };
-    } & OpencodeOperationOptions): Promise<void> {
+    async promptAsync(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+            messageId?: string;
+            /** @deprecated Prefer `parts` when attachments are present */
+            text?: string;
+            /** OpenCode prompt parts (text + optional FilePartInput for images) */
+            parts?: Array<Record<string, unknown>>;
+            system?: string;
+            model?: { providerID: string; modelID: string };
+        } & OpencodeOperationOptions,
+    ): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
         const parts =
             params.parts && params.parts.length > 0
@@ -418,10 +467,12 @@ export class OpencodeApiService {
      * List pending permission prompts (`GET /permission`).
      * Headless serve has no TUI — BuildingAI must reply or the turn hangs.
      */
-    async listPendingPermissions(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        sessionId?: string;
-    } & OpencodeOperationOptions): Promise<Array<{ id: string; sessionID: string }>> {
+    async listPendingPermissions(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId?: string;
+        } & OpencodeOperationOptions,
+    ): Promise<Array<{ id: string; sessionID: string }>> {
         const operation = "list-pending-permissions";
         const body = await this.requestJson<unknown>({
             operation,
@@ -451,11 +502,13 @@ export class OpencodeApiService {
     /**
      * Reply to a permission prompt (`POST /permission/:id/reply`).
      */
-    async replyPermission(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        requestId: string;
-        reply?: "once" | "always" | "reject";
-    } & OpencodeOperationOptions): Promise<void> {
+    async replyPermission(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            requestId: string;
+            reply?: "once" | "always" | "reject";
+        } & OpencodeOperationOptions,
+    ): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
         const reply = params.reply ?? "always";
         const operation = "reply-permission";
@@ -478,10 +531,12 @@ export class OpencodeApiService {
     /**
      * Auto-approve every pending permission for a session (headless YOLO).
      */
-    async approvePendingPermissions(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        sessionId: string;
-    } & OpencodeOperationOptions): Promise<number> {
+    async approvePendingPermissions(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<number> {
         const pending = await this.listPendingPermissions({
             config: params.config,
             sessionId: params.sessionId,
@@ -500,10 +555,12 @@ export class OpencodeApiService {
         return pending.length;
     }
 
-    async abortSession(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        sessionId: string;
-    } & OpencodeOperationOptions): Promise<void> {
+    async abortSession(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
         const operation = "abort-session";
         const response = await this.requestWithDeadline(
@@ -519,20 +576,50 @@ export class OpencodeApiService {
         await this.assertOperationResponse(response, operation);
     }
 
-    async listPendingQuestions(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        sessionId?: string;
-    } & OpencodeOperationOptions): Promise<
-        Array<{ id: string; sessionID: string; questions: Array<Record<string, unknown>> }>
-    > {
+    async listPendingQuestions(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId?: string;
+        } & OpencodeOperationOptions,
+    ): Promise<Array<{ id: string; sessionID: string; questions: OpencodePendingQuestionInfo[] }>> {
         const operation = "list-pending-questions";
-        const body = await this.requestJson<unknown>({
-            operation,
-            config: params.config,
-            path: "/question",
-            signal: params.signal,
-            timeoutMs: params.timeoutMs,
-        });
+        let body: unknown;
+        try {
+            body = await this.requestJson<unknown>({
+                operation,
+                config: params.config,
+                path: "/question",
+                signal: params.signal,
+                timeoutMs: params.timeoutMs,
+            });
+        } catch (error) {
+            if (!(error instanceof OpencodeApiError) || error.status !== 404 || !params.sessionId) {
+                throw error;
+            }
+            body = [];
+        }
+
+        // OpenCode v1 returns an array. Newer v2 servers expose questions on a
+        // session-scoped route and wrap the array in `{ data }`.
+        if (Array.isArray(body) && body.length === 0 && params.sessionId) {
+            try {
+                const v2Body = await this.requestJson<unknown>({
+                    operation,
+                    config: params.config,
+                    path: `/api/session/${encodeURIComponent(params.sessionId)}/question`,
+                    signal: params.signal,
+                    timeoutMs: params.timeoutMs,
+                });
+                body =
+                    v2Body && typeof v2Body === "object" && !Array.isArray(v2Body)
+                        ? (v2Body as Record<string, unknown>).data
+                        : v2Body;
+            } catch (error) {
+                // Older v1 servers do not expose the v2 route; an empty v1 list
+                // is still a valid "no pending question" result there.
+                if (!(error instanceof OpencodeApiError) || error.status !== 404) throw error;
+            }
+        }
         if (!Array.isArray(body)) {
             throw this.invalidResponse(operation, "Pending question response is not an array");
         }
@@ -546,7 +633,7 @@ export class OpencodeApiService {
                     id: String(row.id ?? ""),
                     sessionID: String(row.sessionID ?? ""),
                     questions: Array.isArray(row.questions)
-                        ? (row.questions as Array<Record<string, unknown>>)
+                        ? row.questions.flatMap((item) => normalizeOpencodeQuestionInfo(item))
                         : [],
                 };
             })
@@ -554,13 +641,16 @@ export class OpencodeApiService {
             .filter((item) => !params.sessionId || item.sessionID === params.sessionId);
     }
 
-    async rejectQuestion(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        requestId: string;
-    } & OpencodeOperationOptions): Promise<void> {
+    async rejectQuestion(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            requestId: string;
+            sessionId?: string;
+        } & OpencodeOperationOptions,
+    ): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
         const operation = "reject-question";
-        const response = await this.requestWithDeadline(
+        let response = await this.requestWithDeadline(
             normalized,
             `/question/${encodeURIComponent(params.requestId)}/reject`,
             { method: "POST" },
@@ -570,6 +660,41 @@ export class OpencodeApiService {
                 timeoutMs: params.timeoutMs,
             },
         );
+        if (response.status === 404 && params.sessionId) {
+            response = await this.requestWithDeadline(
+                normalized,
+                `/api/session/${encodeURIComponent(params.sessionId)}/question/${encodeURIComponent(params.requestId)}/reject`,
+                { method: "POST" },
+                { operation, signal: params.signal, timeoutMs: params.timeoutMs },
+            );
+        }
+        await this.assertOperationResponse(response, operation);
+    }
+
+    async replyQuestion(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            requestId: string;
+            sessionId?: string;
+            answers: string[][];
+        } & OpencodeOperationOptions,
+    ): Promise<void> {
+        const normalized = this.normalizeConfig(params.config);
+        const operation = "reply-question";
+        let response = await this.requestWithDeadline(
+            normalized,
+            `/question/${encodeURIComponent(params.requestId)}/reply`,
+            { method: "POST", body: JSON.stringify({ answers: params.answers }) },
+            { operation, signal: params.signal, timeoutMs: params.timeoutMs },
+        );
+        if (response.status === 404 && params.sessionId) {
+            response = await this.requestWithDeadline(
+                normalized,
+                `/api/session/${encodeURIComponent(params.sessionId)}/question/${encodeURIComponent(params.requestId)}/reply`,
+                { method: "POST", body: JSON.stringify({ answers: params.answers }) },
+                { operation, signal: params.signal, timeoutMs: params.timeoutMs },
+            );
+        }
         await this.assertOperationResponse(response, operation);
     }
 
@@ -695,7 +820,7 @@ export class OpencodeApiService {
         const entryPath = String(row.path ?? row.name ?? "").replace(/\/+$/, "");
         const name =
             String(row.name ?? "").trim() ||
-            (entryPath ? entryPath.split("/").filter(Boolean).pop() ?? entryPath : "");
+            (entryPath ? (entryPath.split("/").filter(Boolean).pop() ?? entryPath) : "");
         return {
             name,
             path: entryPath,
@@ -711,6 +836,7 @@ export class OpencodeApiService {
         config?: ThirdPartyIntegrationConfig | null;
         signal?: AbortSignal;
         onEvent: OpencodeSseHandler;
+        onReady?: OpencodeSseReadyHandler;
         shouldStop?: (event: { type: string; properties?: Record<string, any> }) => boolean;
     }): Promise<void> {
         const normalized = this.normalizeConfig(params.config);
@@ -731,6 +857,10 @@ export class OpencodeApiService {
         let buffer = "";
 
         try {
+            // Signal after the HTTP response/reader is established. Callers that
+            // are about to trigger a fast remote turn can now avoid losing the
+            // first question event in the connection/prompt race.
+            await params.onReady?.();
             while (true) {
                 if (params.signal?.aborted) break;
                 const { done, value } = await reader.read();
@@ -754,12 +884,19 @@ export class OpencodeApiService {
                     try {
                         parsed = JSON.parse(payload) as Record<string, any>;
                     } catch {
-                        this.logger.debug(`Skip non-JSON OpenCode SSE chunk: ${payload.slice(0, 120)}`);
+                        this.logger.debug(
+                            `Skip non-JSON OpenCode SSE chunk: ${payload.slice(0, 120)}`,
+                        );
                         continue;
                     }
 
                     const type = String(parsed.type ?? "");
-                    const properties = (parsed.properties ?? {}) as Record<string, any>;
+                    // OpenCode v1 puts event fields in `properties`; v2 SDK/server
+                    // envelopes may use `data` instead. Keep one shape for callers.
+                    const properties = (parsed.properties ?? parsed.data ?? {}) as Record<
+                        string,
+                        any
+                    >;
                     await params.onEvent({ type, properties, raw: parsed });
                     if (params.shouldStop?.({ type, properties })) {
                         return;
@@ -822,7 +959,9 @@ export class OpencodeApiService {
         options.signal?.addEventListener("abort", cancelFromCaller, { once: true });
         const deadline = setTimeout(() => {
             deadlineReached = true;
-            controller.abort(new DOMException("OpenCode operation deadline exceeded", "TimeoutError"));
+            controller.abort(
+                new DOMException("OpenCode operation deadline exceeded", "TimeoutError"),
+            );
         }, timeoutMs);
 
         try {
@@ -914,7 +1053,9 @@ export class OpencodeApiService {
             return await fetch(url, { ...init, headers });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            throw HttpErrorFactory.badRequest(`OpenCode unreachable at ${config.baseURL}: ${message}`);
+            throw HttpErrorFactory.badRequest(
+                `OpenCode unreachable at ${config.baseURL}: ${message}`,
+            );
         }
     }
 }

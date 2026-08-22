@@ -13,7 +13,15 @@ type MetricName =
     | "worker_queue_depth"
     | "oldest_activity_age_ms"
     | "oldest_expired_lease_age_ms"
-    | "status_latency_ms";
+    | "status_latency_ms"
+    | "projection_write_failure"
+    | "projection_write"
+    | "projection_latency_ms"
+    | "projection_sse_connection"
+    | "projection_sse_reconnect"
+    | "projection_upstream_connections"
+    | "projection_poll_fallback"
+    | "projection_truncation";
 
 type MetricFields = Record<string, unknown>;
 

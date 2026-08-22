@@ -1,4 +1,5 @@
 import {
+  listAgentConversationMessages,
   type PublishedAgentDetail,
   useAgentConversationDetailQuery,
   useAgentConversationsQuery,
@@ -7,6 +8,8 @@ import {
   usePublishedAgentDetailQuery,
   useUpdateAgentConversation,
 } from "@buildingai/services/web";
+import { normalizeOpencodePendingQuestion } from "../../_shared/opencode-turn-client";
+import { useAuthStore } from "@buildingai/stores";
 import type { FormFieldConfig } from "@buildingai/types/ai/agent-config.interface";
 import type { PromptInputMessage } from "@buildingai/ui/components/ai-elements/prompt-input";
 import { EditorContentRenderer } from "@buildingai/ui/components/editor";
@@ -25,7 +28,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@buildingai/ui/components/ui/resizable";
-import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { Separator } from "@buildingai/ui/components/ui/separator";
 import {
   Sheet,
@@ -40,7 +42,7 @@ import { Textarea } from "@buildingai/ui/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { formatRemainingPowerLabel } from "@buildingai/ui/lib/remaining-power-label";
 import { cn } from "@buildingai/ui/lib/utils";
-import { useAuthStore } from "@buildingai/web/stores";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   ChevronDown,
@@ -64,7 +66,11 @@ import {
 } from "@/components/ask-assistant-ui";
 
 import { AgentHistoryConversationRow } from "../../_shared/agent-history-conversation-row";
+import { ConversationScrollMemory } from "../../_shared/conversation-scroll-memory";
+import { getOpencodeConversationStore } from "../../_shared/opencode-conversation-store";
+import { OpencodeQuestionCard } from "../../_shared/opencode-question-card";
 import { useBackgroundStreamingConversations } from "../../_shared/use-background-streams";
+import { VirtualizedConversationList } from "../../_shared/virtualized-conversation-list";
 import { OpencodeWorkspacePanel } from "../_components/opencode-workspace-panel";
 import { useAssistantForAgent } from "../_hooks/use-assistant-for-agent";
 import { hasRenderableOpeningStatement } from "../_utils/opening-statement";
@@ -160,6 +166,7 @@ function AgentInfoPanel({
   const archiveMutation = useArchiveAgentConversation();
   const updateConversationMutation = useUpdateAgentConversation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const userPower = useAuthStore((state) => state.auth.userInfo?.power);
   const remainingPowerLabel = formatRemainingPowerLabel(userPower);
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
@@ -351,7 +358,17 @@ function AgentInfoPanel({
                   variant="outline"
                   className="w-full"
                   type="button"
-                  onClick={() => navigate(`/agents/${agent?.id}/chat`)}
+                  onClick={() => {
+                    if (!agent?.id) return;
+                    if (agent.durableOpencodeTurnsEnabled === true) {
+                      const conversationId = getOpencodeConversationStore(
+                        `detail-agent-${agent.id}`,
+                      ).createDraft();
+                      navigate(`/agents/${agent.id}/c/${conversationId}`);
+                      return;
+                    }
+                    navigate(`/agents/${agent.id}/chat`);
+                  }}
                   disabled={!agent?.id}
                 >
                   新对话
@@ -378,12 +395,11 @@ function AgentInfoPanel({
                     <Skeleton className="h-8 w-full" />
                   </div>
                 ) : conversations.length > 0 ? (
-                  <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-auto pr-1">
-                    <ScrollArea
-                      className="h-full min-h-0 w-full min-w-0"
-                      viewportClassName="[&>div]:block!"
-                    >
-                      {conversations.map((item) => (
+                  <div className="mt-2 min-h-0 flex-1 pr-1">
+                    <VirtualizedConversationList
+                      items={conversations}
+                      getKey={(item) => item.id}
+                      renderItem={(item) => (
                         <AgentHistoryConversationRow
                           key={item.id}
                           title={item.title}
@@ -395,11 +411,63 @@ function AgentInfoPanel({
                           }
                           isArchiving={archivingId === item.id}
                           onSelect={() => navigate(`/agents/${agent?.id}/c/${item.id}`)}
+                          onIntent={() => {
+                            if (!agent?.id) return;
+                            const store = getOpencodeConversationStore(`detail-agent-${agent.id}`);
+                            if (store.get(item.id).messages.length > 0) return;
+                            void queryClient
+                              .fetchQuery({
+                                queryKey: [
+                                  "agents",
+                                  "chat",
+                                  "messages",
+                                  agent.id,
+                                  item.id,
+                                  { page: 1, pageSize: 50 },
+                                ],
+                                queryFn: () =>
+                                  listAgentConversationMessages(agent.id, item.id, {
+                                    page: 1,
+                                    pageSize: 50,
+                                  }),
+                                staleTime: 30_000,
+                              })
+                              .then((result) => {
+                                if (store.get(item.id).messages.length > 0) return;
+                                const total = result.total;
+                                const messages = result.items
+                                  .map((record, index) => {
+                                    const base = (record.message ?? {}) as Record<string, unknown>;
+                                    return {
+                                      ...base,
+                                      id: record.id,
+                                      role: (base.role ??
+                                        record.role) as import("ai").UIMessage["role"],
+                                      metadata: {
+                                        ...((base.metadata ?? {}) as Record<string, unknown>),
+                                        parentId: record.parentId ?? null,
+                                        sequence: total - 1 - index,
+                                      },
+                                    } as import("ai").UIMessage;
+                                  })
+                                  .sort(
+                                    (left, right) =>
+                                      Number(
+                                        (left.metadata as { sequence?: number })?.sequence ?? 0,
+                                      ) -
+                                      Number(
+                                        (right.metadata as { sequence?: number })?.sequence ?? 0,
+                                      ),
+                                  );
+                                store.setMessages(item.id, messages);
+                              })
+                              .catch(() => undefined);
+                          }}
                           onRename={(title) => handleRename(item.id, title)}
                           onArchive={() => handleArchive(item.id)}
                         />
-                      ))}
-                    </ScrollArea>
+                      )}
+                    />
                   </div>
                 ) : (
                   <div className="text-muted-foreground mt-2 text-xs">暂无对话记录</div>
@@ -437,6 +505,12 @@ function ChatContent({
     isLoading,
     status,
     textareaRef,
+    composerKey,
+    composerDraft,
+    onComposerDraftChange,
+    scrollMemoryKey,
+    scrollMemory,
+    onScrollMemoryChange,
     onSend,
     onStop,
     liked,
@@ -448,6 +522,9 @@ function ChatContent({
     onSwitchBranch,
     addToolApprovalResponse,
     assistantAvatar,
+    pendingQuestion,
+    replyQuestion,
+    rejectQuestion,
   } = useAssistantContext();
 
   const normalizedOpeningQuestions = useMemo(
@@ -487,6 +564,11 @@ function ChatContent({
         hideScrollToBottomButton
         forceFullHeight={isFirstSession}
       >
+        <ConversationScrollMemory
+          memoryKey={scrollMemoryKey}
+          value={scrollMemory}
+          onChange={onScrollMemoryChange}
+        />
         <div
           className={
             isFirstSession
@@ -592,9 +674,19 @@ function ChatContent({
         <div className="bg-background sticky bottom-0 z-10">
           <InfiniteScrollTopScrollButton className="-top-12 z-20" />
           <div className="mx-auto w-full max-w-3xl px-3 py-2 sm:px-4 sm:py-3">
+            {pendingQuestion && replyQuestion && rejectQuestion ? (
+              <OpencodeQuestionCard
+                question={pendingQuestion}
+                onReply={replyQuestion}
+                onReject={rejectQuestion}
+              />
+            ) : null}
             {status === "submitted" || status === "streaming" ? <StreamingIndicator /> : null}
             <PromptInput
+              key={composerKey}
               textareaRef={textareaRef}
+              initialInput={composerDraft}
+              onTextChange={onComposerDraftChange}
               status={status}
               onSubmit={handleSubmit}
               onStop={onStop}
@@ -615,6 +707,12 @@ const AgentChatPage = () => {
   const { data: agent, isLoading: isAgentLoading } = usePublishedAgentDetailQuery(agentId, {
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!agentId || uuid || agent?.durableOpencodeTurnsEnabled !== true) return;
+    const conversationId = getOpencodeConversationStore(`detail-agent-${agentId}`).createDraft();
+    navigate(`/agents/${agentId}/c/${conversationId}`, { replace: true });
+  }, [agent?.durableOpencodeTurnsEnabled, agentId, navigate, uuid]);
 
   const [formValues, setFormValues] = useState<Record<string, string>>({});
 
@@ -659,8 +757,13 @@ const AgentChatPage = () => {
     { page: 1, pageSize: 30, sortBy: "updatedAt" },
     { enabled: !!agentId },
   );
+  const isLocalDurableDraft = Boolean(
+    uuid &&
+    agent?.durableOpencodeTurnsEnabled === true &&
+    getOpencodeConversationStore(`detail-agent-${agentId}`).isLocalDraft(uuid),
+  );
   const { data: conversationDetail } = useAgentConversationDetailQuery(agentId || undefined, uuid, {
-    enabled: Boolean(agentId && uuid),
+    enabled: Boolean(agentId && uuid && !isLocalDurableDraft),
   });
 
   const activeOpencodeTurn = useMemo(
@@ -696,6 +799,9 @@ const AgentChatPage = () => {
       : legacyOpencodeTurnRunning,
     durableOpencodeTurnsEnabled,
     activeOpencodeTurn,
+    legacyPendingQuestion: normalizeOpencodePendingQuestion(
+      conversationDetail?.metadata?.opencodePendingQuestion,
+    ),
     supportedUploadTypes,
   });
 

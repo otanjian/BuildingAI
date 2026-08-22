@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
+import { fetchAllConversationPages } from "./conversation-pagination";
 
 export type AgentChatRecordItem = {
     id: string;
@@ -33,7 +34,30 @@ export type AgentChatConversationDetail = {
     title?: string | null;
     archivedAt?: string | null;
     activeTurn: OpencodeActiveTurnSummary | null;
+    metadata?: Record<string, unknown> | null;
 };
+
+export async function replyLegacyAgentOpencodeQuestion(
+    agentId: string,
+    conversationId: string,
+    input: { requestId: string; answers: string[][] },
+): Promise<void> {
+    await apiHttpClient.post(
+        `/ai-agents/${agentId}/chat/conversations/${conversationId}/opencode-question/reply`,
+        input,
+    );
+}
+
+export async function rejectLegacyAgentOpencodeQuestion(
+    agentId: string,
+    conversationId: string,
+    requestId: string,
+): Promise<void> {
+    await apiHttpClient.post(
+        `/ai-agents/${agentId}/chat/conversations/${conversationId}/opencode-question/reject`,
+        { requestId },
+    );
+}
 
 export type AgentChatMessageItem = {
     id: string;
@@ -164,7 +188,10 @@ export function useAgentConversationsQuery(
 ) {
     return useQuery({
         queryKey: [...CONVERSATIONS_KEY, agentId ?? "", params],
-        queryFn: () => listAgentConversations(agentId!, params),
+        queryFn: () =>
+            fetchAllConversationPages((page) =>
+                listAgentConversations(agentId!, { ...params, page }),
+            ),
         enabled: !!agentId && options?.enabled !== false,
         refetchInterval: (query) => {
             const items = (query.state.data as { items?: AgentChatRecordItem[] } | undefined)

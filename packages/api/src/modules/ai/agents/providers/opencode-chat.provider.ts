@@ -18,7 +18,11 @@ import type { ServerResponse } from "http";
 import { validate as isUUID } from "uuid";
 
 import { AgentBillingHandler } from "../handlers/agent-billing";
-import { OpencodeApiService } from "../integrations/opencode-api.service";
+import {
+    normalizeOpencodePendingQuestion,
+    OpencodeApiService,
+    type OpencodePendingQuestion,
+} from "../integrations/opencode-api.service";
 import type { AgentChatCompletionParams } from "../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../services/agent-chat-message.service";
 import { AgentChatRecordService } from "../services/agent-chat-record.service";
@@ -41,7 +45,10 @@ import { extractOpencodePermissionAsk } from "../utils/opencode-permission";
 import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
 import { mergeOpencodeTurnMetadata } from "../utils/opencode-turn-status";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
-import { projectAssistantParts } from "../utils/sensitive-word-projector";
+import {
+    persistOpencodeAssistantMessageSafely,
+    prepareOpencodeAssistantMessageForPersistence,
+} from "../utils/opencode-message-persistence";
 import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
@@ -198,6 +205,7 @@ export class OpencodeChatProvider {
                 const tokenUsage = new OpencodeTokenUsageAccumulator();
                 const toolParts = new Map<string, DynamicToolPart>();
                 const emittedToolInputIds = new Set<string>();
+                const questionToolCallIds = new Set<string>();
                 /** OpenCode messageID -> role (ignore user/system text echo) */
                 const messageRoles = new Map<string, string>();
                 let htmlArtifact: HtmlArtifact | undefined;
@@ -302,458 +310,557 @@ export class OpencodeChatProvider {
                 turnHandle = this.turnRunner.start(localConversationId);
                 let persistStarted = false;
                 try {
-                await this.agentChatRecordService.updateMetadata(
-                    localConversationId,
-                    mergeOpencodeTurnMetadata(
-                        { provider: "opencode", opencodeSessionId, artifactRoot },
-                        { status: "running", at: new Date().toISOString() },
-                    ),
-                );
-
-                let turnIdle = false;
-                let streamError: string | undefined;
-                let settleTurn: (() => void) | undefined;
-                const turnDone = new Promise<void>((resolve) => {
-                    settleTurn = resolve;
-                });
-                const finishTurn = () => {
-                    if (turnIdle) return;
-                    turnIdle = true;
-                    settleTurn?.();
-                };
-                const onRunnerAbort = () => {
-                    finishTurn();
-                };
-                if (turnHandle.signal.aborted) onRunnerAbort();
-                else
-                    turnHandle.signal.addEventListener("abort", onRunnerAbort, {
-                        once: true,
-                    });
-
-                const eventLoop = this.opencodeApiService.streamEvents({
-                    config: agent.thirdPartyIntegration,
-                    signal: turnHandle.signal,
-                    shouldStop: (event) => {
-                        if (event.type === "session.idle") {
-                            return event.properties?.sessionID === opencodeSessionId;
-                        }
-                        if (event.type === "session.error") {
-                            return event.properties?.sessionID === opencodeSessionId;
-                        }
-                        return false;
-                    },
-                    onEvent: async (event) => {
-                        const sessionID = event.properties?.sessionID as string | undefined;
-                        if (sessionID && sessionID !== opencodeSessionId) {
-                            return;
-                        }
-
-                        const permissionAsk = extractOpencodePermissionAsk(event);
-                        if (permissionAsk) {
-                            await this.opencodeApiService.replyPermission({
-                                config: agent.thirdPartyIntegration,
-                                requestId: permissionAsk.requestId,
-                                reply: "always",
-                            });
-                            return;
-                        }
-
-                        if (event.type === "message.updated") {
-                            const info = event.properties?.info as Record<string, any> | undefined;
-                            if (info?.id && info?.role) {
-                                messageRoles.set(String(info.id), String(info.role));
-                            }
-                            if (info) {
-                                tokenUsage.observeMessageUpdated(info);
-                            }
-                            return;
-                        }
-
-                        if (event.type === "session.error") {
-                            const err = event.properties?.error;
-                            streamError = this.formatSessionError(err);
-                            finishTurn();
-                            return;
-                        }
-
-                        if (event.type === "session.idle" && sessionID === opencodeSessionId) {
-                            finishTurn();
-                            return;
-                        }
-
-                        if (event.type === "message.part.delta") {
-                            const messageID = String(event.properties?.messageID ?? "");
-                            writeChunks(
-                                partRouter.onDelta({
-                                    messageRole: messageRoles.get(messageID),
-                                    partID: String(event.properties?.partID ?? ""),
-                                    field: event.properties?.field,
-                                    delta: event.properties?.delta,
-                                }),
-                            );
-                            return;
-                        }
-
-                        if (event.type === "file.edited") {
-                            const file = event.properties?.file;
-                            if (
-                                typeof file === "string" &&
-                                isHtmlArtifactPath(file, artifactRoot)
-                            ) {
-                                htmlArtifact = await this.buildHtmlArtifact({
-                                    agentId: params.agentId,
-                                    conversationId: localConversationId!,
-                                    artifactRoot,
-                                    absolutePath: file,
-                                });
-                                if (htmlArtifact) {
-                                    writer.write({
-                                        type: "data-artifact",
-                                        data: htmlArtifact,
-                                    } as any);
-                                }
-                            }
-                            return;
-                        }
-
-                        if (event.type === "message.part.updated") {
-                            const part = event.properties?.part as Record<string, any> | undefined;
-                            if (!part || part.sessionID !== opencodeSessionId) return;
-                            const messageID = String(part.messageID ?? "");
-                            const role = messageRoles.get(messageID);
-
-                            if (part.type === "step-finish") {
-                                tokenUsage.observeStepFinishPart(part);
-                                return;
-                            }
-
-                            if (part.type === "tool") {
-                                if (role && role !== "assistant") return;
-                                partRouter.registerPartType(String(part.id ?? ""), "tool");
-                                this.emitToolPart({
-                                    part,
-                                    writer,
-                                    toolParts,
-                                    emittedToolInputIds,
-                                    artifactRoot,
-                                    agentId: params.agentId,
-                                    conversationId: localConversationId!,
-                                    onHtmlArtifact: (artifact) => {
-                                        htmlArtifact = artifact;
-                                        writer.write({
-                                            type: "data-artifact",
-                                            data: artifact,
-                                        } as any);
-                                    },
-                                });
-                                return;
-                            }
-
-                            // Only stream assistant text/reasoning; user prompt parts caused UI echo.
-                            writeChunks(
-                                partRouter.onTextOrReasoningUpdated({
-                                    messageRole: role,
-                                    part: {
-                                        id: String(part.id ?? ""),
-                                        type: String(part.type ?? ""),
-                                        text: typeof part.text === "string" ? part.text : undefined,
-                                        messageID,
-                                        time: part.time,
-                                    },
-                                }),
-                            );
-                        }
-                    },
-                });
-
-                const eventPromise = eventLoop.catch((error) => {
-                    if (!turnHandle?.signal.aborted) {
-                        this.logger.warn(
-                            `OpenCode event loop ended: ${error instanceof Error ? error.message : String(error)}`,
-                        );
-                    }
-                });
-
-                await this.opencodeApiService.promptAsync({
-                    config: agent.thirdPartyIntegration,
-                    sessionId: opencodeSessionId,
-                    text: userText,
-                    parts: mappedPrompt.parts as Array<Record<string, unknown>>,
-                    system,
-                    model: config.model,
-                });
-                // Race: a permission.asked may fire before /event is fully attached.
-                await this.opencodeApiService.approvePendingPermissions({
-                    config: agent.thirdPartyIntegration,
-                    sessionId: opencodeSessionId,
-                });
-
-                // Persist user message as soon as the remote turn is accepted so
-                // mid-stream reopen can load at least the user turn from BuildingAI.
-                if (
-                    saveConversation &&
-                    localConversationId &&
-                    lastUserMessage &&
-                    !params.isRegenerate &&
-                    !earlySavedUserMessageId
-                ) {
-                    const savedUserMessage = await this.agentChatMessageService.createMessage({
-                        conversationId: localConversationId,
-                        agentId: params.agentId,
-                        userId: params.userId,
-                        anonymousIdentifier: params.anonymousIdentifier,
-                        message: lastUserMessage as ChatUIMessage,
-                        formVariables: params.formVariables,
-                        formFieldsInputs: params.formFieldsInputs,
-                        parentId: params.parentId,
-                    });
-                    earlySavedUserMessageId = savedUserMessage.id;
-                    await this.agentChatRecordService.updateStats(localConversationId);
-                    safeWrite({
-                        type: "data-user-message-id",
-                        data: savedUserMessage.id,
-                    });
-                }
-
-                /**
-                 * Turn completion must outlive the HTTP stream. Switching
-                 * conversations cancels the UI stream / req, which would
-                 * otherwise abort this execute() before saveMessages and leave
-                 * metadata stuck at `running` forever (timeout never fires).
-                 */
-                persistStarted = true;
-                const persistTurn = this.turnRunner.keepAlive(
-                    (async () => {
-                        const permissionPoll = setInterval(() => {
-                            void this.opencodeApiService.approvePendingPermissions({
-                                config: agent.thirdPartyIntegration,
-                                sessionId: opencodeSessionId,
-                            });
-                        }, 3_000);
-                        try {
-                            const maxWaitMs = 15 * 60 * 1000;
-                            await Promise.race([
-                                turnDone,
-                                new Promise<void>((resolve) => {
-                                    setTimeout(() => {
-                                        if (!turnIdle) {
-                                            timedOut = true;
-                                            streamError = "OpenCode turn timed out";
-                                            finishTurn();
-                                            this.turnRunner.cancel(localConversationId);
-                                        }
-                                        resolve();
-                                    }, maxWaitMs);
-                                }),
-                            ]);
-
-                            const userStopped =
-                                Boolean(turnHandle?.signal.aborted) && !timedOut;
-                            if (timedOut || userStopped) {
-                                await this.opencodeApiService.abortSession({
-                                    config: agent.thirdPartyIntegration,
-                                    sessionId: opencodeSessionId,
-                                });
-                            }
-
-                            await Promise.race([
-                                eventPromise,
-                                new Promise((resolve) => setTimeout(resolve, 500)),
-                            ]);
-
-                            if (!htmlArtifact) {
-                                htmlArtifact = await this.detectHtmlArtifact({
-                                    agentId: params.agentId,
-                                    conversationId: localConversationId,
-                                    artifactRoot,
-                                    exclude: preExistingHtmlFiles,
-                                });
-                                if (htmlArtifact) {
-                                    safeWrite({
-                                        type: "data-artifact",
-                                        data: htmlArtifact,
-                                    } as any);
-                                }
-                            }
-
-                            if (streamError) {
-                                writeChunks(
-                                    partRouter.appendErrorText(`OpenCode error: ${streamError}`),
-                                );
-                            }
-
-                            writeChunks(partRouter.endOpenReasoning());
-                            writeChunks(partRouter.ensureTextClosed());
-
-                            const usage = tokenUsage.finalize();
-                            let userConsumedPower = 0;
-                            if (
-                                shouldCharge &&
-                                saveConversation &&
-                                localConversationId &&
-                                params.userId &&
-                                billingRule &&
-                                (usage.totalTokens ?? 0) > 0
-                            ) {
-                                userConsumedPower = await this.agentBillingHandler.deduct({
-                                    userId: params.userId,
-                                    conversationId: localConversationId,
-                                    agentId: params.agentId,
-                                    usage,
-                                    billingRule,
-                                });
-                            }
-
-                            safeWrite({
-                                type: "data-usage",
-                                data: {
-                                    inputTokens: usage.inputTokens ?? 0,
-                                    outputTokens: usage.outputTokens ?? 0,
-                                    totalTokens: usage.totalTokens ?? 0,
-                                    inputTokenDetails: usage.inputTokenDetails,
-                                    outputTokenDetails: usage.outputTokenDetails,
-                                    reasoningTokens: usage.reasoningTokens,
-                                    cachedInputTokens: usage.cachedInputTokens,
-                                    raw: usage.raw,
-                                    userConsumedPower,
-                                },
-                            });
-
-                            const toolCallParts = Array.from(toolParts.values());
-                            const reasoningParts = partRouter.getPersistedReasoningParts();
-                            const responseParts: any[] = [...reasoningParts, ...toolCallParts];
-                            if (
-                                partRouter.fullText ||
-                                (toolCallParts.length === 0 && reasoningParts.length === 0)
-                            ) {
-                                responseParts.push({ type: "text", text: partRouter.fullText });
-                            }
-                            if (htmlArtifact) {
-                                responseParts.push({
-                                    type: "data-artifact",
-                                    data: htmlArtifact,
-                                });
-                            }
-
-                            const responseMessage: UIMessage = {
-                                id: assistantMessageId,
-                                role: "assistant",
-                                parts: responseParts as UIMessage["parts"],
-                            };
-
-                            const terminalStatus = timedOut
-                                ? "timed_out"
-                                : userStopped
-                                  ? "aborted"
-                                  : streamError
-                                    ? "aborted"
-                                    : "completed";
-
-                            if (saveConversation && localConversationId) {
-                                await this.agentChatRecordService.updateMetadata(
-                                    localConversationId,
-                                    mergeOpencodeTurnMetadata(
-                                        {
-                                            provider: "opencode",
-                                            opencodeSessionId,
-                                            artifactRoot,
-                                            lastHtmlArtifact: htmlArtifact,
-                                        },
-                                        {
-                                            status: terminalStatus,
-                                            at: new Date().toISOString(),
-                                        },
-                                    ),
-                                );
-
-                                await this.saveMessages({
-                                    conversationId: localConversationId,
-                                    params,
-                                    writer: { write: safeWrite },
-                                    lastUser: lastUserMessage,
-                                    savedUserMessageId: earlySavedUserMessageId,
-                                    responseMessage,
-                                    sensitiveWordFilter,
-                                    usage,
-                                    userConsumedPower,
-                                    metadata: {
-                                        provider: "opencode",
-                                        opencodeSessionId,
-                                        artifactRoot,
-                                        htmlArtifact,
-                                        toolCalls: toolCallParts,
-                                    },
-                                });
-                            }
-
-                            if (localConversationId) {
-                                safeWrite({
-                                    type: "data-stream-complete",
-                                    data: localConversationId,
-                                    transient: true,
-                                } as any);
-                            }
-
-                            safeWrite({ type: "finish-step" });
-                            safeWrite({
-                                type: "finish",
-                                finishReason:
-                                    userStopped || timedOut || streamError ? "error" : "stop",
-                            });
-                        } finally {
-                            clearInterval(permissionPoll);
-                            if (localConversationId) {
-                                this.turnRunner.complete(localConversationId);
-                            }
-                        }
-                    })(),
-                );
-
-                // Stay on the HTTP stream while the client is connected; if they
-                // disconnect (switch chat), end this execute without cancelling
-                // persistTurn — it keeps listening / saving in the background.
-                const clientDisconnected = new Promise<"disconnect">((resolve) => {
-                    if (params.abortSignal?.aborted) {
-                        resolve("disconnect");
-                        return;
-                    }
-                    params.abortSignal?.addEventListener(
-                        "abort",
-                        () => resolve("disconnect"),
-                        { once: true },
-                    );
-                });
-
-                const outcome = await Promise.race([
-                    persistTurn.then(() => "done" as const),
-                    clientDisconnected,
-                ]);
-
-                if (outcome === "disconnect") {
-                    this.logger.log(
-                        `OpenCode HTTP subscriber disconnected for ${localConversationId}; turn continues in background`,
-                    );
-                    // Do not cancel the runner / OpenCode session.
-                    return;
-                }
-            } catch (error) {
-                // If setup failed before persistTurn, clear runner.
-                if (
-                    !persistStarted &&
-                    localConversationId &&
-                    this.turnRunner.isRunning(localConversationId)
-                ) {
-                    this.turnRunner.complete(localConversationId);
                     await this.agentChatRecordService.updateMetadata(
                         localConversationId,
                         mergeOpencodeTurnMetadata(
-                            { provider: "opencode" },
-                            { status: "aborted", at: new Date().toISOString() },
+                            { provider: "opencode", opencodeSessionId, artifactRoot },
+                            { status: "running", at: new Date().toISOString() },
                         ),
                     );
+
+                    let turnIdle = false;
+                    let streamError: string | undefined;
+                    let settleTurn: (() => void) | undefined;
+                    const turnDone = new Promise<void>((resolve) => {
+                        settleTurn = resolve;
+                    });
+                    const finishTurn = () => {
+                        if (turnIdle) return;
+                        turnIdle = true;
+                        settleTurn?.();
+                    };
+                    const onRunnerAbort = () => {
+                        finishTurn();
+                    };
+                    if (turnHandle.signal.aborted) onRunnerAbort();
+                    else
+                        turnHandle.signal.addEventListener("abort", onRunnerAbort, {
+                            once: true,
+                        });
+
+                    let resolveEventReady: (() => void) | undefined;
+                    let rejectEventReady: ((error: unknown) => void) | undefined;
+                    const eventReady = new Promise<void>((resolve, reject) => {
+                        resolveEventReady = resolve;
+                        rejectEventReady = reject;
+                    });
+                    const eventLoop = this.opencodeApiService.streamEvents({
+                        config: agent.thirdPartyIntegration,
+                        signal: turnHandle.signal,
+                        onReady: () => resolveEventReady?.(),
+                        shouldStop: (event) => {
+                            if (event.type === "session.idle") {
+                                return event.properties?.sessionID === opencodeSessionId;
+                            }
+                            if (event.type === "session.error") {
+                                return event.properties?.sessionID === opencodeSessionId;
+                            }
+                            return false;
+                        },
+                        onEvent: async (event) => {
+                            const sessionID = event.properties?.sessionID as string | undefined;
+                            if (sessionID && sessionID !== opencodeSessionId) {
+                                return;
+                            }
+
+                            if (
+                                event.type === "question.asked" ||
+                                event.type === "question.v2.asked"
+                            ) {
+                                const question = normalizeOpencodePendingQuestion(
+                                    event.properties?.data &&
+                                        typeof event.properties.data === "object"
+                                        ? event.properties.data
+                                        : event.properties,
+                                );
+                                if (!question || question.sessionId !== opencodeSessionId) return;
+                                const tool = event.properties?.tool as
+                                    | Record<string, unknown>
+                                    | undefined;
+                                if (typeof tool?.callID === "string")
+                                    questionToolCallIds.add(tool.callID);
+                                if (localConversationId) {
+                                    await this.agentChatRecordService.updateMetadata(
+                                        localConversationId,
+                                        {
+                                            opencodePendingQuestion: question,
+                                        },
+                                    );
+                                }
+                                safeWrite({
+                                    type: "data-opencode-question",
+                                    data: question,
+                                } as any);
+                                return;
+                            }
+
+                            if (
+                                event.type === "question.replied" ||
+                                event.type === "question.rejected" ||
+                                event.type === "question.v2.replied" ||
+                                event.type === "question.v2.rejected"
+                            ) {
+                                if (localConversationId) {
+                                    await this.agentChatRecordService.updateMetadata(
+                                        localConversationId,
+                                        {
+                                            opencodePendingQuestion: null,
+                                        },
+                                    );
+                                }
+                                safeWrite({ type: "data-opencode-question", data: null } as any);
+                                return;
+                            }
+
+                            const permissionAsk = extractOpencodePermissionAsk(event);
+                            if (permissionAsk) {
+                                await this.opencodeApiService.replyPermission({
+                                    config: agent.thirdPartyIntegration,
+                                    requestId: permissionAsk.requestId,
+                                    reply: "always",
+                                });
+                                return;
+                            }
+
+                            if (event.type === "message.updated") {
+                                const info = event.properties?.info as
+                                    | Record<string, any>
+                                    | undefined;
+                                if (info?.id && info?.role) {
+                                    messageRoles.set(String(info.id), String(info.role));
+                                }
+                                if (info) {
+                                    tokenUsage.observeMessageUpdated(info);
+                                }
+                                return;
+                            }
+
+                            if (event.type === "session.error") {
+                                const err = event.properties?.error;
+                                streamError = this.formatSessionError(err);
+                                finishTurn();
+                                return;
+                            }
+
+                            if (event.type === "session.idle" && sessionID === opencodeSessionId) {
+                                finishTurn();
+                                return;
+                            }
+
+                            if (event.type === "message.part.delta") {
+                                const messageID = String(event.properties?.messageID ?? "");
+                                writeChunks(
+                                    partRouter.onDelta({
+                                        messageRole: messageRoles.get(messageID),
+                                        partID: String(event.properties?.partID ?? ""),
+                                        field: event.properties?.field,
+                                        delta: event.properties?.delta,
+                                    }),
+                                );
+                                return;
+                            }
+
+                            if (event.type === "file.edited") {
+                                const file = event.properties?.file;
+                                if (
+                                    typeof file === "string" &&
+                                    isHtmlArtifactPath(file, artifactRoot)
+                                ) {
+                                    htmlArtifact = await this.buildHtmlArtifact({
+                                        agentId: params.agentId,
+                                        conversationId: localConversationId!,
+                                        artifactRoot,
+                                        absolutePath: file,
+                                    });
+                                    if (htmlArtifact) {
+                                        writer.write({
+                                            type: "data-artifact",
+                                            data: htmlArtifact,
+                                        } as any);
+                                    }
+                                }
+                                return;
+                            }
+
+                            if (event.type === "message.part.updated") {
+                                const part = event.properties?.part as
+                                    | Record<string, any>
+                                    | undefined;
+                                if (!part || part.sessionID !== opencodeSessionId) return;
+                                const messageID = String(part.messageID ?? "");
+                                const role = messageRoles.get(messageID);
+
+                                if (part.type === "step-finish") {
+                                    tokenUsage.observeStepFinishPart(part);
+                                    return;
+                                }
+
+                                if (part.type === "tool") {
+                                    if (role && role !== "assistant") return;
+                                    const callId = String(part.callID ?? part.id ?? "");
+                                    if (part.tool === "question" || questionToolCallIds.has(callId))
+                                        return;
+                                    partRouter.registerPartType(String(part.id ?? ""), "tool");
+                                    this.emitToolPart({
+                                        part,
+                                        writer,
+                                        toolParts,
+                                        emittedToolInputIds,
+                                        artifactRoot,
+                                        agentId: params.agentId,
+                                        conversationId: localConversationId!,
+                                        onHtmlArtifact: (artifact) => {
+                                            htmlArtifact = artifact;
+                                            writer.write({
+                                                type: "data-artifact",
+                                                data: artifact,
+                                            } as any);
+                                        },
+                                    });
+                                    return;
+                                }
+
+                                // Only stream assistant text/reasoning; user prompt parts caused UI echo.
+                                writeChunks(
+                                    partRouter.onTextOrReasoningUpdated({
+                                        messageRole: role,
+                                        part: {
+                                            id: String(part.id ?? ""),
+                                            type: String(part.type ?? ""),
+                                            text:
+                                                typeof part.text === "string"
+                                                    ? part.text
+                                                    : undefined,
+                                            messageID,
+                                            time: part.time,
+                                        },
+                                    }),
+                                );
+                            }
+                        },
+                    });
+
+                    const eventPromise = eventLoop.catch((error) => {
+                        rejectEventReady?.(error);
+                        if (!turnHandle?.signal.aborted) {
+                            this.logger.warn(
+                                `OpenCode event loop ended: ${error instanceof Error ? error.message : String(error)}`,
+                            );
+                        }
+                    });
+
+                    // The first prompt can trigger a question immediately. Do
+                    // not send it until the event subscription is connected.
+                    await eventReady;
+                    await this.opencodeApiService.promptAsync({
+                        config: agent.thirdPartyIntegration,
+                        sessionId: opencodeSessionId,
+                        text: userText,
+                        parts: mappedPrompt.parts as Array<Record<string, unknown>>,
+                        system,
+                        model: config.model,
+                    });
+                    // Race: a permission.asked may fire before /event is fully attached.
+                    await this.opencodeApiService.approvePendingPermissions({
+                        config: agent.thirdPartyIntegration,
+                        sessionId: opencodeSessionId,
+                    });
+
+                    // Persist user message as soon as the remote turn is accepted so
+                    // mid-stream reopen can load at least the user turn from BuildingAI.
+                    if (
+                        saveConversation &&
+                        localConversationId &&
+                        lastUserMessage &&
+                        !params.isRegenerate &&
+                        !earlySavedUserMessageId
+                    ) {
+                        const savedUserMessage = await this.agentChatMessageService.createMessage({
+                            conversationId: localConversationId,
+                            agentId: params.agentId,
+                            userId: params.userId,
+                            anonymousIdentifier: params.anonymousIdentifier,
+                            message: lastUserMessage as ChatUIMessage,
+                            formVariables: params.formVariables,
+                            formFieldsInputs: params.formFieldsInputs,
+                            parentId: params.parentId,
+                        });
+                        earlySavedUserMessageId = savedUserMessage.id;
+                        await this.agentChatRecordService.updateStats(localConversationId);
+                        safeWrite({
+                            type: "data-user-message-id",
+                            data: savedUserMessage.id,
+                        });
+                    }
+
+                    /**
+                     * Turn completion must outlive the HTTP stream. Switching
+                     * conversations cancels the UI stream / req, which would
+                     * otherwise abort this execute() before saveMessages and leave
+                     * metadata stuck at `running` forever (timeout never fires).
+                     */
+                    persistStarted = true;
+                    const persistTurn = this.turnRunner.keepAlive(
+                        (async () => {
+                            const permissionPoll = setInterval(() => {
+                                void this.opencodeApiService.approvePendingPermissions({
+                                    config: agent.thirdPartyIntegration,
+                                    sessionId: opencodeSessionId,
+                                });
+                            }, 3_000);
+                            try {
+                                const maxWaitMs = 15 * 60 * 1000;
+                                await Promise.race([
+                                    turnDone,
+                                    new Promise<void>((resolve) => {
+                                        setTimeout(() => {
+                                            if (!turnIdle) {
+                                                timedOut = true;
+                                                streamError = "OpenCode turn timed out";
+                                                finishTurn();
+                                                this.turnRunner.cancel(localConversationId);
+                                            }
+                                            resolve();
+                                        }, maxWaitMs);
+                                    }),
+                                ]);
+
+                                const userStopped =
+                                    Boolean(turnHandle?.signal.aborted) && !timedOut;
+                                if (timedOut || userStopped) {
+                                    await this.opencodeApiService.abortSession({
+                                        config: agent.thirdPartyIntegration,
+                                        sessionId: opencodeSessionId,
+                                    });
+                                }
+
+                                await Promise.race([
+                                    eventPromise,
+                                    new Promise((resolve) => setTimeout(resolve, 500)),
+                                ]);
+
+                                if (!htmlArtifact) {
+                                    htmlArtifact = await this.detectHtmlArtifact({
+                                        agentId: params.agentId,
+                                        conversationId: localConversationId,
+                                        artifactRoot,
+                                        exclude: preExistingHtmlFiles,
+                                    });
+                                    if (htmlArtifact) {
+                                        safeWrite({
+                                            type: "data-artifact",
+                                            data: htmlArtifact,
+                                        } as any);
+                                    }
+                                }
+
+                                if (streamError) {
+                                    writeChunks(
+                                        partRouter.appendErrorText(
+                                            `OpenCode error: ${streamError}`,
+                                        ),
+                                    );
+                                }
+
+                                writeChunks(partRouter.endOpenReasoning());
+                                writeChunks(partRouter.ensureTextClosed());
+
+                                const usage = tokenUsage.finalize();
+                                let userConsumedPower = 0;
+                                if (
+                                    shouldCharge &&
+                                    saveConversation &&
+                                    localConversationId &&
+                                    params.userId &&
+                                    billingRule &&
+                                    (usage.totalTokens ?? 0) > 0
+                                ) {
+                                    userConsumedPower = await this.agentBillingHandler.deduct({
+                                        userId: params.userId,
+                                        conversationId: localConversationId,
+                                        agentId: params.agentId,
+                                        usage,
+                                        billingRule,
+                                    });
+                                }
+
+                                safeWrite({
+                                    type: "data-usage",
+                                    data: {
+                                        inputTokens: usage.inputTokens ?? 0,
+                                        outputTokens: usage.outputTokens ?? 0,
+                                        totalTokens: usage.totalTokens ?? 0,
+                                        inputTokenDetails: usage.inputTokenDetails,
+                                        outputTokenDetails: usage.outputTokenDetails,
+                                        reasoningTokens: usage.reasoningTokens,
+                                        cachedInputTokens: usage.cachedInputTokens,
+                                        raw: usage.raw,
+                                        userConsumedPower,
+                                    },
+                                });
+
+                                const toolCallParts = Array.from(toolParts.values());
+                                const reasoningParts = partRouter.getPersistedReasoningParts();
+                                const responseParts: any[] = [...reasoningParts, ...toolCallParts];
+                                if (
+                                    partRouter.fullText ||
+                                    (toolCallParts.length === 0 && reasoningParts.length === 0)
+                                ) {
+                                    responseParts.push({ type: "text", text: partRouter.fullText });
+                                }
+                                if (htmlArtifact) {
+                                    responseParts.push({
+                                        type: "data-artifact",
+                                        data: htmlArtifact,
+                                    });
+                                }
+
+                                const responseMessage: UIMessage = {
+                                    id: assistantMessageId,
+                                    role: "assistant",
+                                    parts: responseParts as UIMessage["parts"],
+                                };
+
+                                const terminalStatus = timedOut
+                                    ? "timed_out"
+                                    : userStopped
+                                      ? "aborted"
+                                      : streamError
+                                        ? "aborted"
+                                        : "completed";
+
+                                if (saveConversation && localConversationId) {
+                                    await this.agentChatRecordService.updateMetadata(
+                                        localConversationId,
+                                        mergeOpencodeTurnMetadata(
+                                            {
+                                                provider: "opencode",
+                                                opencodeSessionId,
+                                                artifactRoot,
+                                                lastHtmlArtifact: htmlArtifact,
+                                            },
+                                            {
+                                                status: terminalStatus,
+                                                at: new Date().toISOString(),
+                                            },
+                                        ),
+                                    );
+
+                                    const persistenceResult =
+                                        await persistOpencodeAssistantMessageSafely({
+                                            persist: () =>
+                                                this.saveMessages({
+                                                    conversationId: localConversationId!,
+                                                    params,
+                                                    writer: { write: safeWrite },
+                                                    lastUser: lastUserMessage,
+                                                    savedUserMessageId: earlySavedUserMessageId,
+                                                    responseMessage,
+                                                    sensitiveWordFilter,
+                                                    usage,
+                                                    userConsumedPower,
+                                                    metadata: {
+                                                        provider: "opencode",
+                                                        opencodeSessionId,
+                                                        artifactRoot,
+                                                        htmlArtifact,
+                                                        toolCalls: toolCallParts,
+                                                    },
+                                                }),
+                                            markFailure: () =>
+                                                this.agentChatRecordService.updateMetadata(
+                                                    localConversationId!,
+                                                    mergeOpencodeTurnMetadata(
+                                                        {
+                                                            provider: "opencode",
+                                                            opencodeSessionId,
+                                                            artifactRoot,
+                                                        },
+                                                        {
+                                                            status: "persist_failed",
+                                                            at: new Date().toISOString(),
+                                                        },
+                                                    ),
+                                                ),
+                                        });
+
+                                    if ("error" in persistenceResult) {
+                                        const persistenceError =
+                                            "Assistant response could not be saved. Please retry.";
+                                        streamError = persistenceError;
+                                        this.logger.error(
+                                            `OpenCode assistant message persistence failed for conversation ${localConversationId} (${this.getPersistenceErrorCode(persistenceResult.error)})`,
+                                        );
+                                        safeWrite({ type: "error", errorText: persistenceError });
+                                    }
+                                }
+
+                                if (localConversationId) {
+                                    safeWrite({
+                                        type: "data-stream-complete",
+                                        data: localConversationId,
+                                        transient: true,
+                                    } as any);
+                                }
+
+                                safeWrite({ type: "finish-step" });
+                                safeWrite({
+                                    type: "finish",
+                                    finishReason:
+                                        userStopped || timedOut || streamError ? "error" : "stop",
+                                });
+                            } finally {
+                                clearInterval(permissionPoll);
+                                if (localConversationId) {
+                                    this.turnRunner.complete(localConversationId);
+                                }
+                            }
+                        })(),
+                    );
+
+                    // Stay on the HTTP stream while the client is connected; if they
+                    // disconnect (switch chat), end this execute without cancelling
+                    // persistTurn — it keeps listening / saving in the background.
+                    const clientDisconnected = new Promise<"disconnect">((resolve) => {
+                        if (params.abortSignal?.aborted) {
+                            resolve("disconnect");
+                            return;
+                        }
+                        params.abortSignal?.addEventListener("abort", () => resolve("disconnect"), {
+                            once: true,
+                        });
+                    });
+
+                    const outcome = await Promise.race([
+                        persistTurn.then(() => "done" as const),
+                        clientDisconnected,
+                    ]);
+
+                    if (outcome === "disconnect") {
+                        this.logger.log(
+                            `OpenCode HTTP subscriber disconnected for ${localConversationId}; turn continues in background`,
+                        );
+                        // Do not cancel the runner / OpenCode session.
+                        return;
+                    }
+                } catch (error) {
+                    // If setup failed before persistTurn, clear runner.
+                    if (
+                        !persistStarted &&
+                        localConversationId &&
+                        this.turnRunner.isRunning(localConversationId)
+                    ) {
+                        this.turnRunner.complete(localConversationId);
+                        await this.agentChatRecordService.updateMetadata(
+                            localConversationId,
+                            mergeOpencodeTurnMetadata(
+                                { provider: "opencode" },
+                                { status: "aborted", at: new Date().toISOString() },
+                            ),
+                        );
+                    }
+                    throw error;
                 }
-                throw error;
-            }
             },
             onError: (error) => {
                 const message = error instanceof Error ? error.message : String(error);
@@ -1042,21 +1149,19 @@ export class OpencodeChatProvider {
             }
         }
 
+        const persistedAssistantMessage = prepareOpencodeAssistantMessageForPersistence(
+            responseMessage as ChatUIMessage,
+            sensitiveWordFilter,
+            usage,
+            userConsumedPower,
+        );
+
         const savedAssistantMessage = await this.agentChatMessageService.createMessage({
             conversationId,
             agentId: chatParams.agentId,
             userId: chatParams.userId,
             anonymousIdentifier: chatParams.anonymousIdentifier,
-            message: {
-                ...(responseMessage as ChatUIMessage),
-                parts: projectAssistantParts(
-                    responseMessage.parts as Record<string, any>[],
-                    sensitiveWordFilter,
-                    sensitiveWordFilter.policy.applyToReasoning,
-                ),
-                ...(usage ? { usage } : {}),
-                ...(userConsumedPower != null ? { userConsumedPower } : {}),
-            } as ChatUIMessage,
+            message: persistedAssistantMessage,
             parentId: userMessageId,
         });
 
@@ -1065,5 +1170,17 @@ export class OpencodeChatProvider {
             data: savedAssistantMessage.id,
         });
         await this.agentChatRecordService.updateStats(conversationId);
+    }
+
+    private getPersistenceErrorCode(error: unknown): string {
+        if (!error || typeof error !== "object") return "unknown";
+        const candidate = error as { code?: unknown; name?: unknown };
+        if (typeof candidate.code === "string" && candidate.code.length <= 64) {
+            return candidate.code;
+        }
+        if (typeof candidate.name === "string" && candidate.name.length <= 64) {
+            return candidate.name;
+        }
+        return "unknown";
     }
 }

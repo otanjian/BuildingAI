@@ -5,6 +5,12 @@ export type ToolPartLike = {
   toolName?: string;
 };
 
+export function isInteractiveQuestionToolPart(part: ToolPartLike): boolean {
+  return part.type === "dynamic-tool"
+    ? part.toolName === "question"
+    : part.type === "tool-question";
+}
+
 const COMPLETED_STATES = new Set(["output-available", "output-error", "output-denied"]);
 
 export function isCompletedToolState(state?: string): boolean {

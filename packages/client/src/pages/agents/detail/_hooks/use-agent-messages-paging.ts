@@ -3,7 +3,10 @@ import { listAgentConversationMessages } from "@buildingai/services/web";
 import type { UIMessage } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { shouldApplyHistoryPageToChat } from "../../_shared/history-page-overwrite";
+import {
+  mergeHistoryPageWithLiveMessages,
+  shouldApplyHistoryPageToChat,
+} from "../../_shared/history-page-overwrite";
 
 const PAGE_SIZE = 20;
 
@@ -50,6 +53,7 @@ export interface UseAgentMessagesPagingOptions {
   lastMessageDbIdRef: React.RefObject<string | null>;
   shouldLoadInitial: boolean;
   getLiveMessageCount?: () => number;
+  getDbMessageId: (clientMessageId: string) => string | undefined;
 }
 
 export interface UseAgentMessagesPagingReturn {
@@ -62,8 +66,15 @@ export interface UseAgentMessagesPagingReturn {
 export function useAgentMessagesPaging(
   options: UseAgentMessagesPagingOptions,
 ): UseAgentMessagesPagingReturn {
-  const { agentId, conversationId, setMessages, lastMessageDbIdRef, shouldLoadInitial, getLiveMessageCount } =
-    options;
+  const {
+    agentId,
+    conversationId,
+    setMessages,
+    lastMessageDbIdRef,
+    shouldLoadInitial,
+    getLiveMessageCount,
+    getDbMessageId,
+  } = options;
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
@@ -104,32 +115,34 @@ export function useAgentMessagesPaging(
     listAgentConversationMessages(agentId, requestConversationId, { page: 1, pageSize: PAGE_SIZE })
       .then((res) => {
         if (prevConversationIdRef.current !== requestConversationId) return;
-        if (
-          !shouldApplyHistoryPageToChat({
-            shouldLoadInitial,
-            switched,
-            liveMessageCount: getLiveMessageCountRef.current?.() ?? 0,
-          })
-        ) {
-          return;
-        }
         const total = res.total;
         const items = res.items.map((item, idx) =>
           convertToUIMessage(item, idx, { page: 1, pageSize: PAGE_SIZE, total }),
         );
         const sorted = mergeAndSort([], items);
+        const persistedIds = new Set(sorted.map((message) => message.id));
         setHasMoreMessages(res.page < res.totalPages);
         nextPageRef.current = Math.max(2, res.page + 1);
-        setMessages(sorted);
-        if (sorted.length > 0) {
-          lastMessageDbIdRef.current = sorted[sorted.length - 1].id;
-        }
+        setMessages((live) => {
+          const reconciled = mergeHistoryPageWithLiveMessages(sorted, live, getDbMessageId);
+          const latestPersistedId = [...reconciled]
+            .reverse()
+            .map((message) =>
+              getDbMessageId(message.id) ??
+              (persistedIds.has(message.id) ? message.id : undefined),
+            )
+            .find((id): id is string => Boolean(id));
+          if (latestPersistedId) {
+            lastMessageDbIdRef.current = latestPersistedId;
+          }
+          return reconciled;
+        });
       })
       .catch(() => {})
       .finally(() => {
         setIsLoadingMessages(false);
       });
-  }, [agentId, conversationId, shouldLoadInitial, setMessages, lastMessageDbIdRef]);
+  }, [agentId, conversationId, shouldLoadInitial, setMessages, lastMessageDbIdRef, getDbMessageId]);
 
   const loadMoreMessages = useCallback(() => {
     if (!conversationId) return;

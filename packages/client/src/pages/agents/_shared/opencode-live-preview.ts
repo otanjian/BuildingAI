@@ -30,6 +30,7 @@ export function buildOpencodeLivePreview(
     }
     if (part.type === "tool") {
       const toolName = String(part.tool ?? "tool");
+      if (toolName === "question") continue;
       const state = (part.state as Record<string, unknown>) ?? {};
       const status = String(state.status ?? "pending");
       const input = (state.input as Record<string, unknown>) ?? {};
@@ -45,7 +46,6 @@ export function buildOpencodeLivePreview(
   return {
     id: `oc-live-${userMessageId}`,
     role: "assistant",
-    content: fullText,
     parts: [{ type: "text" as const, text: fullText }],
     metadata: {
       isOpencodeLivePreview: true,

@@ -261,16 +261,15 @@ describe("decideOpencodeTurnObservation", () => {
         ).toEqual({ kind: "continue", activityChanged: false });
     });
 
-    it("rejects questions deterministically", () => {
+    it("waits for questions deterministically", () => {
         expect(
             decideOpencodeTurnObservation(
                 observation({ pendingQuestionIds: ["q_1"] }),
             ),
         ).toEqual({
-            kind: "reject-question",
+            kind: "await-question",
             activityChanged: true,
             requestId: "q_1",
-            errorCode: "OPENCODE_INTERACTIVE_QUESTION_UNSUPPORTED",
         });
     });
 

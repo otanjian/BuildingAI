@@ -13,10 +13,13 @@ vi.mock("./public-http", () => ({
     payload && typeof payload === "object" && "data" in payload ? payload.data : payload,
 }));
 vi.mock("@/utils/api", () => ({ getApiBaseUrl: () => "https://buildingai.test" }));
+vi.mock("@buildingai/services/web", () => ({ fetchAllConversationPages: vi.fn() }));
 
 import {
   acceptPublicOpencodeTurn,
   getPublicOpencodeTurnStatus,
+  replyPublicOpencodeTurnQuestion,
+  rejectPublicOpencodeTurnQuestion,
   stopPublicOpencodeTurn,
 } from "./public-conversations";
 
@@ -58,6 +61,34 @@ describe("public durable OpenCode turn transport", () => {
       2,
       `https://buildingai.test/v1/opencode-turns/${input.turnId}/stop`,
       undefined,
+      { signal: undefined },
+    );
+  });
+
+  it("sends question answers and reject actions with anonymous ownership", async () => {
+    post.mockResolvedValue({ data: { status: "running", pendingQuestion: null } });
+    const ownership = { accessToken: "site-token", anonymousIdentifier: "anonymous-owner" };
+    await replyPublicOpencodeTurnQuestion({
+      ...ownership,
+      turnId: "turn-1",
+      requestId: "q-1",
+      answers: [["Option A"]],
+    });
+    await rejectPublicOpencodeTurnQuestion({
+      ...ownership,
+      turnId: "turn-1",
+      requestId: "q-1",
+    });
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      "https://buildingai.test/v1/opencode-turns/turn-1/question/reply",
+      { requestId: "q-1", answers: [["Option A"]] },
+      { signal: undefined },
+    );
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      "https://buildingai.test/v1/opencode-turns/turn-1/question/reject",
+      { requestId: "q-1" },
       { signal: undefined },
     );
   });

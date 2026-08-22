@@ -43,6 +43,20 @@ export type OpencodeTurnStatusResult = {
     startedAt: string | null;
     completedAt: string | null;
     lastActivityAt: string | null;
+    liveProjection: Record<string, unknown> | null;
+    projectionVersion: string;
+    projectionUpdatedAt: string | null;
+    pendingQuestion: {
+        requestId: string;
+        sessionId: string;
+        questions: Array<{
+            question: string;
+            header: string;
+            options: Array<{ label: string; description: string }>;
+            multiple: boolean;
+            custom: boolean;
+        }>;
+    } | null;
 };
 
 export type OpencodeTurnRequestOptions = {
@@ -91,6 +105,32 @@ export function stopOpencodeTurn(
     return apiHttpClient.post<OpencodeTurnStatusResult>(
         `/ai-agents/${agentId}/chat/opencode-turns/${turnId}/stop`,
         undefined,
+        requestConfig(options),
+    );
+}
+
+export function replyOpencodeTurnQuestion(
+    agentId: string,
+    turnId: string,
+    input: { requestId: string; answers: string[][] },
+    options?: OpencodeTurnRequestOptions,
+): Promise<OpencodeTurnStatusResult> {
+    return apiHttpClient.post<OpencodeTurnStatusResult>(
+        `/ai-agents/${agentId}/chat/opencode-turns/${turnId}/question/reply`,
+        input,
+        requestConfig(options),
+    );
+}
+
+export function rejectOpencodeTurnQuestion(
+    agentId: string,
+    turnId: string,
+    input: { requestId: string },
+    options?: OpencodeTurnRequestOptions,
+): Promise<OpencodeTurnStatusResult> {
+    return apiHttpClient.post<OpencodeTurnStatusResult>(
+        `/ai-agents/${agentId}/chat/opencode-turns/${turnId}/question/reject`,
+        input,
         requestConfig(options),
     );
 }

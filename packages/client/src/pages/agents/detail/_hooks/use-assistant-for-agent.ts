@@ -14,8 +14,12 @@ import type {
   Suggestion,
 } from "@/components/ask-assistant-ui/types";
 
-import type { OpencodeTurnActivity } from "../../_shared/opencode-turn-client";
+import { getOpencodeConversationStore } from "../../_shared/opencode-conversation-store";
 import { opencodeDurableUiPolicy } from "../../_shared/opencode-durable-ui-policy";
+import type {
+  OpencodePendingQuestion,
+  OpencodeTurnActivity,
+} from "../../_shared/opencode-turn-client";
 import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { useAgentChatStream } from "./use-agent-chat-stream";
 import { useAgentFeedback } from "./use-agent-feedback";
@@ -45,6 +49,7 @@ export interface UseAssistantForAgentOptions {
   isOpencodeTurnRunning?: boolean;
   durableOpencodeTurnsEnabled?: boolean;
   activeOpencodeTurn?: Omit<OpencodeTurnActivity, "conversationId"> | null;
+  legacyPendingQuestion?: OpencodePendingQuestion | null;
   /** Override available upload types for third-party agents (Coze/Dify). */
   supportedUploadTypes?: Array<"image" | "video" | "audio" | "file">;
 }
@@ -133,6 +138,7 @@ export function useAssistantForAgent(
     isOpencodeTurnRunning = false,
     durableOpencodeTurnsEnabled = false,
     activeOpencodeTurn,
+    legacyPendingQuestion,
     supportedUploadTypes,
   } = options;
   const { uuid: routeConversationId } = useParams<{ uuid?: string }>();
@@ -161,6 +167,14 @@ export function useAssistantForAgent(
     regenerate,
     addToolApprovalResponse,
     getDbMessageId,
+    composerKey,
+    composerDraft,
+    setComposerDraft,
+    scrollMemory,
+    setScrollMemory,
+    pendingQuestion,
+    replyQuestion,
+    rejectQuestion,
   } = useAgentChatStream({
     agentId,
     saveConversation,
@@ -178,6 +192,7 @@ export function useAssistantForAgent(
     isOpencodeTurnRunning,
     durableOpencodeTurnsEnabled,
     activeOpencodeTurn,
+    legacyPendingQuestion,
   });
 
   const { liked, disliked, onLike, onDislike } = useAgentFeedback(
@@ -226,10 +241,20 @@ export function useAssistantForAgent(
   const liveMessageCountRef = useRef(0);
   liveMessageCountRef.current = streamMessages.length;
 
+  useEffect(() => {
+    if (!composerKey) return;
+    const frame = requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [composerKey]);
+
   const shouldLoadInitial = Boolean(
     normalizedConversationId &&
+    !(
+      durableOpencodeTurnsEnabled &&
+      getOpencodeConversationStore(`detail-agent-${agentId}`).isLocalDraft(normalizedConversationId)
+    ) &&
     (durableOpencodeTurnsEnabled || status === "ready" || status === "error") &&
-    streamMessages.length === 0 &&
+    (durableOpencodeTurnsEnabled || streamMessages.length === 0) &&
     !editInProgressRef.current,
   );
 
@@ -245,6 +270,7 @@ export function useAssistantForAgent(
     lastMessageDbIdRef,
     shouldLoadInitial,
     getLiveMessageCount: () => liveMessageCountRef.current,
+    getDbMessageId,
   });
 
   const models = useMemo(
@@ -432,6 +458,12 @@ export function useAssistantForAgent(
     liked,
     disliked,
     textareaRef,
+    composerKey,
+    composerDraft,
+    onComposerDraftChange: setComposerDraft,
+    scrollMemoryKey: composerKey,
+    scrollMemory,
+    onScrollMemoryChange: setScrollMemory,
     onSend,
     onLoadMoreMessages: loadMoreMessages,
     onStop: stop,
@@ -455,5 +487,8 @@ export function useAssistantForAgent(
     isLoadingHistory,
     getDbMessageId,
     supportedUploadTypes,
+    pendingQuestion,
+    replyQuestion,
+    rejectQuestion,
   };
 }

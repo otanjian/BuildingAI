@@ -10,11 +10,34 @@ jest.mock("chalk", () => {
 import { VersionManagerService } from "./version-manager.service";
 
 describe("VersionManagerService migration ranges", () => {
+    it("reconciles pending migrations when the installed version is already current", async () => {
+        const service = new VersionManagerService({} as any, {} as any);
+        const migrations = {
+            runPendingMigrationsForVersion: jest.fn(async () => undefined),
+        };
+        (service as any).migrationRunner = migrations;
+        (service as any).versionDetector = {
+            detect: jest.fn(async () => ({
+                installed: "26.1.5",
+                current: "26.1.5",
+                needsUpgrade: false,
+                upgradeVersions: [],
+            })),
+        };
+
+        await service.checkAndUpgrade();
+
+        expect(migrations.runPendingMigrationsForVersion).toHaveBeenCalledWith("26.1.5");
+    });
+
     it("runs each upgrade from the installed/previous version instead of replaying from initial", async () => {
-        const service = new VersionManagerService({} as any, {
-            createContext: jest.fn(() => ({})),
-            executeUpgradeScripts: jest.fn(async () => undefined),
-        } as any);
+        const service = new VersionManagerService(
+            {} as any,
+            {
+                createContext: jest.fn(() => ({})),
+                executeUpgradeScripts: jest.fn(async () => undefined),
+            } as any,
+        );
         const migrations = { runMigrations: jest.fn(async () => undefined) };
         (service as any).migrationRunner = migrations;
         (service as any).writeVersionFile = jest.fn(async () => undefined);

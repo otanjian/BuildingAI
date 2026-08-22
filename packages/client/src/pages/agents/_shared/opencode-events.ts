@@ -1,6 +1,12 @@
 import type { OpencodeSessionMessage } from "./opencode-live-preview";
 
 export type OpencodeSessionEvent =
+  | { type: "question.asked"; properties?: Record<string, unknown> }
+  | { type: "question.replied"; properties?: Record<string, unknown> }
+  | { type: "question.rejected"; properties?: Record<string, unknown> }
+  | { type: "question.v2.asked"; properties?: Record<string, unknown> }
+  | { type: "question.v2.replied"; properties?: Record<string, unknown> }
+  | { type: "question.v2.rejected"; properties?: Record<string, unknown> }
   | {
       type: "message.updated";
       properties?: {
@@ -55,6 +61,7 @@ export interface SubscribeOpencodeSessionEventsOptions {
   onSnapshot?: (messages: OpencodeSessionMessage[]) => void;
   onDone?: (status: "idle" | "error") => void;
   onError?: (error: Error) => void;
+  onQuestion?: (question: unknown | null) => void;
 }
 
 /**
@@ -67,7 +74,7 @@ export interface SubscribeOpencodeSessionEventsOptions {
 export async function subscribeOpencodeSessionEvents(
   options: SubscribeOpencodeSessionEventsOptions,
 ): Promise<void> {
-  const { url, headers, signal, onSnapshot, onDone, onError } = options;
+  const { url, headers, signal, onSnapshot, onDone, onError, onQuestion } = options;
 
   try {
     const response = await fetch(url, {
@@ -112,6 +119,19 @@ export async function subscribeOpencodeSessionEvents(
         }
 
         const event = parsed as OpencodeSessionEvent;
+        if (event.type === "question.asked" || event.type === "question.v2.asked") {
+          onQuestion?.(event.properties ?? null);
+          continue;
+        }
+        if (
+          event.type === "question.replied" ||
+          event.type === "question.rejected" ||
+          event.type === "question.v2.replied" ||
+          event.type === "question.v2.rejected"
+        ) {
+          onQuestion?.(null);
+          continue;
+        }
         if (event.type === "session.idle" || event.type === "session.error") {
           onDone?.(event.type === "session.idle" ? "idle" : "error");
           continue;

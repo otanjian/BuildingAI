@@ -2,8 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   DeterministicOpencodeTurnClient,
+  normalizeOpencodePendingQuestion,
   type OpencodeTurnTransport,
 } from "./opencode-turn-client";
+
+describe("normalizeOpencodePendingQuestion", () => {
+  it("maps OpenCode event payloads into the question-card contract", () => {
+    expect(
+      normalizeOpencodePendingQuestion({
+        id: "q_1",
+        sessionID: "ses_1",
+        questions: [{ question: "范围?", header: "范围", options: [] }],
+      }),
+    ).toMatchObject({ requestId: "q_1", sessionId: "ses_1" });
+  });
+});
 
 const CONVERSATION_ID = "11111111-1111-4111-8111-111111111111";
 const TURN_ID = "22222222-2222-4222-8222-222222222222";
@@ -216,6 +229,30 @@ describe("DeterministicOpencodeTurnClient", () => {
     resolveStatus(activeStatus());
     await Promise.all([first, second]);
     client.dispose();
+  });
+
+  it("slows authoritative polling while SSE is healthy and restores it on failure", async () => {
+    vi.useFakeTimers();
+    const api = transport();
+    const client = new DeterministicOpencodeTurnClient({
+      transport: api,
+      pollIntervalMs: 1_000,
+    });
+    client.hydrate(activeStatus());
+
+    client.setRealtimeHealthy(TURN_ID, true);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(api.getStatus).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(api.getStatus).toHaveBeenCalledTimes(1);
+
+    client.setRealtimeHealthy(TURN_ID, false);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(api.getStatus).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(api.getStatus).toHaveBeenCalledTimes(2);
+    client.dispose();
+    vi.useRealTimers();
   });
 
   it("uses bounded exponential backoff without overlapping failed polls", async () => {

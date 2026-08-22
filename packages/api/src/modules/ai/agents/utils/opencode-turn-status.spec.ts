@@ -9,6 +9,7 @@ describe("readOpencodeTurnStatus", () => {
     it("reads status from metadata", () => {
         expect(readOpencodeTurnStatus({ opencodeTurnStatus: "running" })).toBe("running");
         expect(readOpencodeTurnStatus({ opencodeTurnStatus: "timed_out" })).toBe("timed_out");
+        expect(readOpencodeTurnStatus({ opencodeTurnStatus: "persist_failed" })).toBe("persist_failed");
         expect(readOpencodeTurnStatus(undefined)).toBeUndefined();
         expect(readOpencodeTurnStatus({ opencodeTurnStatus: "nope" })).toBeUndefined();
     });
@@ -42,5 +43,15 @@ describe("mergeOpencodeTurnMetadata", () => {
         expect(next.opencodeTurnStatus).toBe("timed_out");
         expect(next.opencodeTurnEndedAt).toBe("2026-08-15T12:15:00.000Z");
         expect(next.opencodeTurnStartedAt).toBe("a");
+    });
+
+    it("sets persistence failure as a terminal status", () => {
+        const next = mergeOpencodeTurnMetadata(
+            { opencodeTurnStatus: "running" },
+            { status: "persist_failed", at: "2026-08-15T12:16:00.000Z" },
+        );
+
+        expect(next.opencodeTurnStatus).toBe("persist_failed");
+        expect(next.opencodeTurnEndedAt).toBe("2026-08-15T12:16:00.000Z");
     });
 });

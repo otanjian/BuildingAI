@@ -15,10 +15,22 @@ SAP_PYRFC_ENV="${SAP_PYRFC_DIR}/.env"
 DEV_PORTS=(4090 4091)
 CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
+OPENCODE_WORKSPACE_DIR="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
 SAP_PORT="${MCP_PORT:-8100}"
 SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
 ERPNEXT_PORT=8000
 INFRA_SERVICES=(redis postgres)
+# Overridable in tests; default Homebrew data dirs on Apple Silicon / Intel Mac.
+HOMEBREW_PG_DATA_DIRS=(
+  "/opt/homebrew/var/postgresql@17"
+  "/opt/homebrew/var/postgresql@16"
+  "/opt/homebrew/var/postgresql@15"
+  "/opt/homebrew/var/postgres"
+  "/usr/local/var/postgresql@17"
+  "/usr/local/var/postgresql@16"
+  "/usr/local/var/postgresql@15"
+  "/usr/local/var/postgres"
+)
 
 export NO_PROXY="localhost,127.0.0.1,::1"
 export no_proxy="$NO_PROXY"
@@ -65,8 +77,13 @@ Environment (root .env or shell):
   START_DOCKER_INFRA=true|false         Default false — docker compose up redis postgres
   OPENCODE_PORT=4096                    OpenCode serve HTTP port
   OPENCODE_BIN                          Optional path to opencode binary
+  OPENCODE_WORKSPACE_DIR                OpenCode source workspace (default: ../opencode)
   MCP_PORT=8100                         SAP ADT MCP HTTP port
   SAP_PYRFC_MCP_PORT=8200               SAP PyRFC MCP HTTP port
+
+  Before API/web start, start.sh checks Postgres (:DB_PORT) and Redis (:REDIS_PORT).
+  It clears a stale Homebrew postmaster.pid when the recorded PID is dead or not postgres,
+  then tries brew services restart for postgresql@* / redis when needed.
 
 Examples:
   ./start.sh                      # first start (foreground dev + OpenCode)
@@ -108,19 +125,24 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
     done
   fi
   OPENCODE_PORT="${OPENCODE_PORT:-4096}"
+  OPENCODE_WORKSPACE_DIR="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
   SAP_PORT="${MCP_PORT:-8100}"
   SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
   START_OPENCODE="${START_OPENCODE:-auto}"
   START_SAP_MCP="${START_SAP_MCP:-auto}"
   START_SAP_PYRFC_MCP="${START_SAP_PYRFC_MCP:-auto}"
   START_DOCKER_INFRA="${START_DOCKER_INFRA:-false}"
+  DB_HOST="${DB_HOST:-localhost}"
+  DB_PORT="${DB_PORT:-5432}"
+  REDIS_HOST="${REDIS_HOST:-localhost}"
+  REDIS_PORT="${REDIS_PORT:-6379}"
 }
 
 load_nvm() {
@@ -226,14 +248,47 @@ opencode_ready() {
   curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/global/health" >/dev/null 2>&1
 }
 
+opencode_workspace_version() {
+  local package_json="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}/packages/opencode/package.json"
+  [[ -f "$package_json" ]] || return 1
+  sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$package_json" | head -n 1
+}
+
+opencode_reported_version() {
+  local port="${OPENCODE_PORT:-4096}"
+  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/global/health" \
+    | sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p'
+}
+
+opencode_runtime_matches_workspace() {
+  local expected actual
+  opencode_ready || return 1
+  expected="$(opencode_workspace_version || true)"
+  [[ -z "$expected" ]] && return 0
+  actual="$(opencode_reported_version || true)"
+  [[ -n "$actual" && "$actual" == "$expected" ]]
+}
+
 resolve_opencode_bin() {
-  local candidate
+  local candidate workspace="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
   if [[ -n "${OPENCODE_BIN:-}" ]]; then
     if [[ -x "${OPENCODE_BIN}" ]]; then
       printf '%s' "${OPENCODE_BIN}"
       return 0
     fi
   fi
+  for candidate in \
+    "${workspace}/packages/opencode/dist/opencode-darwin-arm64/bin/opencode" \
+    "${workspace}/packages/opencode/dist/opencode-darwin-x64/bin/opencode" \
+    "${workspace}/packages/opencode/dist/opencode-linux-arm64/bin/opencode" \
+    "${workspace}/packages/opencode/dist/opencode-linux-x64/bin/opencode" \
+    "${workspace}/packages/opencode/dist/opencode-windows-arm64/bin/opencode.exe" \
+    "${workspace}/packages/opencode/dist/opencode-windows-x64/bin/opencode.exe"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
   if command -v opencode >/dev/null 2>&1; then
     command -v opencode
     return 0
@@ -303,9 +358,9 @@ wait_for_api_ready() {
   done
   echo ""
   echo "WARNING: API :4090 did not become ready within ${max_wait}s."
-  echo "  Common causes: stale nodemon, DB schema sync stuck, or extension bootstrap hang."
+  echo "  Common causes: Postgres/Redis down, stale nodemon, DB schema sync stuck, or extension bootstrap hang."
+  echo "  Check: ./start.sh status  (Postgres/Redis lines) and ./start.sh logs"
   echo "  Try: ./start.sh stop && ./start.sh -f restart dev -d"
-  echo "  Logs: ./start.sh logs  (look for 'Schema Build' or 'Startup Time')"
   return 1
 }
 
@@ -417,6 +472,155 @@ read_pid() {
 pid_alive() {
   local pid="${1:-}"
   [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
+
+is_postgres_process() {
+  local pid="${1:-}"
+  local cmd
+  [[ -n "$pid" ]] || return 1
+  pid_alive "$pid" || return 1
+  cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ "$cmd" == *[Pp]ostgres* ]] || [[ "$cmd" == */bin/postgres* ]]
+}
+
+postgres_ready() {
+  local host="${DB_HOST:-localhost}"
+  local port="${DB_PORT:-5432}"
+  if command -v pg_isready >/dev/null 2>&1; then
+    pg_isready -h "$host" -p "$port" >/dev/null 2>&1
+  else
+    port_in_use "$port"
+  fi
+}
+
+redis_ready() {
+  local host="${REDIS_HOST:-localhost}"
+  local port="${REDIS_PORT:-6379}"
+  if command -v redis-cli >/dev/null 2>&1; then
+    redis-cli -h "$host" -p "$port" ping 2>/dev/null | grep -q PONG
+  else
+    port_in_use "$port"
+  fi
+}
+
+# Homebrew often leaves postmaster.pid after an unclean stop. If the recorded PID is
+# dead — or reused by a non-postgres process — Postgres refuses to start.
+recover_stale_postgres_pid() {
+  local dir pidfile pid
+  for dir in "${HOMEBREW_PG_DATA_DIRS[@]}"; do
+    pidfile="${dir}/postmaster.pid"
+    [[ -f "$pidfile" ]] || continue
+    pid="$(head -n 1 "$pidfile" 2>/dev/null | tr -d '[:space:]')"
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    if ! pid_alive "$pid"; then
+      echo "Removing stale Postgres lock: ${pidfile} (PID ${pid} not running)"
+      rm -f "$pidfile"
+      continue
+    fi
+    if ! is_postgres_process "$pid"; then
+      echo "Removing stale Postgres lock: ${pidfile} (PID ${pid} is not postgres)"
+      rm -f "$pidfile"
+    fi
+  done
+}
+
+try_start_homebrew_service() {
+  local formula="$1"
+  command -v brew >/dev/null 2>&1 || return 1
+  brew services list 2>/dev/null | awk '{print $1}' | grep -qx "$formula" || return 1
+  echo "Starting Homebrew service: ${formula}..."
+  brew services restart "$formula" >/dev/null 2>&1 || brew services start "$formula" >/dev/null 2>&1 || return 1
+  return 0
+}
+
+try_recover_local_postgres() {
+  local formula waited=0
+  recover_stale_postgres_pid
+  for formula in postgresql@17 postgresql@16 postgresql@15 postgresql; do
+    if try_start_homebrew_service "$formula"; then
+      break
+    fi
+  done
+  while [[ "$waited" -lt 15 ]]; do
+    if postgres_ready; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+try_recover_local_redis() {
+  local waited=0
+  try_start_homebrew_service redis || true
+  while [[ "$waited" -lt 10 ]]; do
+    if redis_ready; then
+      return 0
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+ensure_local_infra() {
+  local ok=1
+  local waited=0
+
+  if ! postgres_ready; then
+    if [[ "${START_DOCKER_INFRA}" == "true" || "${START_DOCKER_INFRA}" == "1" ]]; then
+      echo "Postgres ${DB_HOST}:${DB_PORT} is not ready — waiting for Docker infra..."
+      waited=0
+      while [[ "$waited" -lt 30 ]]; do
+        postgres_ready && break
+        sleep 1
+        waited=$((waited + 1))
+      done
+    else
+      echo "Postgres ${DB_HOST}:${DB_PORT} is not ready — attempting recovery..."
+      try_recover_local_postgres || true
+    fi
+  fi
+  if ! redis_ready; then
+    if [[ "${START_DOCKER_INFRA}" == "true" || "${START_DOCKER_INFRA}" == "1" ]]; then
+      echo "Redis ${REDIS_HOST}:${REDIS_PORT} is not ready — waiting for Docker infra..."
+      waited=0
+      while [[ "$waited" -lt 20 ]]; do
+        redis_ready && break
+        sleep 1
+        waited=$((waited + 1))
+      done
+    else
+      echo "Redis ${REDIS_HOST}:${REDIS_PORT} is not ready — attempting recovery..."
+      try_recover_local_redis || true
+    fi
+  fi
+
+  if postgres_ready; then
+    echo "  Postgres ${DB_HOST}:${DB_PORT} — ok"
+  else
+    echo "Error: PostgreSQL is not accepting connections on ${DB_HOST}:${DB_PORT}."
+    echo "  Fix stale lock: rm -f /opt/homebrew/var/postgresql@*/postmaster.pid"
+    echo "  Then: brew services restart postgresql@17"
+    echo "  Or Docker: START_DOCKER_INFRA=true ./start.sh infra start"
+    ok=0
+  fi
+
+  if redis_ready; then
+    echo "  Redis ${REDIS_HOST}:${REDIS_PORT} — ok"
+  else
+    echo "Error: Redis is not accepting connections on ${REDIS_HOST}:${REDIS_PORT}."
+    echo "  Try: brew services restart redis"
+    echo "  Or Docker: START_DOCKER_INFRA=true ./start.sh infra start"
+    ok=0
+  fi
+
+  if [[ -z "${APP_DOMAIN:-}" ]]; then
+    echo "Warning: APP_DOMAIN is empty in .env — set APP_DOMAIN=http://127.0.0.1:4090 for OpenCode image URL rewriting."
+  fi
+
+  [[ "$ok" == 1 ]]
 }
 
 stop_pid_file() {
@@ -599,9 +803,13 @@ start_opencode() {
     return 1
   fi
 
-  if opencode_ready; then
+  if opencode_runtime_matches_workspace; then
     echo "  OpenCode: already healthy at http://127.0.0.1:${OPENCODE_PORT}/"
     return 0
+  fi
+
+  if opencode_ready; then
+    echo "  OpenCode: running version $(opencode_reported_version || echo unknown), restarting for workspace version $(opencode_workspace_version || echo unknown)..."
   fi
 
   load_nvm
@@ -832,7 +1040,6 @@ start_dev_detached() {
   stop_pid_file "dev-web"
   stop_pid_file "dev-api"
 
-  echo "DEBUG start_dev_detached: SERVER_PORT=[${SERVER_PORT:-unset}] APP_DOMAIN=[${APP_DOMAIN:-unset}]"
   echo "Starting dev stack in background via PM2 (API + web)..."
   : >>"${RUN_DIR}/dev.log"
   ensure_dev_launchers
@@ -841,6 +1048,8 @@ start_dev_detached() {
   clear_broken_proxy
   # PM2 runs as a daemon. We record the PM2 God daemon PID so stop can shut it down.
   CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
+    APP_DOMAIN="${APP_DOMAIN:-}" \
+    SERVER_PORT="${SERVER_PORT:-4090}" \
     NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" \
     pnpm exec pm2 start ecosystem.config.js 2>&1 | tee -a "${RUN_DIR}/dev.log" >/dev/null
   local pm2_home="${PM2_HOME:-$HOME/.pm2}"
@@ -857,6 +1066,7 @@ start_dev() {
   load_nvm
   check_node
   check_env_file
+  ensure_local_infra || exit 1
   ensure_ports_available "$force" "${DEV_PORTS[@]}"
   kill_cursor_listeners "${CLIENT_DEV_PORT:-4091}"
   check_deps
@@ -909,6 +1119,17 @@ cmd_status() {
       echo "  :${port}  down"
     fi
   done
+
+  if postgres_ready; then
+    echo "  :${DB_PORT}  Postgres         ok (${DB_HOST})"
+  else
+    echo "  :${DB_PORT}  Postgres         down (${DB_HOST})"
+  fi
+  if redis_ready; then
+    echo "  :${REDIS_PORT}  Redis            ok (${REDIS_HOST})"
+  else
+    echo "  :${REDIS_PORT}  Redis            down (${REDIS_HOST})"
+  fi
 
   if port_in_use "$SAP_PORT"; then
     echo "  :${SAP_PORT}  SAP ADT MCP     listening"
