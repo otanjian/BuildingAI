@@ -1,0 +1,5 @@
+- [x] Add a pure OpenCode panel message mapper and regression tests (TDD red/green).
+- [x] Add a client query hook for OpenCode session message snapshots.
+- [x] Implement the API-driven OpenCode conversation side panel with SSE/polling refresh and shared question card.
+- [x] Integrate the panel with the existing resizable agent layout and preserve the workspace file tab.
+- [x] Run focused tests, client typecheck/lint, build, and OpenSpec validation.

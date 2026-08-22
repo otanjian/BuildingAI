@@ -178,6 +178,20 @@ export async function getAgentOpencodeSessionMessages(
     );
 }
 
+export function useAgentOpencodeSessionMessagesQuery(
+    agentId: string | undefined,
+    conversationId: string | undefined,
+    options?: { enabled?: boolean; refetchInterval?: number | false },
+) {
+    return useQuery({
+        queryKey: ["agents", "chat", "opencode-session", agentId ?? "", conversationId ?? ""],
+        queryFn: () => getAgentOpencodeSessionMessages(agentId!, conversationId!),
+        enabled: Boolean(agentId && conversationId) && options?.enabled !== false,
+        refetchInterval: options?.refetchInterval ?? false,
+        staleTime: 1_000,
+    });
+}
+
 const CONVERSATIONS_KEY = ["agents", "chat", "conversations"] as const;
 const MESSAGES_KEY = ["agents", "chat", "messages"] as const;
 

@@ -8,7 +8,6 @@ import {
   usePublishedAgentDetailQuery,
   useUpdateAgentConversation,
 } from "@buildingai/services/web";
-import { normalizeOpencodePendingQuestion } from "../../_shared/opencode-turn-client";
 import { useAuthStore } from "@buildingai/stores";
 import type { FormFieldConfig } from "@buildingai/types/ai/agent-config.interface";
 import type { PromptInputMessage } from "@buildingai/ui/components/ai-elements/prompt-input";
@@ -69,9 +68,10 @@ import { AgentHistoryConversationRow } from "../../_shared/agent-history-convers
 import { ConversationScrollMemory } from "../../_shared/conversation-scroll-memory";
 import { getOpencodeConversationStore } from "../../_shared/opencode-conversation-store";
 import { OpencodeQuestionCard } from "../../_shared/opencode-question-card";
+import { normalizeOpencodePendingQuestion } from "../../_shared/opencode-turn-client";
 import { useBackgroundStreamingConversations } from "../../_shared/use-background-streams";
 import { VirtualizedConversationList } from "../../_shared/virtualized-conversation-list";
-import { OpencodeWorkspacePanel } from "../_components/opencode-workspace-panel";
+import { OpencodeNativePanel } from "../_components/opencode-native-panel";
 import { useAssistantForAgent } from "../_hooks/use-assistant-for-agent";
 import { hasRenderableOpeningStatement } from "../_utils/opening-statement";
 
@@ -831,7 +831,7 @@ const AgentChatPage = () => {
   const [formPopoverOpen, setFormPopoverOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(false);
+  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(true);
   const workspacePanelRef = useRef<ImperativePanelHandle>(null);
   const hasForm = formFields.length > 0;
   const isOpencodeAgent = agent?.createMode === "opencode";
@@ -890,10 +890,10 @@ const AgentChatPage = () => {
         {isOpencodeAgent ? (
           <ResizablePanelGroup
             direction="horizontal"
-            autoSaveId="opencode-workspace-outer"
+            autoSaveId="opencode-native-panel-outer-v1"
             className="min-h-0 min-w-0 flex-1"
           >
-            <ResizablePanel defaultSize={100} minSize={40}>
+            <ResizablePanel defaultSize={68} minSize={40}>
               <div
                 className={cn(
                   "bg-background relative flex h-full min-w-0 flex-col overflow-hidden",
@@ -1039,14 +1039,22 @@ const AgentChatPage = () => {
               ref={workspacePanelRef}
               collapsible
               collapsedSize={0}
-              defaultSize={0}
+              defaultSize={32}
               minSize={18}
               maxSize={48}
               onCollapse={() => setWorkspacePanelOpen(false)}
               onExpand={() => setWorkspacePanelOpen(true)}
             >
               {agentId ? (
-                <OpencodeWorkspacePanel agentId={agentId} className="border-border border-l" />
+                <AssistantProvider {...contextValue}>
+                  <OpencodeNativePanel
+                    agentId={agentId}
+                    conversationId={uuid}
+                    isLocalDraft={isLocalDurableDraft}
+                    isTurnRunning={isOpencodeTurnRunning}
+                    className="border-border border-l"
+                  />
+                </AssistantProvider>
               ) : null}
             </ResizablePanel>
           </ResizablePanelGroup>
