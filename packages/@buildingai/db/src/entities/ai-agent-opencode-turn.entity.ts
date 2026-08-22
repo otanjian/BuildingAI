@@ -91,6 +91,12 @@ export type OpencodeTurnStatus = (typeof OPENCODE_TURN_STATUSES)[number];
     `("lease_token" IS NULL AND "lease_expires_at" IS NULL)
         OR ("lease_token" IS NOT NULL AND "lease_expires_at" IS NOT NULL)`,
 )
+@Check("ck_oc_turn_projection_version", `"projection_version" >= 0`)
+@Check(
+    "ck_oc_turn_terminal_projection",
+    `"status" IN ('accepted', 'running', 'committing')
+        OR ("live_projection" IS NULL AND "projection_updated_at" IS NULL)`,
+)
 export class AgentOpencodeTurn extends BaseEntity {
     @Column({ type: "uuid", nullable: false, comment: "BuildingAI conversation ID" })
     conversationId: string;
@@ -145,6 +151,20 @@ export class AgentOpencodeTurn extends BaseEntity {
 
     @Column({ type: "timestamptz", nullable: true, comment: "Atomic terminal commit time" })
     completedAt: Date | null;
+
+    @Column({ type: "jsonb", nullable: true, comment: "Recoverable live display projection" })
+    liveProjection: Record<string, unknown> | null;
+
+    @Column({
+        type: "bigint",
+        nullable: false,
+        default: "0",
+        comment: "Monotonic live projection version",
+    })
+    projectionVersion: string;
+
+    @Column({ type: "timestamptz", nullable: true, comment: "Latest live projection update time" })
+    projectionUpdatedAt: Date | null;
 
     @ManyToOne(() => AgentChatRecord, { onDelete: "CASCADE" })
     @JoinColumn({ name: "conversation_id" })

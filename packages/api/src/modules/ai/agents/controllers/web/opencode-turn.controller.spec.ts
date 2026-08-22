@@ -111,21 +111,25 @@ describe("OpencodeTurnRequestDto", () => {
     it.each(["messages", "history", "parentId", "trigger", "messageId", "toolApproval"])(
         "rejects the browser-owned %s field",
         async (field) => {
-        const module = loadCreatedModule<Record<string, any>>(DTO_PATH);
-        if (!module) return;
+            const module = loadCreatedModule<Record<string, any>>(DTO_PATH);
+            if (!module) return;
 
-        const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
-        const value = plainToInstance(module.OpencodeTurnRequestDto, {
-            turnId: TURN_ID,
-            conversationId: CONVERSATION_ID,
-            message: { role: "user", parts: [{ type: "text", text: "hello" }] },
-            [field]: "browser-owned",
-        });
-        const rejection = await pipe
-            .transform(value, { type: "body", metatype: module.OpencodeTurnRequestDto })
-            .catch((error) => error);
-        expect(rejection.getStatus()).toBe(400);
-        expect(JSON.stringify(rejection.getResponse())).toContain(field);
+            const pipe = new ValidationPipe({
+                transform: true,
+                whitelist: true,
+                forbidNonWhitelisted: true,
+            });
+            const value = plainToInstance(module.OpencodeTurnRequestDto, {
+                turnId: TURN_ID,
+                conversationId: CONVERSATION_ID,
+                message: { role: "user", parts: [{ type: "text", text: "hello" }] },
+                [field]: "browser-owned",
+            });
+            const rejection = await pipe
+                .transform(value, { type: "body", metatype: module.OpencodeTurnRequestDto })
+                .catch((error) => error);
+            expect(rejection.getStatus()).toBe(400);
+            expect(JSON.stringify(rejection.getResponse())).toContain(field);
         },
     );
 });
@@ -140,6 +144,8 @@ describe("OpencodeTurnWebController", () => {
                 status: "running",
                 cancelRequested: true,
             })),
+            replyQuestion: jest.fn(async (value) => ({ ...value, status: "running" })),
+            rejectQuestion: jest.fn(async (value) => ({ ...value, status: "running" })),
         };
         return {
             acceptance,
@@ -157,12 +163,7 @@ describe("OpencodeTurnWebController", () => {
             conversationId: CONVERSATION_ID,
             message: { role: "user", parts: [{ type: "text", text: "hello" }] },
         };
-        const result = await controller.acceptTurn(
-            AGENT_ID,
-            dto,
-            { id: USER_ID },
-            { headers: {} },
-        );
+        const result = await controller.acceptTurn(AGENT_ID, dto, { id: USER_ID }, { headers: {} });
 
         expect(Reflect.getMetadata(HTTP_CODE_METADATA, controller.acceptTurn)).toBe(202);
         expect(acceptance.accept).toHaveBeenCalledWith({
@@ -211,5 +212,41 @@ describe("OpencodeTurnWebController", () => {
             userId: USER_ID,
             anonymousIdentifier: "anonymous-owner",
         });
+    });
+
+    it("forwards exact question answers and reject ownership", async () => {
+        const module = loadCreatedModule<Record<string, any>>(CONTROLLER_PATH);
+        if (!module) return;
+        const { controller, acceptance } = createController(module);
+        const req = { headers: { "x-anonymous-identifier": "anonymous-owner" } };
+        await controller.replyQuestion(
+            AGENT_ID,
+            TURN_ID,
+            { requestId: "que_1", answers: [["Bowi"]] },
+            { id: USER_ID },
+            req,
+        );
+        await controller.rejectQuestion(
+            AGENT_ID,
+            TURN_ID,
+            { requestId: "que_1" },
+            { id: USER_ID },
+            req,
+        );
+        expect(acceptance.replyQuestion).toHaveBeenCalledWith({
+            agentId: AGENT_ID,
+            turnId: TURN_ID,
+            requestId: "que_1",
+            answers: [["Bowi"]],
+            userId: USER_ID,
+            anonymousIdentifier: "anonymous-owner",
+        });
+        expect(acceptance.rejectQuestion).toHaveBeenCalledWith(
+            expect.objectContaining({
+                agentId: AGENT_ID,
+                requestId: "que_1",
+                anonymousIdentifier: "anonymous-owner",
+            }),
+        );
     });
 });

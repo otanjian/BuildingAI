@@ -17,6 +17,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { AgentBillingHandler } from "../handlers/agent-billing";
 import { OpencodeApiService } from "../integrations/opencode-api.service";
+import type { OpencodePendingQuestion } from "../integrations/opencode-api.service";
 import { resolveArtifactRoot } from "../utils/opencode-artifact-path";
 import { isOpencodeDurableTurnsEnabled } from "../utils/opencode-durable-rollout";
 import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
@@ -63,6 +64,10 @@ export type OpencodeTurnStatusResult = {
     startedAt: Date | null;
     completedAt: Date | null;
     lastActivityAt: Date | null;
+    liveProjection: Record<string, unknown> | null;
+    projectionVersion: string;
+    projectionUpdatedAt: Date | null;
+    pendingQuestion: OpencodePendingQuestion | null;
 };
 
 @Injectable()
@@ -159,7 +164,9 @@ export class OpencodeTurnAcceptanceService {
             }
             if (!isOpencodeDurableTurnsEnabled(agent)) {
                 this.recordAcceptanceConflict(input, "rollout-disabled");
-                throw HttpErrorFactory.conflict("OpenCode durable turns are disabled for this agent");
+                throw HttpErrorFactory.conflict(
+                    "OpenCode durable turns are disabled for this agent",
+                );
             }
 
             const normalizedRuntime = this.opencodeApiService.normalizeConfig(
@@ -167,15 +174,9 @@ export class OpencodeTurnAcceptanceService {
             );
             const runtimeConfigHash = hashOpencodeRuntime(normalizedRuntime);
             const billing = await this.resolveBilling(input);
-            const resolvedAttachmentUrls = await this.resolveAuthorizedAttachments(
-                command,
-                input,
-            );
+            const resolvedAttachmentUrls = await this.resolveAuthorizedAttachments(command, input);
             const personalParams = input.userId
-                ? await this.userDictService.getGroupValues(
-                      input.userId,
-                      "personalParams",
-                  )
+                ? await this.userDictService.getGroupValues(input.userId, "personalParams")
                 : undefined;
             const artifactRoot = resolveArtifactRoot({
                 workspace: normalizedRuntime.workspace,
@@ -279,6 +280,9 @@ export class OpencodeTurnAcceptanceService {
                     cancelRequestedAt: null,
                     startedAt: null,
                     completedAt: null,
+                    liveProjection: null,
+                    projectionVersion: "0",
+                    projectionUpdatedAt: null,
                 }),
             );
 
@@ -373,6 +377,81 @@ export class OpencodeTurnAcceptanceService {
         });
     }
 
+    async replyQuestion(input: {
+        agentId: string;
+        turnId: string;
+        requestId: string;
+        answers: string[][];
+        userId?: string;
+        anonymousIdentifier?: string;
+    }): Promise<OpencodeTurnStatusResult> {
+        return this.resolveQuestion(input, false);
+    }
+
+    async rejectQuestion(input: {
+        agentId: string;
+        turnId: string;
+        requestId: string;
+        userId?: string;
+        anonymousIdentifier?: string;
+    }): Promise<OpencodeTurnStatusResult> {
+        return this.resolveQuestion({ ...input, answers: [] }, true);
+    }
+
+    private async resolveQuestion(
+        input: {
+            agentId: string;
+            turnId: string;
+            requestId: string;
+            answers: string[][];
+            userId?: string;
+            anonymousIdentifier?: string;
+        },
+        reject: boolean,
+    ): Promise<OpencodeTurnStatusResult> {
+        return this.dataSource.transaction(async (manager) => {
+            const turn = await manager.findOne(AgentOpencodeTurn, {
+                where: { id: input.turnId },
+                relations: { conversation: { agent: true } },
+                lock: { mode: "pessimistic_write", tables: ["ai_agent_opencode_turn"] },
+            });
+            if (!turn) throw HttpErrorFactory.notFound("OpenCode turn not found");
+            this.assertConversationOwner(turn.conversation, input);
+            if (!OPENCODE_TURN_ACTIVE_STATUSES.includes(turn.status as any)) {
+                throw HttpErrorFactory.conflict("OpenCode turn is no longer active");
+            }
+            const pending = this.pendingQuestionFromTurn(turn);
+            if (!pending || pending.requestId !== input.requestId) {
+                throw HttpErrorFactory.conflict("OpenCode question is stale or no longer pending");
+            }
+            const sessionId = turn.conversation.opencodeSessionId;
+            if (!sessionId || sessionId !== pending.sessionId) {
+                throw HttpErrorFactory.conflict("OpenCode question session is no longer mapped");
+            }
+            if (reject) {
+                await this.opencodeApiService.rejectQuestion({
+                    config: turn.conversation.agent?.thirdPartyIntegration,
+                    requestId: input.requestId,
+                    sessionId,
+                });
+            } else {
+                await this.opencodeApiService.replyQuestion({
+                    config: turn.conversation.agent?.thirdPartyIntegration,
+                    requestId: input.requestId,
+                    sessionId,
+                    answers: input.answers,
+                });
+            }
+            if (turn.liveProjection) {
+                turn.liveProjection = { ...turn.liveProjection, pendingQuestion: null };
+                turn.projectionVersion = (BigInt(turn.projectionVersion || "0") + 1n).toString();
+                turn.projectionUpdatedAt = new Date();
+                await manager.save(AgentOpencodeTurn, turn);
+            }
+            return this.toStatusResult(turn);
+        });
+    }
+
     private toStatusResult(turn: AgentOpencodeTurn): OpencodeTurnStatusResult {
         return {
             conversationId: turn.conversationId,
@@ -389,7 +468,17 @@ export class OpencodeTurnAcceptanceService {
             startedAt: turn.startedAt ?? null,
             completedAt: turn.completedAt ?? null,
             lastActivityAt: turn.lastActivityAt ?? null,
+            liveProjection: turn.liveProjection ?? null,
+            projectionVersion: turn.projectionVersion ?? "0",
+            projectionUpdatedAt: turn.projectionUpdatedAt ?? null,
+            pendingQuestion: this.pendingQuestionFromTurn(turn),
         };
+    }
+
+    private pendingQuestionFromTurn(turn: AgentOpencodeTurn): OpencodePendingQuestion | null {
+        const value = turn.liveProjection?.pendingQuestion;
+        if (!value || typeof value !== "object") return null;
+        return value as OpencodePendingQuestion;
     }
 
     private toCommand(input: OpencodeTurnAcceptanceInput): OpencodeTurnCommand {
@@ -418,7 +507,9 @@ export class OpencodeTurnAcceptanceService {
             turn.requestHash !== requestHash
         ) {
             this.recordAcceptanceConflict(input, "turn-id-reuse");
-            throw HttpErrorFactory.conflict("OpenCode turn identifier conflicts with another command");
+            throw HttpErrorFactory.conflict(
+                "OpenCode turn identifier conflicts with another command",
+            );
         }
         return {
             conversationId: turn.conversationId,

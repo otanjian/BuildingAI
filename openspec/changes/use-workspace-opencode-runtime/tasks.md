@@ -1,0 +1,4 @@
+- [x] Add a failing contract test for workspace-first OpenCode resolution.
+- [x] Implement workspace binary resolution and runtime mismatch restart while preserving config.
+- [x] Rebuild/launch the workspace OpenCode 1.18.19 runtime and verify `/global/health`.
+- [x] Run shell tests, syntax checks, and OpenSpec validation.

@@ -9,7 +9,10 @@ import { ImageGenerationTool } from "../tools/image-generation-tool";
 import { KnowledgeReferences } from "../tools/knowledge-references";
 import { PlanTool } from "../tools/plan-tool";
 import { WeatherTool } from "../tools/weather-tool";
-import { partitionToolPartsForDisplay } from "./message-tools-helpers";
+import {
+  isInteractiveQuestionToolPart,
+  partitionToolPartsForDisplay,
+} from "./message-tools-helpers";
 
 interface ToolPartData {
   toolCallId: string;
@@ -134,7 +137,8 @@ export const MessageTools = memo(function MessageTools({
   const toolParts = parts.filter(
     (part) =>
       typeof part.type === "string" &&
-      (part.type.startsWith("tool-") || part.type === "dynamic-tool"),
+      (part.type.startsWith("tool-") || part.type === "dynamic-tool") &&
+      !isInteractiveQuestionToolPart(part as ToolPartData),
   ) as ToolUIPart[];
 
   if (toolParts.length === 0) return null;

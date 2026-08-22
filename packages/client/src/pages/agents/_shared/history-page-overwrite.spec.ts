@@ -1,6 +1,10 @@
+import type { UIMessage } from "ai";
 import { describe, expect, it } from "vitest";
 
-import { shouldApplyHistoryPageToChat } from "./history-page-overwrite";
+import {
+  mergeHistoryPageWithLiveMessages,
+  shouldApplyHistoryPageToChat,
+} from "./history-page-overwrite";
 
 describe("shouldApplyHistoryPageToChat", () => {
   it("loads history when the Chat is empty on first open", () => {
@@ -23,24 +27,24 @@ describe("shouldApplyHistoryPageToChat", () => {
     ).toBe(true);
   });
 
-  it("does not replace a live Chat when switching back mid-turn", () => {
+  it("loads history for reconciliation when switching back mid-turn", () => {
     expect(
       shouldApplyHistoryPageToChat({
         shouldLoadInitial: false,
         switched: true,
         liveMessageCount: 4,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
-  it("does not replace a live Chat if a history fetch was already in flight", () => {
+  it("keeps an initial history load eligible for reconciliation with live messages", () => {
     expect(
       shouldApplyHistoryPageToChat({
         shouldLoadInitial: true,
         switched: false,
         liveMessageCount: 2,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does nothing when there is no reason to fetch", () => {
@@ -51,5 +55,63 @@ describe("shouldApplyHistoryPageToChat", () => {
         liveMessageCount: 0,
       }),
     ).toBe(false);
+  });
+
+  it("preserves persisted history when a live user message arrives before page one", () => {
+    const history: UIMessage[] = [
+      {
+        id: "db-user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Earlier" }],
+        metadata: { sequence: 0 },
+      },
+      {
+        id: "db-assistant-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "Earlier reply" }],
+        metadata: { sequence: 1 },
+      },
+    ];
+    const live: UIMessage[] = [
+      {
+        id: "local-user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Are you done?" }],
+      },
+    ];
+
+    expect(
+      mergeHistoryPageWithLiveMessages(history, live, () => undefined).map((message) => message.id),
+    ).toEqual(["db-user-1", "db-assistant-1", "local-user-2"]);
+  });
+
+  it("deduplicates a live message that has already been persisted", () => {
+    const history: UIMessage[] = [
+      {
+        id: "db-user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Earlier" }],
+        metadata: { sequence: 0 },
+      },
+      {
+        id: "db-user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Are you done?" }],
+        metadata: { sequence: 1 },
+      },
+    ];
+    const live: UIMessage[] = [
+      {
+        id: "local-user-2",
+        role: "user",
+        parts: [{ type: "text", text: "Are you done?" }],
+      },
+    ];
+
+    expect(
+      mergeHistoryPageWithLiveMessages(history, live, (id) =>
+        id === "local-user-2" ? "db-user-2" : undefined,
+      ).map((message) => message.id),
+    ).toEqual(["db-user-1", "local-user-2"]);
   });
 });

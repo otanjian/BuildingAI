@@ -50,7 +50,11 @@ import {
 } from "@/components/ask-assistant-ui";
 
 import { AgentHistoryConversationRow } from "../_shared/agent-history-conversation-row";
+import { ConversationScrollMemory } from "../_shared/conversation-scroll-memory";
+import { getOpencodeConversationStore } from "../_shared/opencode-conversation-store";
+import { OpencodeQuestionCard } from "../_shared/opencode-question-card";
 import { useBackgroundStreamingConversations } from "../_shared/use-background-streams";
+import { VirtualizedConversationList } from "../_shared/virtualized-conversation-list";
 import {
   useEmbedFormContext,
   useEmbedHostDocumentClass,
@@ -239,7 +243,13 @@ function SiteChatSidebarPanel({
             className="w-full"
             type="button"
             onClick={() => {
-              navigate(`/agents/${agentId}/${accessToken}`);
+              if (agent?.durableOpencodeTurnsEnabled === true) {
+                const scope = `public-agent-${agentId}-${accessToken}`;
+                const conversationId = getOpencodeConversationStore(scope).createDraft();
+                navigate(`/agents/${agentId}/${accessToken}/c/${conversationId}`);
+              } else {
+                navigate(`/agents/${agentId}/${accessToken}`);
+              }
               onAfterNavigate?.();
             }}
             disabled={!agentId || !accessToken}
@@ -259,8 +269,11 @@ function SiteChatSidebarPanel({
                 <Skeleton className="h-8 w-full rounded-sm" />
               </div>
             ) : conversations && conversations.length > 0 ? (
-              <div className="space-y-1">
-                {conversations.map((c) => (
+              <VirtualizedConversationList
+                items={conversations}
+                getKey={(conversation) => conversation.id}
+                className="max-h-[min(50vh,30rem)] overflow-auto"
+                renderItem={(c) => (
                   <AgentHistoryConversationRow
                     key={c.id}
                     title={c.title}
@@ -275,11 +288,47 @@ function SiteChatSidebarPanel({
                       openConversation(c.id);
                       onAfterNavigate?.();
                     }}
+                    onIntent={() => {
+                      const store = getOpencodeConversationStore(
+                        `public-agent-${agentId}-${accessToken}`,
+                      );
+                      if (store.get(c.id).messages.length > 0) return;
+                      void queryClient
+                        .fetchQuery({
+                          queryKey: [
+                            "public-agent-messages",
+                            agentId,
+                            accessToken,
+                            anonymousIdentifier ?? "",
+                            c.id,
+                            1,
+                            50,
+                          ],
+                          queryFn: async () => {
+                            const module = await import("./services/public-conversation-messages");
+                            return module.getPublicConversationMessages({
+                              agentId,
+                              accessToken,
+                              anonymousIdentifier,
+                              conversationId: c.id,
+                              page: 1,
+                              pageSize: 50,
+                            });
+                          },
+                          staleTime: 30_000,
+                        })
+                        .then((result) => {
+                          if (store.get(c.id).messages.length === 0) {
+                            store.setMessages(c.id, result.items);
+                          }
+                        })
+                        .catch(() => undefined);
+                    }}
                     onRename={(title) => handleRename(c.id, title)}
                     onArchive={() => handleArchive(c.id)}
                   />
-                ))}
-              </div>
+                )}
+              />
             ) : (
               <div className="text-muted-foreground text-xs">暂无对话记录</div>
             )}
@@ -346,6 +395,21 @@ export default function PublishChatPage() {
     conversationId: conversationIdParam,
     formVariables,
   });
+
+  useEffect(() => {
+    if (
+      !agentId ||
+      !accessToken ||
+      conversationIdParam ||
+      agent?.durableOpencodeTurnsEnabled !== true
+    ) {
+      return;
+    }
+    const conversationId = getOpencodeConversationStore(
+      `public-agent-${agentId}-${accessToken}`,
+    ).createDraft();
+    navigate(`/agents/${agentId}/${accessToken}/c/${conversationId}`, { replace: true });
+  }, [accessToken, agent?.durableOpencodeTurnsEnabled, agentId, conversationIdParam, navigate]);
 
   useEmbedFormContext(formFields, setFormValues);
   useEmbedHostDocumentClass();
@@ -627,6 +691,11 @@ export default function PublishChatPage() {
                   onLoadMore={onLoadMoreMessages}
                   forceFullHeight={isFirstSession}
                 >
+                  <ConversationScrollMemory
+                    memoryKey={providerValue.scrollMemoryKey}
+                    value={providerValue.scrollMemory}
+                    onChange={providerValue.onScrollMemoryChange}
+                  />
                   <div
                     className={
                       isFirstSession
@@ -730,11 +799,23 @@ export default function PublishChatPage() {
 
                 <div className="bg-background relative z-10 shrink-0">
                   <div className="mx-auto w-full max-w-3xl px-0 py-2 sm:px-4 sm:py-3">
+                    {providerValue.pendingQuestion &&
+                    providerValue.replyQuestion &&
+                    providerValue.rejectQuestion ? (
+                      <OpencodeQuestionCard
+                        question={providerValue.pendingQuestion}
+                        onReply={providerValue.replyQuestion}
+                        onReject={providerValue.rejectQuestion}
+                      />
+                    ) : null}
                     {status === "submitted" || status === "streaming" ? (
                       <StreamingIndicator />
                     ) : null}
                     <PromptInput
-                      textareaRef={undefined}
+                      key={providerValue.composerKey}
+                      textareaRef={providerValue.textareaRef}
+                      initialInput={providerValue.composerDraft}
+                      onTextChange={providerValue.onComposerDraftChange}
                       status={status}
                       onSubmit={handleSubmit}
                       onStop={stop}

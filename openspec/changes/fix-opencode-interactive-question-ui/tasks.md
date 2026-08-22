@@ -1,0 +1,12 @@
+- [x] Add OpenCode question types, reply API, projection persistence, status fields, and owner-authorized reply/reject routes.
+- [x] Change worker observation from automatic rejection to durable waiting and clearing after resolution.
+- [x] Add shared client question state, transport methods, and authenticated/public question card UI.
+- [x] Add focused regression tests for API payloads, observer/worker behavior, persistence, and client state/UI contracts.
+- [x] Run typecheck, lint, focused tests, full relevant tests, and OpenSpec validation.
+- [x] Persist and stream legacy OpenCode `question.asked` state in agent-chat conversation metadata.
+- [x] Add owner-authorized legacy reply/reject endpoints and clear metadata after resolution.
+- [x] Hydrate legacy question state in authenticated/public hooks and render the shared question card.
+- [x] Add legacy stream, controller, transport, and client regression tests, then rerun full verification.
+- [x] Normalize OpenCode v1/v2 question SSE envelopes and preserve first-question events in newly created legacy conversations.
+- [x] Prevent historical/live `question` tool parts from rendering as generic `question (running)` rows.
+- [x] Add regression tests for v2/data envelopes and new-conversation question rendering, then rerun full verification.

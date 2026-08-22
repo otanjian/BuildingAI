@@ -11,6 +11,7 @@ export * from "./cdk";
 export * from "./chat";
 export * from "./chat-feedback";
 export * from "./config";
+export * from "./conversation-pagination";
 export * from "./datasets";
 export * from "./datasets-chat";
 export * from "./datasets-document";

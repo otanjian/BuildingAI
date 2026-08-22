@@ -469,6 +469,10 @@ describe("OpencodeTurnAcceptanceService", () => {
             startedAt: null,
             completedAt: null,
             lastActivityAt: null,
+            liveProjection: null,
+            projectionVersion: "0",
+            projectionUpdatedAt: null,
+            pendingQuestion: null,
         });
         expect(status).not.toHaveProperty("dispatchSnapshot");
         expect(status).not.toHaveProperty("artifactBaseline");

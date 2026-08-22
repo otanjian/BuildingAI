@@ -14,17 +14,21 @@ export function useDeterministicOpencodeTurn(options: {
   onAccepted?: (
     turn: import("./opencode-turn-client").AcceptedOpencodeTurn,
   ) => void | Promise<void>;
+  onStatus?: (status: OpencodeTurnStatusResult) => void | Promise<void>;
   onTerminal: (status: OpencodeTurnStatusResult) => void | Promise<void>;
 }) {
   const onTerminalRef = useRef(options.onTerminal);
   onTerminalRef.current = options.onTerminal;
   const onAcceptedRef = useRef(options.onAccepted);
   onAcceptedRef.current = options.onAccepted;
+  const onStatusRef = useRef(options.onStatus);
+  onStatusRef.current = options.onStatus;
   const client = useMemo(
     () =>
       new DeterministicOpencodeTurnClient({
         transport: options.transport,
         onAccepted: (turn) => onAcceptedRef.current?.(turn),
+        onStatus: (status) => onStatusRef.current?.(status),
         onTerminal: (status) => onTerminalRef.current(status),
       }),
     [options.transport],

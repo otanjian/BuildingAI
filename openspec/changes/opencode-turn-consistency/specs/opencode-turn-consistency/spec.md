@@ -234,6 +234,10 @@ The OpenCode client MUST render persisted BuildingAI history plus at most one tu
 - **WHEN** status reports a terminal committed assistant identifier
 - **THEN** the client refreshes history and removes the matching activity indicator without duplicating content
 
+#### Scenario: History response races a new user message
+- **WHEN** persisted history is requested for a conversation and a new user message enters the in-memory chat before that request returns
+- **THEN** the client merges the persisted history with the live message by stable database identity instead of discarding the history page or duplicating the new message
+
 #### Scenario: Status polling is degraded
 - **WHEN** an active-turn status request is already in flight or fails temporarily
 - **THEN** the client does not overlap another request for that turn and retries with bounded backoff

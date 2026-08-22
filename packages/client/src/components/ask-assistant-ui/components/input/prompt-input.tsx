@@ -70,6 +70,8 @@ export interface PromptInputProps {
     event: FormEvent<HTMLFormElement>,
   ) => void | Promise<void>;
   onTextareaFocus?: (event: FocusEvent<HTMLTextAreaElement>) => void;
+  initialInput?: string;
+  onTextChange?: (value: string) => void;
   onStop?: () => void;
   globalDrop?: boolean;
   multiple?: boolean;
@@ -150,6 +152,8 @@ const PromptInputInner = memo(
     status,
     onStop,
     onTextareaFocus,
+    initialInput,
+    onTextChange,
     globalDrop,
     multiple,
     onSubmit,
@@ -233,6 +237,11 @@ const PromptInputInner = memo(
     } = useFileUpload(multiple, selectedModel?.features, context?.supportedUploadTypes);
 
     const controller = usePromptInputController();
+
+    useEffect(() => {
+      if (initialInput === undefined || controller.textInput.value === initialInput) return;
+      controller.textInput.setInput(initialInput);
+    }, [controller.textInput, initialInput]);
 
     /**
      * Handle paste event with file type validation
@@ -379,6 +388,7 @@ const PromptInputInner = memo(
             onFocus={onTextareaFocus}
             onKeyDown={handleTextareaKeyDown}
             onPaste={handlePaste}
+            onChange={(event) => onTextChange?.(event.currentTarget.value)}
           />
         </AIPromptInputBody>
         <AIPromptInputFooter className="h-13 py-0">
@@ -514,6 +524,8 @@ export const PromptInput = memo((props: PromptInputProps) => {
     status = "ready",
     onSubmit,
     onTextareaFocus,
+    initialInput,
+    onTextChange,
     onStop,
     globalDrop,
     multiple,
@@ -527,12 +539,13 @@ export const PromptInput = memo((props: PromptInputProps) => {
   } = props;
 
   return (
-    <AIPromptInputProvider>
+    <AIPromptInputProvider initialInput={initialInput}>
       <PromptInputInner
         textareaRef={textareaRef}
         status={status}
         onSubmit={onSubmit}
         onTextareaFocus={onTextareaFocus}
+        onTextChange={onTextChange}
         onStop={onStop}
         globalDrop={globalDrop}
         multiple={multiple}

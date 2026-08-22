@@ -7,7 +7,11 @@ jest.mock("chalk", () => {
     return { __esModule: true, default: new Proxy(color, { get: () => color }) };
 });
 
-import { OpencodeApiError, OpencodeApiService } from "./opencode-api.service";
+import {
+    normalizeOpencodePendingQuestion,
+    OpencodeApiError,
+    OpencodeApiService,
+} from "./opencode-api.service";
 
 const CONFIG = {
     provider: "opencode",
@@ -197,6 +201,61 @@ describe("OpencodeApiService durable read adapter", () => {
         expect(global.fetch).toHaveBeenCalledWith(
             "http://opencode.test/session/ses_1/message?limit=20",
             expect.objectContaining({ method: "GET" }),
+        );
+    });
+
+    it("normalizes pending question options and posts ordered answers", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce(
+                response([
+                    {
+                        id: "que_1",
+                        sessionID: "ses_1",
+                        questions: [
+                            {
+                                question: "Pick a company",
+                                header: "Company",
+                                options: [{ label: "Bowi", description: "Real data" }],
+                                multiple: false,
+                            },
+                        ],
+                    },
+                ]),
+            )
+            .mockResolvedValueOnce(response(undefined, 204));
+
+        await expect(
+            service.listPendingQuestions({ config: CONFIG, sessionId: "ses_1" }),
+        ).resolves.toEqual([
+            {
+                id: "que_1",
+                sessionID: "ses_1",
+                questions: [
+                    {
+                        question: "Pick a company",
+                        header: "Company",
+                        options: [{ label: "Bowi", description: "Real data" }],
+                        multiple: false,
+                        custom: true,
+                    },
+                ],
+            },
+        ]);
+        await expect(
+            service.replyQuestion({
+                config: CONFIG,
+                requestId: "que_1",
+                answers: [["Bowi"]],
+            }),
+        ).resolves.toBeUndefined();
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            "http://opencode.test/question/que_1/reply",
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({ answers: [["Bowi"]] }),
+            }),
         );
     });
 
@@ -408,6 +467,88 @@ describe("OpencodeApiService durable read adapter", () => {
         );
     });
 
+    it("reads v2 session questions when the legacy question list is empty", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce(response([]))
+            .mockResolvedValueOnce(
+                response({
+                    data: [
+                        {
+                            id: "que_v2",
+                            sessionID: "ses_1",
+                            questions: [
+                                {
+                                    question: "范围？",
+                                    header: "范围",
+                                    options: [],
+                                },
+                            ],
+                        },
+                    ],
+                }),
+            )
+            .mockResolvedValueOnce(response([]));
+
+        await expect(
+            service.listPendingQuestions({ config: CONFIG, sessionId: "ses_1" }),
+        ).resolves.toEqual([
+            {
+                id: "que_v2",
+                sessionID: "ses_1",
+                questions: [
+                    {
+                        question: "范围？",
+                        header: "范围",
+                        options: [],
+                        multiple: false,
+                        custom: true,
+                    },
+                ],
+            },
+        ]);
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            "http://opencode.test/api/session/ses_1/question",
+            expect.objectContaining({ method: "GET" }),
+        );
+    });
+
+    it("falls back to v2 session-scoped mutations for reply and reject", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValueOnce(response({}, 404))
+            .mockResolvedValueOnce(response(undefined, 204))
+            .mockResolvedValueOnce(response({}, 404))
+            .mockResolvedValueOnce(response(undefined, 204));
+
+        await service.replyQuestion({
+            config: CONFIG,
+            requestId: "que_v2",
+            sessionId: "ses_1",
+            answers: [["范围"]],
+        });
+        await service.rejectQuestion({
+            config: CONFIG,
+            requestId: "que_v2",
+            sessionId: "ses_1",
+        });
+
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            2,
+            "http://opencode.test/api/session/ses_1/question/que_v2/reply",
+            expect.objectContaining({
+                method: "POST",
+                body: JSON.stringify({ answers: [["范围"]] }),
+            }),
+        );
+        expect(global.fetch).toHaveBeenNthCalledWith(
+            4,
+            "http://opencode.test/api/session/ses_1/question/que_v2/reject",
+            expect.objectContaining({ method: "POST" }),
+        );
+    });
+
     it("aborts one exact session with a bounded mutation", async () => {
         global.fetch = jest.fn().mockResolvedValue(response(true));
 
@@ -429,5 +570,78 @@ describe("OpencodeApiService durable read adapter", () => {
             kind: "conflict",
             status: 409,
         });
+    });
+});
+
+describe("normalizeOpencodePendingQuestion", () => {
+    it("normalizes both legacy SSE field names and preserves answer semantics", () => {
+        expect(
+            normalizeOpencodePendingQuestion({
+                id: "q_1",
+                sessionID: "ses_1",
+                questions: [
+                    {
+                        question: "选择范围",
+                        header: "范围",
+                        multiple: true,
+                        custom: false,
+                        options: [{ label: "真实公司", description: "排除测试数据" }],
+                    },
+                ],
+            }),
+        ).toEqual({
+            requestId: "q_1",
+            sessionId: "ses_1",
+            questions: [
+                {
+                    question: "选择范围",
+                    header: "范围",
+                    multiple: true,
+                    custom: false,
+                    options: [{ label: "真实公司", description: "排除测试数据" }],
+                },
+            ],
+        });
+    });
+
+    it("rejects malformed events instead of creating an unusable card", () => {
+        expect(normalizeOpencodePendingQuestion({ id: "q_1", sessionID: "ses_1" })).toBeNull();
+    });
+});
+
+describe("OpencodeApiService event stream readiness", () => {
+    it("signals readiness before delivering the first event", async () => {
+        const service = new OpencodeApiService();
+        const encoder = new TextEncoder();
+        const chunks = [
+            encoder.encode(
+                'data: {"type":"question.asked","properties":{"id":"q_1","sessionID":"ses_1","questions":[]}}\n\n',
+            ),
+        ].values();
+        global.fetch = jest.fn().mockResolvedValue({
+            ok: true,
+            body: {
+                getReader: () => ({
+                    read: async () => {
+                        const next = chunks.next();
+                        return next.done ? { done: true } : { done: false, value: next.value };
+                    },
+                    cancel: async () => undefined,
+                }),
+            },
+        });
+
+        const order: string[] = [];
+        await service.streamEvents({
+            config: CONFIG,
+            onReady: () => {
+                order.push("ready");
+            },
+            onEvent: async () => {
+                order.push("event");
+            },
+        });
+
+        expect(order).toEqual(["ready", "event"]);
     });
 });

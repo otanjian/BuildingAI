@@ -52,7 +52,9 @@ describe("buildOpencodeLivePreview", () => {
         ],
       },
     ]);
-    expect(preview?.content).toBe("read (running) — /tmp/.env\n\nreading config");
+    expect(preview?.parts).toEqual([
+      { type: "text", text: "read (running) — /tmp/.env\n\nreading config" },
+    ]);
   });
 
   it("includes a pending tool summary when there is no text yet", () => {
@@ -62,6 +64,20 @@ describe("buildOpencodeLivePreview", () => {
         parts: [{ type: "tool", tool: "read", state: { status: "pending" } }],
       },
     ]);
-    expect(preview?.content).toBe("read (pending)");
+    expect(preview?.parts).toEqual([{ type: "text", text: "read (pending)" }]);
+  });
+
+  it("does not turn the interactive question tool into a generic live preview", () => {
+    expect(
+      buildOpencodeLivePreview(userId, [
+        {
+          info: { id: "m1", role: "assistant", finish: null },
+          parts: [
+            { type: "tool", tool: "question", state: { status: "running" } },
+            { type: "text", text: "等待选择" },
+          ],
+        },
+      ])?.parts,
+    ).toEqual([{ type: "text", text: "等待选择" }]);
   });
 });

@@ -1,6 +1,8 @@
 import type { ToolUIPart, UIMessage } from "ai";
 import type { ReactNode, RefObject } from "react";
 
+import type { OpencodePendingQuestion } from "@/pages/agents/_shared/opencode-turn-client";
+
 export interface MessageAttachment {
   type: "file";
   url: string;
@@ -106,6 +108,12 @@ export interface AssistantContextValue {
   disliked: Record<string, boolean>;
 
   textareaRef: RefObject<HTMLTextAreaElement | null>;
+  composerKey?: string;
+  composerDraft?: string;
+  onComposerDraftChange?: (value: string) => void;
+  scrollMemoryKey?: string;
+  scrollMemory?: { top: number; atBottom: boolean };
+  onScrollMemoryChange?: (value: { top: number; atBottom: boolean }) => void;
 
   onSend: (
     content: string,
@@ -143,6 +151,9 @@ export interface AssistantContextValue {
   historicalSessions?: DisplayMessage[][];
   /** Override available upload types (e.g. for third-party agents like Coze/Dify). */
   supportedUploadTypes?: Array<"image" | "video" | "audio" | "file">;
+  pendingQuestion?: OpencodePendingQuestion | null;
+  replyQuestion?: (input: { requestId: string; answers: string[][] }) => Promise<unknown>;
+  rejectQuestion?: (requestId: string) => Promise<unknown>;
 }
 
 export interface AssistantProviderProps extends AssistantContextValue {

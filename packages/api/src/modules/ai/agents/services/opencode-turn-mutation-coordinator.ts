@@ -18,10 +18,7 @@ import {
 } from "../utils/opencode-turn-command";
 import { AgentsService } from "./agents.service";
 import { OpencodeArtifactBaselineService } from "./opencode-artifact-baseline.service";
-import {
-    OpencodeTurnLeaseLostError,
-    OpencodeTurnRepository,
-} from "./opencode-turn.repository";
+import { OpencodeTurnLeaseLostError, OpencodeTurnRepository } from "./opencode-turn.repository";
 import { OpencodeTurnTelemetryService } from "./opencode-turn-telemetry.service";
 
 const DEFAULT_MUTATION_TIMEOUT_MS = 5_000;
@@ -167,10 +164,7 @@ export class OpencodeTurnMutationCoordinator {
 
             const now = input.now ?? new Date();
             const ambiguityWindowMs = input.ambiguityWindowMs ?? DEFAULT_AMBIGUITY_WINDOW_MS;
-            if (
-                turn.startedAt &&
-                now.getTime() - turn.startedAt.getTime() < ambiguityWindowMs
-            ) {
+            if (turn.startedAt && now.getTime() - turn.startedAt.getTime() < ambiguityWindowMs) {
                 this.telemetry?.increment("dispatch_ambiguity", {
                     turnId: turn.id,
                     conversationId: turn.conversationId,
@@ -270,6 +264,7 @@ export class OpencodeTurnMutationCoordinator {
             await this.opencodeApiService.rejectQuestion({
                 config: turn.conversation.agent?.thirdPartyIntegration,
                 requestId: input.requestId,
+                sessionId,
                 signal: input.signal,
                 timeoutMs: input.mutationTimeoutMs ?? DEFAULT_MUTATION_TIMEOUT_MS,
             });
@@ -300,11 +295,7 @@ export class OpencodeTurnMutationCoordinator {
         mutationTimeoutMs?: number;
     }): Promise<void> {
         await this.withConversationMutationLock(input.turnId, async (queryRunner, initial) => {
-            const turn = await this.revalidate(
-                queryRunner.manager,
-                input,
-                initial.conversationId,
-            );
+            const turn = await this.revalidate(queryRunner.manager, input, initial.conversationId);
             const runtime = await this.resolveRuntime(turn);
             this.snapshot(turn, runtime.workspace);
             const sessionId = turn.conversation.opencodeSessionId;
@@ -327,11 +318,7 @@ export class OpencodeTurnMutationCoordinator {
             signal?: AbortSignal;
             mutationTimeoutMs?: number;
         },
-        operation: (
-            turn: ClaimedTurn,
-            sessionId: string,
-            manager: EntityManager,
-        ) => Promise<T>,
+        operation: (turn: ClaimedTurn, sessionId: string, manager: EntityManager) => Promise<T>,
     ): Promise<T> {
         return this.withConversationMutationLock(input.turnId, async (queryRunner, initial) => {
             const turn = await this.revalidate(queryRunner.manager, input, initial.conversationId);

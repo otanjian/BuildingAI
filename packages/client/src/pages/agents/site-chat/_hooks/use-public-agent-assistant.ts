@@ -14,8 +14,10 @@ import type {
 } from "@/components/ask-assistant-ui";
 import { useMessageRepository } from "@/components/ask-assistant-ui";
 
-import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
+import { getOpencodeConversationStore } from "../../_shared/opencode-conversation-store";
+import { normalizeOpencodePendingQuestion } from "../../_shared/opencode-turn-client";
 import { opencodeDurableUiPolicy } from "../../_shared/opencode-durable-ui-policy";
+import { resolvePendingClearForStreamImport } from "../../_shared/pending-clear-stream-import";
 import { hasRenderableOpeningStatement } from "../../detail/_utils/opening-statement.ts";
 import {
   clearLastConversation,
@@ -128,10 +130,17 @@ export function usePublicAgentAssistant(args: {
     isError: isConversationsError,
     error: conversationsError,
   } = usePublicConversations(agentId, accessToken, anonymousIdentifier);
+  const publicStoreScope = `public-agent-${agentId}-${accessToken}`;
+  const isLocalDurableDraft = Boolean(
+    normalizedConversationId &&
+    agent?.durableOpencodeTurnsEnabled === true &&
+    getOpencodeConversationStore(publicStoreScope).isLocalDraft(normalizedConversationId),
+  );
   const { data: conversationDetail } = usePublicConversationDetail({
     conversationId: normalizedConversationId,
     accessToken,
     anonymousIdentifier,
+    enabled: !isLocalDurableDraft,
   });
 
   const conversationsEmbedAccessDisabled =
@@ -163,6 +172,14 @@ export function usePublicAgentAssistant(args: {
     addToolApprovalResponse,
     regenerate,
     getDbMessageId,
+    composerKey,
+    composerDraft,
+    setComposerDraft,
+    scrollMemory,
+    setScrollMemory,
+    pendingQuestion,
+    replyQuestion,
+    rejectQuestion,
   } = usePublicAgentChatStream({
     agentId,
     accessToken,
@@ -173,12 +190,21 @@ export function usePublicAgentAssistant(args: {
     isOpencodeTurnRunning: opencodeTurnRunning,
     durableOpencodeTurnsEnabled,
     activeOpencodeTurn,
+    legacyPendingQuestion: normalizeOpencodePendingQuestion(
+      conversationDetail?.metadata?.opencodePendingQuestion,
+    ),
   });
 
   const conversationIdForMessageOps = streamConversationId ?? normalizedConversationId;
   const canOperateMessage = Boolean(
     conversationIdForMessageOps && isUUID(conversationIdForMessageOps),
   );
+
+  useEffect(() => {
+    if (!composerKey) return;
+    const frame = requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [composerKey]);
 
   const { isResuming } = useEmbedConversationResume({
     agentId,
@@ -237,12 +263,14 @@ export function usePublicAgentAssistant(args: {
       shouldLoadInitial: Boolean(
         conversationIdForMessageOps &&
         isUUID(conversationIdForMessageOps) &&
+        !isLocalDurableDraft &&
         (durableOpencodeTurnsEnabled || (status !== "streaming" && status !== "submitted")) &&
-        streamMessages.length === 0 &&
+        (durableOpencodeTurnsEnabled || streamMessages.length === 0) &&
         !editInProgressRef.current,
       ),
       pollWhileRunning,
       getLiveMessageCount: () => streamMessages.length,
+      getDbMessageId,
       onLoadError: handleMessagesLoadError,
     });
 
@@ -388,8 +416,13 @@ export function usePublicAgentAssistant(args: {
 
   const startNewConversation = useCallback(() => {
     clearLastConversation(agentId);
+    if (durableOpencodeTurnsEnabled) {
+      const nextId = getOpencodeConversationStore(publicStoreScope).createDraft();
+      navigate(`/agents/${agentId}/${accessToken}/c/${nextId}`, { replace: true });
+      return;
+    }
     navigate(`/agents/${agentId}/${accessToken}`, { replace: true });
-  }, [agentId, accessToken, navigate]);
+  }, [agentId, accessToken, durableOpencodeTurnsEnabled, navigate, publicStoreScope]);
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -556,6 +589,12 @@ export function usePublicAgentAssistant(args: {
     liked: likedMap,
     disliked: dislikedMap,
     textareaRef,
+    composerKey,
+    composerDraft,
+    onComposerDraftChange: setComposerDraft,
+    scrollMemoryKey: composerKey,
+    scrollMemory,
+    onScrollMemoryChange: setScrollMemory,
     onSend,
     onLoadMoreMessages: loadMoreMessages,
     onStop: stop,
@@ -572,6 +611,9 @@ export function usePublicAgentAssistant(args: {
     onVoiceAudio: voiceConfig?.stt?.modelId ? onVoiceAudio : undefined,
     showConversationContext: false,
     assistantAvatar,
+    pendingQuestion,
+    replyQuestion,
+    rejectQuestion,
   };
 
   return {

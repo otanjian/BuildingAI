@@ -22,6 +22,7 @@ type AgentHistoryConversationRowProps = {
   onSelect: () => void;
   onRename: (title: string) => Promise<void>;
   onArchive: () => Promise<void> | void;
+  onIntent?: () => void;
 };
 
 /**
@@ -35,6 +36,7 @@ export function AgentHistoryConversationRow({
   onSelect,
   onRename,
   onArchive,
+  onIntent,
 }: AgentHistoryConversationRowProps) {
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(title);
@@ -122,6 +124,8 @@ export function AgentHistoryConversationRow({
           )}
           title={title}
           onClick={onSelect}
+          onMouseEnter={onIntent}
+          onFocus={onIntent}
         >
           <span className="min-w-0 flex-1 truncate text-left">{title}</span>
           {isGenerating ? (

@@ -30,6 +30,10 @@ import { ArchiveConversationDto } from "../../dto/web/chat/archive-conversation.
 import { CreateOperatorMessageDto } from "../../dto/web/chat/create-operator-message.dto";
 import { ListAgentConversationsDto } from "../../dto/web/chat/list-agent-conversations.dto";
 import { ListConversationMessagesDto } from "../../dto/web/chat/list-conversation-messages.dto";
+import {
+    OpencodeQuestionRejectDto,
+    OpencodeQuestionReplyDto,
+} from "../../dto/web/chat/opencode-question.dto";
 import { OpencodeApiService } from "../../integrations/opencode-api.service";
 import { AgentChatCompletionService } from "../../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../../services/agent-chat-message.service";
@@ -546,6 +550,27 @@ export class AgentChatWebController {
                         return;
                     }
 
+                    if (event.type === "question.asked" || event.type === "question.v2.asked") {
+                        writeEvent({
+                            type: event.type,
+                            properties: event.properties,
+                        });
+                        return;
+                    }
+
+                    if (
+                        event.type === "question.replied" ||
+                        event.type === "question.rejected" ||
+                        event.type === "question.v2.replied" ||
+                        event.type === "question.v2.rejected"
+                    ) {
+                        writeEvent({
+                            type: event.type,
+                            properties: event.properties,
+                        });
+                        return;
+                    }
+
                     if (event.type === "message.part.updated") {
                         const part = event.properties?.part as Record<string, any> | undefined;
                         if (!part) return;
@@ -576,8 +601,12 @@ export class AgentChatWebController {
             });
         } catch (error) {
             if (!abortSignal.aborted) {
-                const message = error instanceof Error ? error.message : "OpenCode event stream failed";
-                writeEvent({ type: "session.error", properties: { sessionID: sessionId, error: message } });
+                const message =
+                    error instanceof Error ? error.message : "OpenCode event stream failed";
+                writeEvent({
+                    type: "session.error",
+                    properties: { sessionID: sessionId, error: message },
+                });
             }
         } finally {
             clearInterval(heartbeat);
@@ -747,9 +776,37 @@ export class AgentChatWebController {
         if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
-        const turnProjection = await this.agentChatRecordService.getOpencodeTurnConversationProjection(
-            conversationId,
-        );
+        const agent = await this.agentsService.findOneById(agentId);
+        const sessionId =
+            typeof record.metadata === "object" && record.metadata
+                ? (record.metadata as Record<string, unknown>).opencodeSessionId
+                : undefined;
+        if (agent?.createMode === "opencode" && typeof sessionId === "string") {
+            try {
+                const question = (
+                    await this.opencodeApiService.listPendingQuestions({
+                        config: agent.thirdPartyIntegration,
+                        sessionId,
+                        timeoutMs: 2_000,
+                    })
+                )[0];
+                const pending = question
+                    ? {
+                          requestId: question.id,
+                          sessionId: question.sessionID,
+                          questions: question.questions,
+                      }
+                    : null;
+                await this.agentChatRecordService.updateMetadata(conversationId, {
+                    opencodePendingQuestion: pending,
+                });
+                record.metadata = { ...(record.metadata ?? {}), opencodePendingQuestion: pending };
+            } catch {
+                // Persisted question metadata remains usable when OpenCode is temporarily unavailable.
+            }
+        }
+        const turnProjection =
+            await this.agentChatRecordService.getOpencodeTurnConversationProjection(conversationId);
         return {
             id: record.id,
             title: record.title,
@@ -762,6 +819,89 @@ export class AgentChatWebController {
                 : record.metadata,
             activeTurn: turnProjection.activeTurn,
         };
+    }
+
+    @Post(":id/chat/conversations/:conversationId/opencode-question/reply")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/opencode-question/reply",
+        targetPath: ":id/chat/conversations/:conversationId/opencode-question/reply",
+        method: "POST",
+    })
+    async replyLegacyOpencodeQuestion(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Body() dto: OpencodeQuestionReplyDto,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ) {
+        const record = await this.getOwnedConversation(
+            agentId,
+            conversationId,
+            playground,
+            req,
+            "操作",
+        );
+        const pending = record.metadata?.opencodePendingQuestion as
+            | Record<string, unknown>
+            | undefined;
+        if (!pending || pending.requestId !== dto.requestId)
+            throw HttpErrorFactory.conflict("问题已过期");
+        const sessionId = record.metadata?.opencodeSessionId;
+        if (typeof sessionId !== "string") throw HttpErrorFactory.conflict("会话已结束");
+        const agent = await this.agentsService.findOneById(agentId);
+        if (!agent || agent.createMode !== "opencode")
+            throw HttpErrorFactory.badRequest("Only OpenCode agents support questions");
+        await this.opencodeApiService.replyQuestion({
+            config: agent.thirdPartyIntegration,
+            requestId: dto.requestId,
+            sessionId,
+            answers: dto.answers,
+        });
+        await this.agentChatRecordService.updateMetadata(conversationId, {
+            opencodePendingQuestion: null,
+        });
+        return { ok: true };
+    }
+
+    @Post(":id/chat/conversations/:conversationId/opencode-question/reject")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/opencode-question/reject",
+        targetPath: ":id/chat/conversations/:conversationId/opencode-question/reject",
+        method: "POST",
+    })
+    async rejectLegacyOpencodeQuestion(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Body() dto: OpencodeQuestionRejectDto,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ) {
+        const record = await this.getOwnedConversation(
+            agentId,
+            conversationId,
+            playground,
+            req,
+            "操作",
+        );
+        const pending = record.metadata?.opencodePendingQuestion as
+            | Record<string, unknown>
+            | undefined;
+        if (!pending || pending.requestId !== dto.requestId)
+            throw HttpErrorFactory.conflict("问题已过期");
+        const sessionId = record.metadata?.opencodeSessionId;
+        if (typeof sessionId !== "string") throw HttpErrorFactory.conflict("会话已结束");
+        const agent = await this.agentsService.findOneById(agentId);
+        if (!agent || agent.createMode !== "opencode")
+            throw HttpErrorFactory.badRequest("Only OpenCode agents support questions");
+        await this.opencodeApiService.rejectQuestion({
+            config: agent.thirdPartyIntegration,
+            requestId: dto.requestId,
+            sessionId,
+        });
+        await this.agentChatRecordService.updateMetadata(conversationId, {
+            opencodePendingQuestion: null,
+        });
+        return { ok: true };
     }
 
     @Post(":id/chat/conversations/:conversationId/messages/operator")
@@ -782,6 +922,24 @@ export class AgentChatWebController {
             operatorId: playground.id,
             operatorName: playground.username,
         });
+    }
+
+    private async getOwnedConversation(
+        agentId: string,
+        conversationId: string,
+        playground: UserPlayground,
+        req: Request,
+        action: string,
+    ) {
+        const record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record || record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id)
+            throw HttpErrorFactory.forbidden(`无权${action}该对话`);
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden(`无权${action}该对话`);
+        }
+        return record;
     }
 
     /**

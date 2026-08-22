@@ -19,9 +19,7 @@ export interface MigrationFile {
     timestamp: number;
 }
 
-export function parseMigrationFilename(
-    file: string,
-): Omit<MigrationFile, "path"> | null {
+export function parseMigrationFilename(file: string): Omit<MigrationFile, "path"> | null {
     const match = file.match(/^(\d+)-([^-]+)-(.+)\.js$/);
     if (!match) return null;
     const [, timestamp, version] = match;
@@ -209,6 +207,21 @@ export class MigrationRunner {
                 semver.lte(m.version, toVersion) &&
                 !existingVersions.has(m.version), // 排除已存在的版本
         );
+    }
+
+    /**
+     * Reconcile migrations added to the already-installed product version.
+     * The migration history name remains the idempotency boundary, so this is
+     * safe to run on every startup and fixes same-version patch migrations.
+     */
+    async runPendingMigrationsForVersion(version: string): Promise<void> {
+        await this.ensureMigrationHistoryTable();
+        const migrations = (await this.getMigrationFiles()).filter(
+            (migration) => migration.version === version,
+        );
+        for (const migration of migrations) {
+            await this.executeMigration(migration);
+        }
     }
 
     /**
