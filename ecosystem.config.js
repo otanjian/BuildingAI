@@ -1,3 +1,5 @@
+const clientDevPort = Number(process.env.CLIENT_DEV_PORT || 4091);
+
 module.exports = {
   apps: [
     {
@@ -28,7 +30,7 @@ module.exports = {
       script: ".run/start-web.js",
       cwd: "./",
       env: {
-        CLIENT_DEV_PORT: 4091,
+        CLIENT_DEV_PORT: clientDevPort,
         NO_PROXY: "localhost,127.0.0.1,::1",
         no_proxy: "localhost,127.0.0.1,::1",
       },

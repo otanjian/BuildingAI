@@ -65,4 +65,13 @@ PATH="$workspace/empty-bin:$PATH"
 [[ "$(resolve_opencode_bin)" == "$workspace_bin" ]] || fail "resolve_opencode_bin should prefer the workspace OpenCode binary"
 rm -rf "$workspace"
 
+# Configurable API/client ports must flow into the managed dev port list and health helpers.
+SERVER_PORT=4190
+CLIENT_DEV_PORT=4191
+refresh_dev_ports
+[[ "${DEV_PORTS[*]}" == "4190 4191" ]] || fail "refresh_dev_ports should use SERVER_PORT and CLIENT_DEV_PORT"
+[[ "$(api_url)" == "http://127.0.0.1:4190" ]] || fail "api_url should use SERVER_PORT"
+configured_web_port="$(CLIENT_DEV_PORT=4191 node -e 'console.log(require("./ecosystem.config").apps.find((app) => app.name === "buildingai-web").env.CLIENT_DEV_PORT)')"
+[[ "$configured_web_port" == "4191" ]] || fail "PM2 web config should inherit CLIENT_DEV_PORT"
+
 echo "OK: start.sh OpenCode contract tests passed"

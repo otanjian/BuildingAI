@@ -12,8 +12,9 @@ SAP_ENV="${SAP_DIR}/.env"
 SAP_PYRFC_DIR="${ROOT_DIR}/integrations/sap-pyrfc-mcp"
 SAP_PYRFC_ENV="${SAP_PYRFC_DIR}/.env"
 
-DEV_PORTS=(4090 4091)
+SERVER_PORT="${SERVER_PORT:-4090}"
 CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
+DEV_PORTS=()
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 OPENCODE_WORKSPACE_DIR="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
 SAP_PORT="${MCP_PORT:-8100}"
@@ -75,6 +76,8 @@ Environment (root .env or shell):
   START_SAP_MCP=auto|true|false         Default auto (start if integrations/sap-abap-adt-mcp/.env exists)
   START_SAP_PYRFC_MCP=auto|true|false   Default auto (start if integrations/sap-pyrfc-mcp/.env exists)
   START_DOCKER_INFRA=true|false         Default false — docker compose up redis postgres
+  SERVER_PORT=4090                      API server HTTP port
+  CLIENT_DEV_PORT=4091                  Web development server HTTP port
   OPENCODE_PORT=4096                    OpenCode serve HTTP port
   OPENCODE_BIN                          Optional path to opencode binary
   OPENCODE_WORKSPACE_DIR                OpenCode source workspace (default: ../opencode)
@@ -125,12 +128,14 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
     done
   fi
+  SERVER_PORT="${SERVER_PORT:-4090}"
+  CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
   OPENCODE_PORT="${OPENCODE_PORT:-4096}"
   OPENCODE_WORKSPACE_DIR="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
   SAP_PORT="${MCP_PORT:-8100}"
@@ -143,6 +148,11 @@ load_root_env() {
   DB_PORT="${DB_PORT:-5432}"
   REDIS_HOST="${REDIS_HOST:-localhost}"
   REDIS_PORT="${REDIS_PORT:-6379}"
+  refresh_dev_ports
+}
+
+refresh_dev_ports() {
+  DEV_PORTS=("${SERVER_PORT:-4090}" "${CLIENT_DEV_PORT:-4091}")
 }
 
 load_nvm() {
@@ -229,8 +239,12 @@ free_ports() {
   fi
 }
 
+api_url() {
+  printf 'http://127.0.0.1:%s' "${SERVER_PORT:-4090}"
+}
+
 api_ready() {
-  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:4090/consoleapi/health" >/dev/null 2>&1
+  curl -sf --noproxy '*' --max-time 2 "$(api_url)/consoleapi/health" >/dev/null 2>&1
 }
 
 web_ready() {
@@ -357,7 +371,7 @@ wait_for_api_ready() {
     sleep 1
   done
   echo ""
-  echo "WARNING: API :4090 did not become ready within ${max_wait}s."
+  echo "WARNING: API :${SERVER_PORT:-4090} did not become ready within ${max_wait}s."
   echo "  Common causes: Postgres/Redis down, stale nodemon, DB schema sync stuck, or extension bootstrap hang."
   echo "  Check: ./start.sh status  (Postgres/Redis lines) and ./start.sh logs"
   echo "  Try: ./start.sh stop && ./start.sh -f restart dev -d"
@@ -386,7 +400,7 @@ wait_for_dev_ready() {
   done
   echo ""
   echo "WARNING: Dev stack not fully ready within ${max_wait}s."
-  api_ready && echo "  API :4090 — ok" || echo "  API :4090 — down"
+  api_ready && echo "  API :${SERVER_PORT:-4090} — ok" || echo "  API :${SERVER_PORT:-4090} — down"
   web_ready && echo "  Web :${CLIENT_DEV_PORT:-4091} — ok" || echo "  Web :${CLIENT_DEV_PORT:-4091} — down"
   web_proxy_ready && echo "  Proxy /api/config — ok" || echo "  Proxy /api/config — down"
   if [[ "$want_opencode" == 1 ]]; then
@@ -617,7 +631,7 @@ ensure_local_infra() {
   fi
 
   if [[ -z "${APP_DOMAIN:-}" ]]; then
-    echo "Warning: APP_DOMAIN is empty in .env — set APP_DOMAIN=http://127.0.0.1:4090 for OpenCode image URL rewriting."
+    echo "Warning: APP_DOMAIN is empty in .env — set APP_DOMAIN=$(api_url) for OpenCode image URL rewriting."
   fi
 
   [[ "$ok" == 1 ]]
@@ -942,8 +956,8 @@ print_info() {
 
 BuildingAI dev server
   Web:  http://127.0.0.1:${CLIENT_DEV_PORT}/
-  API:  http://127.0.0.1:4090/
-  Install wizard (first run): http://127.0.0.1:4090/install
+  API:  $(api_url)/
+  Install wizard (first run): $(api_url)/install
 $(should_start_opencode && echo "  OpenCode: http://127.0.0.1:${OPENCODE_PORT}/")
 
 $(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/sse")
@@ -1112,6 +1126,7 @@ cmd_status() {
   ensure_run_dir
 
   echo "=== BuildingAI local stack ==="
+  refresh_dev_ports
   for port in "${DEV_PORTS[@]}"; do
     if port_in_use "$port"; then
       echo "  :${port}  listening  (pids: $(port_pids "$port" | tr '\n' ' '))"
