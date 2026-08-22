@@ -1,0 +1,1 @@
+var e=()=>(typeof window<`u`&&window.location.origin,``);export{e as t};
