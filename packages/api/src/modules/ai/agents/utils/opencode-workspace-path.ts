@@ -42,6 +42,17 @@ export function resolveSafeWorkspaceRelativePath(params: {
         return "";
     }
 
+    const requestedSegments = relativeInput.split(/[\\/]+/);
+    if (
+        requestedSegments.some(
+            (segment) =>
+                (segment.startsWith(".") && segment !== "." && segment !== "..") ||
+                WORKSPACE_NOISE_BASENAMES.has(segment),
+        )
+    ) {
+        throw new Error("hidden workspace path is not accessible");
+    }
+
     const absolute = path.resolve(workspace, relativeInput);
     if (absolute !== workspace && !absolute.startsWith(workspace + path.sep)) {
         throw new Error("Path escapes workspace");
@@ -52,7 +63,16 @@ export function resolveSafeWorkspaceRelativePath(params: {
         throw new Error("Path escapes workspace");
     }
 
-    return relative.split(path.sep).join("/");
+    const segments = relative.split(path.sep);
+    if (
+        segments.some(
+            (segment) => segment.startsWith(".") || WORKSPACE_NOISE_BASENAMES.has(segment),
+        )
+    ) {
+        throw new Error("hidden workspace path is not accessible");
+    }
+
+    return segments.join("/");
 }
 
 /**
@@ -75,6 +95,14 @@ export function filterWorkspaceEntries<T extends WorkspaceEntry>(entries: T[]): 
         const base = entry.name || path.basename(entry.path);
         if (!base || base.startsWith(".")) return false;
         if (WORKSPACE_NOISE_BASENAMES.has(base)) return false;
+        const pathSegments = String(entry.path ?? "").split(/[\\/]+/);
+        if (
+            pathSegments.some(
+                (segment) => segment.startsWith(".") || WORKSPACE_NOISE_BASENAMES.has(segment),
+            )
+        ) {
+            return false;
+        }
         return true;
     });
 }

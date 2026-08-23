@@ -54,6 +54,19 @@
             }
         },
         {
+            "id": "menu_personal_todos",
+            "icon": "list-checks",
+            "title": "我的待办",
+            "link": {
+                "label": "我的待办",
+                "path": "/todos",
+                "type": "system",
+                "query": {},
+                "component": "/src/pages/todos/index.tsx",
+                "target": "_self"
+            }
+        },
+        {
             "id": "menu_history_fixed",
             "icon": "history",
             "title": "历史记录",

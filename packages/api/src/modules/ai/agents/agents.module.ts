@@ -30,6 +30,7 @@ import { forwardRef, MiddlewareConsumer, Module, NestModule, RequestMethod } fro
 
 import { AiMemoryModule } from "../memory/ai-memory.module";
 import { AgentsConsoleController } from "./controllers/console/agents.controller";
+import { OpencodeCredentialInternalController } from "./controllers/internal/opencode-credential.controller";
 // import { AgentOpenApiController } from "./controllers/openapi/agent-chat.controller";
 import { AgentAnnotationWebController } from "./controllers/web/agent-annotation.controller";
 import { AgentChatWebController } from "./controllers/web/agent-chat.controller";
@@ -62,7 +63,9 @@ import { AgentVoiceService } from "./services/agent-voice.service";
 import { AgentsService } from "./services/agents.service";
 import { OpencodeArtifactBaselineService } from "./services/opencode-artifact-baseline.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
+import { OpencodeCredentialService } from "./services/opencode-credential.service";
 import { OpencodeLegacyBindingMigrationService } from "./services/opencode-legacy-binding-migration";
+import { OpencodeIframeBillingReconcilerService } from "./services/opencode-iframe-billing-reconciler.service";
 import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
 import { OpencodeTurnLeaseRepository } from "./services/opencode-turn-lease.repository";
 import { OpencodeTurnInvariantService } from "./services/opencode-turn-invariant.service";
@@ -119,6 +122,7 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
         AgentPublishWebController,
         AgentAnnotationWebController,
         OpencodeTurnWebController,
+        OpencodeCredentialInternalController,
         // AgentOpenApiController,
     ],
     providers: [
@@ -153,6 +157,7 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
         OpencodeArtifactBaselineService,
         OpencodeArtifactService,
         OpencodeLegacyBindingMigrationService,
+        OpencodeIframeBillingReconcilerService,
         OpencodeTurnAcceptanceService,
         OpencodeTurnRepository,
         OpencodeTurnLeaseRepository,
@@ -175,6 +180,7 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
         OpencodeSessionRecoverService,
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,
+        OpencodeCredentialService,
         // Shared services (same pattern as AiChatModule)
         AiModelService,
         AiProviderService,

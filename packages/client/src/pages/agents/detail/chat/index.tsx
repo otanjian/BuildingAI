@@ -46,9 +46,10 @@ import {
   Bot,
   ChevronDown,
   ChevronLeft,
+  FolderTree,
   ListIndentDecrease,
   PanelLeft,
-  PanelRight,
+  RefreshCw,
   Settings2,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -71,8 +72,10 @@ import { OpencodeQuestionCard } from "../../_shared/opencode-question-card";
 import { normalizeOpencodePendingQuestion } from "../../_shared/opencode-turn-client";
 import { useBackgroundStreamingConversations } from "../../_shared/use-background-streams";
 import { VirtualizedConversationList } from "../../_shared/virtualized-conversation-list";
-import { OpencodeNativePanel } from "../_components/opencode-native-panel";
+import { OpencodeIframePanel } from "../_components/opencode-iframe-panel";
+import { OpencodeWorkspacePanel } from "../_components/opencode-workspace-panel";
 import { useAssistantForAgent } from "../_hooks/use-assistant-for-agent";
+import { resolveOpencodeEntryRoute } from "../_utils/opencode-entry-route";
 import { hasRenderableOpeningStatement } from "../_utils/opening-statement";
 
 type PublishedAgentDetailWithUploadCapability = PublishedAgentDetail & {
@@ -360,7 +363,10 @@ function AgentInfoPanel({
                   type="button"
                   onClick={() => {
                     if (!agent?.id) return;
-                    if (agent.durableOpencodeTurnsEnabled === true) {
+                    if (
+                      agent.createMode === "opencode" ||
+                      agent.durableOpencodeTurnsEnabled === true
+                    ) {
                       const conversationId = getOpencodeConversationStore(
                         `detail-agent-${agent.id}`,
                       ).createDraft();
@@ -426,10 +432,12 @@ function AgentInfoPanel({
                                   { page: 1, pageSize: 50 },
                                 ],
                                 queryFn: () =>
-                                  listAgentConversationMessages(agent.id, item.id, {
-                                    page: 1,
-                                    pageSize: 50,
-                                  }),
+                                  listAgentConversationMessages(
+                                    agent.id,
+                                    item.id,
+                                    { page: 1, pageSize: 50 },
+                                    { silent: true },
+                                  ),
                                 staleTime: 30_000,
                               })
                               .then((result) => {
@@ -708,13 +716,8 @@ const AgentChatPage = () => {
     refetchOnWindowFocus: false,
   });
 
-  useEffect(() => {
-    if (!agentId || uuid || agent?.durableOpencodeTurnsEnabled !== true) return;
-    const conversationId = getOpencodeConversationStore(`detail-agent-${agentId}`).createDraft();
-    navigate(`/agents/${agentId}/c/${conversationId}`, { replace: true });
-  }, [agent?.durableOpencodeTurnsEnabled, agentId, navigate, uuid]);
-
   const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [initializedDraftConversationId, setInitializedDraftConversationId] = useState<string>();
 
   const formFields = useMemo(() => {
     const fields = agent?.formFields;
@@ -752,18 +755,24 @@ const AgentChatPage = () => {
     [agent],
   );
 
-  const { data: conversationsData, isLoading: isLoadingConversations } = useAgentConversationsQuery(
+  const {
+    data: conversationsData,
+    isLoading: isLoadingConversations,
+    isError: isConversationsError,
+    refetch: refetchConversations,
+  } = useAgentConversationsQuery(
     agentId || undefined,
-    { page: 1, pageSize: 30, sortBy: "updatedAt" },
+    { page: 1, pageSize: 30, sortBy: "createdAt" },
     { enabled: !!agentId },
   );
-  const isLocalDurableDraft = Boolean(
-    uuid &&
-    agent?.durableOpencodeTurnsEnabled === true &&
-    getOpencodeConversationStore(`detail-agent-${agentId}`).isLocalDraft(uuid),
+  const isLocalOpenCodeDraft = Boolean(
+    uuid && getOpencodeConversationStore(`detail-agent-${agentId}`).isLocalDraft(uuid),
+  );
+  const isPendingOpenCodeDraft = Boolean(
+    isLocalOpenCodeDraft && initializedDraftConversationId !== uuid,
   );
   const { data: conversationDetail } = useAgentConversationDetailQuery(agentId || undefined, uuid, {
-    enabled: Boolean(agentId && uuid && !isLocalDurableDraft),
+    enabled: Boolean(agentId && uuid && !isPendingOpenCodeDraft),
   });
 
   const activeOpencodeTurn = useMemo(
@@ -794,6 +803,7 @@ const AgentChatPage = () => {
     showReference: agent?.showReference ?? true,
     assistantAvatar,
     conversationId: uuid,
+    isLocalConversationDraft: isPendingOpenCodeDraft,
     isOpencodeTurnRunning: durableOpencodeTurnsEnabled
       ? isOpencodeTurnRunning
       : legacyOpencodeTurnRunning,
@@ -831,31 +841,64 @@ const AgentChatPage = () => {
   const [formPopoverOpen, setFormPopoverOpen] = useState(false);
   const [panelExpanded, setPanelExpanded] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [workspacePanelOpen, setWorkspacePanelOpen] = useState(true);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const workspacePanelRef = useRef<ImperativePanelHandle>(null);
+  const opencodeEntryResolvedRef = useRef<string | null>(null);
   const hasForm = formFields.length > 0;
   const isOpencodeAgent = agent?.createMode === "opencode";
 
   useEffect(() => {
     if (!isOpencodeAgent) return;
-    const api = workspacePanelRef.current;
-    if (!api) return;
-    if (workspacePanelOpen) {
-      if (api.isCollapsed()) api.expand();
-    } else if (!api.isCollapsed()) {
-      api.collapse();
+    const panel = workspacePanelRef.current;
+    if (!panel) return;
+    if (workspaceOpen) {
+      if (panel.isCollapsed()) panel.expand();
+    } else if (!panel.isCollapsed()) {
+      panel.collapse();
     }
-  }, [isOpencodeAgent, workspacePanelOpen]);
+  }, [isOpencodeAgent, workspaceOpen]);
 
   useEffect(() => {
-    const mql = window.matchMedia("(max-width: 767px)");
-    const sync = () => {
-      if (mql.matches) setWorkspacePanelOpen(false);
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const collapseOnNarrowScreen = () => {
+      if (media.matches) setWorkspaceOpen(false);
     };
-    sync();
-    mql.addEventListener("change", sync);
-    return () => mql.removeEventListener("change", sync);
+    collapseOnNarrowScreen();
+    media.addEventListener("change", collapseOnNarrowScreen);
+    return () => media.removeEventListener("change", collapseOnNarrowScreen);
   }, []);
+
+  const opencodeEntryDecision = resolveOpencodeEntryRoute({
+    agentId,
+    isOpencodeAgent,
+    conversationId: uuid,
+    historyStatus: isConversationsError ? "error" : isLoadingConversations ? "loading" : "success",
+    conversations: (conversationsData?.items ?? []).filter(
+      (item) => item.metadata?.isDebug !== true,
+    ),
+  });
+
+  useEffect(() => {
+    if (opencodeEntryDecision.kind === "stay") {
+      if (uuid) opencodeEntryResolvedRef.current = null;
+      return;
+    }
+    if (
+      opencodeEntryDecision.kind === "wait" ||
+      opencodeEntryDecision.kind === "error" ||
+      opencodeEntryResolvedRef.current === agentId
+    ) {
+      return;
+    }
+
+    opencodeEntryResolvedRef.current = agentId;
+    const conversationId =
+      opencodeEntryDecision.kind === "open"
+        ? opencodeEntryDecision.conversationId
+        : getOpencodeConversationStore(`detail-agent-${agentId}`).createDraft();
+    navigate(`/agents/${agentId}/c/${conversationId}`, { replace: true });
+  }, [agentId, navigate, opencodeEntryDecision, uuid]);
 
   /**
    * Auto-open the form variables popover when any form fields exist,
@@ -867,332 +910,17 @@ const AgentChatPage = () => {
   }, [formFields.length]);
 
   return (
-    <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-      <div
-        className={cn(
-          "flex h-dvh w-full",
-          "md:gap-0",
-          panelExpanded ? "md:bg-muted md:py-2 md:pr-2" : "bg-background",
-        )}
-      >
-        {panelExpanded && (
-          <aside className="hidden md:flex">
-            <AgentInfoPanel
-              agent={agent}
-              isLoading={isAgentLoading}
-              conversations={conversations}
-              isLoadingConversations={isLoadingConversations}
-              currentConversationId={uuid}
-              backgroundStreamingConversationIds={backgroundStreamingConversationIds}
-            />
-          </aside>
-        )}
-        {isOpencodeAgent ? (
-          <ResizablePanelGroup
-            direction="horizontal"
-            autoSaveId="opencode-native-panel-outer-v1"
-            className="min-h-0 min-w-0 flex-1"
-          >
-            <ResizablePanel defaultSize={68} minSize={40}>
-              <div
-                className={cn(
-                  "bg-background relative flex h-full min-w-0 flex-col overflow-hidden",
-                  panelExpanded && "md:rounded-sm",
-                )}
-              >
-                <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
-                  <div className="flex items-center gap-1">
-                    <SheetTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="shrink-0 md:hidden"
-                        aria-label="打开菜单"
-                      >
-                        <PanelLeft className="size-4" />
-                      </Button>
-                    </SheetTrigger>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="hidden md:inline-flex"
-                      title={panelExpanded ? "收起侧栏" : "展开侧栏"}
-                      onClick={() => setPanelExpanded((v) => !v)}
-                    >
-                      {panelExpanded ? (
-                        <ListIndentDecrease className="size-4" />
-                      ) : (
-                        <ListIndentDecrease className="size-4 rotate-180" />
-                      )}
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
-                      <ChevronLeft />
-                    </Button>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="size-8 rounded-lg after:rounded-lg">
-                        <AvatarImage
-                          className="rounded-lg"
-                          src={agent?.avatar ?? undefined}
-                          alt={agent?.name ?? ""}
-                        />
-                        <AvatarFallback className="rounded-lg">
-                          <Bot className="size-4" />
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
-                        {agent?.name}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    {hasForm && (
-                      <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button size="icon" variant="ghost" title="表单变量">
-                            <Settings2 className="size-4" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80" align="end">
-                          <div className="space-y-3">
-                            <h4 className="text-sm font-medium">表单变量</h4>
-                            <p className="text-muted-foreground text-xs">
-                              填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
-                            </p>
-                            <Separator />
-                            {formFields.map((field) => (
-                              <div key={field.name} className="space-y-1.5">
-                                <Label className="text-xs">
-                                  {field.label}
-                                  {field.required ? (
-                                    <span className="text-destructive ml-0.5">*</span>
-                                  ) : null}
-                                </Label>
-                                {field.type === "textarea" ? (
-                                  <Textarea
-                                    placeholder={`输入 ${field.label}`}
-                                    value={formValues[field.name] ?? ""}
-                                    onChange={(e) =>
-                                      handleFormValueChange(field.name, e.target.value)
-                                    }
-                                    rows={2}
-                                    className="resize-none text-xs"
-                                  />
-                                ) : field.type === "select" ? (
-                                  <select
-                                    className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
-                                    value={formValues[field.name] ?? ""}
-                                    onChange={(e) =>
-                                      handleFormValueChange(field.name, e.target.value)
-                                    }
-                                  >
-                                    <option value="">请选择</option>
-                                    {getSelectOptions(field).map((opt) => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <Input
-                                    placeholder={`输入 ${field.label}`}
-                                    value={formValues[field.name] ?? ""}
-                                    onChange={(e) =>
-                                      handleFormValueChange(field.name, e.target.value)
-                                    }
-                                    className="h-8 text-xs"
-                                    maxLength={field.maxLength}
-                                  />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="hidden md:inline-flex"
-                      title={workspacePanelOpen ? "收起工作区" : "打开工作区"}
-                      aria-pressed={workspacePanelOpen}
-                      onClick={() => setWorkspacePanelOpen((open) => !open)}
-                    >
-                      <PanelRight className="size-4" />
-                    </Button>
-                  </div>
-                </header>
-                <AssistantProvider {...contextValue}>
-                  <ChatContent
-                    agentAvatar={agentAvatar}
-                    agentName={agent?.name}
-                    formFields={formFields}
-                    formValues={formValues}
-                    onOpenForm={() => setFormPopoverOpen(true)}
-                    openingStatement={agent?.openingStatement}
-                    openingQuestions={agent?.openingQuestions ?? []}
-                  />
-                </AssistantProvider>
-              </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle={workspacePanelOpen} className="hidden md:flex" />
-            <ResizablePanel
-              ref={workspacePanelRef}
-              collapsible
-              collapsedSize={0}
-              defaultSize={32}
-              minSize={18}
-              maxSize={48}
-              onCollapse={() => setWorkspacePanelOpen(false)}
-              onExpand={() => setWorkspacePanelOpen(true)}
-            >
-              {agentId ? (
-                <AssistantProvider {...contextValue}>
-                  <OpencodeNativePanel
-                    agentId={agentId}
-                    conversationId={uuid}
-                    isLocalDraft={isLocalDurableDraft}
-                    isTurnRunning={isOpencodeTurnRunning}
-                    className="border-border border-l"
-                  />
-                </AssistantProvider>
-              ) : null}
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : (
-          <div
-            className={cn(
-              "bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden",
-              panelExpanded && "md:rounded-sm",
-            )}
-          >
-            <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
-              <div className="flex items-center gap-1">
-                <SheetTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="shrink-0 md:hidden"
-                    aria-label="打开菜单"
-                  >
-                    <PanelLeft className="size-4" />
-                  </Button>
-                </SheetTrigger>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="hidden md:inline-flex"
-                  title={panelExpanded ? "收起侧栏" : "展开侧栏"}
-                  onClick={() => setPanelExpanded((v) => !v)}
-                >
-                  {panelExpanded ? (
-                    <ListIndentDecrease className="size-4" />
-                  ) : (
-                    <ListIndentDecrease className="size-4 rotate-180" />
-                  )}
-                </Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
-                  <ChevronLeft />
-                </Button>
-                <div className="flex items-center gap-2">
-                  <Avatar className="size-8 rounded-lg after:rounded-lg">
-                    <AvatarImage
-                      className="rounded-lg"
-                      src={agent?.avatar ?? undefined}
-                      alt={agent?.name ?? ""}
-                    />
-                    <AvatarFallback className="rounded-lg">
-                      <Bot className="size-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
-                    {agent?.name}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-0.5">
-                {hasForm && (
-                  <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button size="icon" variant="ghost" title="表单变量">
-                        <Settings2 className="size-4" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-80" align="end">
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-medium">表单变量</h4>
-                        <p className="text-muted-foreground text-xs">
-                          填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
-                        </p>
-                        <Separator />
-                        {formFields.map((field) => (
-                          <div key={field.name} className="space-y-1.5">
-                            <Label className="text-xs">
-                              {field.label}
-                              {field.required ? (
-                                <span className="text-destructive ml-0.5">*</span>
-                              ) : null}
-                            </Label>
-                            {field.type === "textarea" ? (
-                              <Textarea
-                                placeholder={`输入 ${field.label}`}
-                                value={formValues[field.name] ?? ""}
-                                onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                                rows={2}
-                                className="resize-none text-xs"
-                              />
-                            ) : field.type === "select" ? (
-                              <select
-                                className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
-                                value={formValues[field.name] ?? ""}
-                                onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                              >
-                                <option value="">请选择</option>
-                                {getSelectOptions(field).map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <Input
-                                placeholder={`输入 ${field.label}`}
-                                value={formValues[field.name] ?? ""}
-                                onChange={(e) => handleFormValueChange(field.name, e.target.value)}
-                                className="h-8 text-xs"
-                                maxLength={field.maxLength}
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                )}
-              </div>
-            </header>
-            <AssistantProvider {...contextValue}>
-              <ChatContent
-                agentAvatar={agentAvatar}
-                agentName={agent?.name}
-                formFields={formFields}
-                formValues={formValues}
-                onOpenForm={() => setFormPopoverOpen(true)}
-                openingStatement={agent?.openingStatement}
-                openingQuestions={agent?.openingQuestions ?? []}
-              />
-            </AssistantProvider>
-          </div>
-        )}
-        <SheetContent
-          side="left"
-          className="bg-sidebar flex h-full w-[min(20rem,calc(100vw-1rem))] max-w-[min(20rem,calc(100vw-1rem))] flex-col gap-0 border-r p-0 sm:max-w-sm"
+    <>
+      <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+        <div
+          className={cn(
+            "flex h-dvh w-full",
+            "md:gap-0",
+            panelExpanded ? "md:bg-muted md:py-2 md:pr-2" : "bg-background",
+          )}
         >
-          <SheetHeader className="sr-only">
-            <SheetTitle>智能体信息</SheetTitle>
-            <SheetDescription>智能体详情与历史对话</SheetDescription>
-          </SheetHeader>
-          <div className="chat-scroll flex min-h-0 flex-1 flex-col overflow-hidden py-2">
-            <div className="w-full min-w-0 [&>div]:w-full [&>div]:max-w-full">
+          {panelExpanded && (
+            <aside className="hidden md:flex">
               <AgentInfoPanel
                 agent={agent}
                 isLoading={isAgentLoading}
@@ -1201,11 +929,298 @@ const AgentChatPage = () => {
                 currentConversationId={uuid}
                 backgroundStreamingConversationIds={backgroundStreamingConversationIds}
               />
+            </aside>
+          )}
+          {isOpencodeAgent ? (
+            agentId ? (
+              <ResizablePanelGroup direction="horizontal" className="min-h-0 min-w-0 flex-1">
+                <ResizablePanel defaultSize={100} minSize={42}>
+                  <OpencodeIframePanel
+                    agentId={agentId}
+                    conversationId={uuid}
+                    onConversationReady={(conversationId) => {
+                      const store = getOpencodeConversationStore(`detail-agent-${agentId}`);
+                      if (store.isLocalDraft(conversationId)) {
+                        store.markPersisted(conversationId);
+                        setInitializedDraftConversationId(conversationId);
+                      }
+                    }}
+                    agentAvatar={agent?.avatar}
+                    agentName={agent?.name}
+                    panelExpanded={panelExpanded}
+                    onTogglePanel={() => setPanelExpanded((v) => !v)}
+                    onBack={() => navigate("/agents")}
+                    className={cn("min-w-0 flex-1", panelExpanded && "md:rounded-sm")}
+                    emptyState={
+                      opencodeEntryDecision.kind === "error" ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                          <p className="text-muted-foreground max-w-sm text-sm">
+                            无法加载历史会话，请重试。当前不会新建会话。
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void refetchConversations()}
+                          >
+                            <RefreshCw className="mr-1.5 size-3.5" /> 重试
+                          </Button>
+                        </div>
+                      ) : undefined
+                    }
+                    headerActions={
+                      <>
+                        {hasForm && (
+                          <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button size="icon" variant="ghost" title="表单变量">
+                                <Settings2 className="size-4" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80" align="end">
+                              <div className="space-y-3">
+                                <h4 className="text-sm font-medium">表单变量</h4>
+                                <p className="text-muted-foreground text-xs">
+                                  填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
+                                </p>
+                                <Separator />
+                                {formFields.map((field) => (
+                                  <div key={field.name} className="space-y-1.5">
+                                    <Label className="text-xs">
+                                      {field.label}
+                                      {field.required ? (
+                                        <span className="text-destructive ml-0.5">*</span>
+                                      ) : null}
+                                    </Label>
+                                    {field.type === "textarea" ? (
+                                      <Textarea
+                                        placeholder={`输入 ${field.label}`}
+                                        value={formValues[field.name] ?? ""}
+                                        onChange={(e) =>
+                                          handleFormValueChange(field.name, e.target.value)
+                                        }
+                                        rows={2}
+                                        className="resize-none text-xs"
+                                      />
+                                    ) : field.type === "select" ? (
+                                      <select
+                                        className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
+                                        value={formValues[field.name] ?? ""}
+                                        onChange={(e) =>
+                                          handleFormValueChange(field.name, e.target.value)
+                                        }
+                                      >
+                                        <option value="">请选择</option>
+                                        {getSelectOptions(field).map((opt) => (
+                                          <option key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <Input
+                                        placeholder={`输入 ${field.label}`}
+                                        value={formValues[field.name] ?? ""}
+                                        onChange={(e) =>
+                                          handleFormValueChange(field.name, e.target.value)
+                                        }
+                                        className="h-8 text-xs"
+                                        maxLength={field.maxLength}
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )}
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="hidden md:inline-flex"
+                          title={workspaceOpen ? "收起工作区" : "打开工作区"}
+                          aria-label={workspaceOpen ? "收起项目文件" : "打开项目文件"}
+                          aria-pressed={workspaceOpen}
+                          onClick={() => setWorkspaceOpen((open) => !open)}
+                        >
+                          <FolderTree className="size-4" />
+                        </Button>
+                      </>
+                    }
+                  />
+                </ResizablePanel>
+                <ResizableHandle withHandle={workspaceOpen} className="hidden md:flex" />
+                <ResizablePanel
+                  ref={workspacePanelRef}
+                  collapsible
+                  collapsedSize={0}
+                  defaultSize={0}
+                  minSize={20}
+                  maxSize={55}
+                  onCollapse={() => setWorkspaceOpen(false)}
+                  onExpand={() => setWorkspaceOpen(true)}
+                  className="hidden md:block"
+                >
+                  <OpencodeWorkspacePanel agentId={agentId} className="border-border border-l" />
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            ) : null
+          ) : (
+            <div
+              className={cn(
+                "bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden",
+                panelExpanded && "md:rounded-sm",
+              )}
+            >
+              <header className="sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3">
+                <div className="flex items-center gap-1">
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0 md:hidden"
+                      aria-label="打开菜单"
+                    >
+                      <PanelLeft className="size-4" />
+                    </Button>
+                  </SheetTrigger>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="hidden md:inline-flex"
+                    title={panelExpanded ? "收起侧栏" : "展开侧栏"}
+                    onClick={() => setPanelExpanded((v) => !v)}
+                  >
+                    {panelExpanded ? (
+                      <ListIndentDecrease className="size-4" />
+                    ) : (
+                      <ListIndentDecrease className="size-4 rotate-180" />
+                    )}
+                  </Button>
+                  <Button variant="ghost" size="icon-sm" onClick={() => navigate("/agents")}>
+                    <ChevronLeft />
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="size-8 rounded-lg after:rounded-lg">
+                      <AvatarImage
+                        className="rounded-lg"
+                        src={agent?.avatar ?? undefined}
+                        alt={agent?.name ?? ""}
+                      />
+                      <AvatarFallback className="rounded-lg">
+                        <Bot className="size-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>
+                      {agent?.name}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-0.5">
+                  {hasForm && (
+                    <Popover open={formPopoverOpen} onOpenChange={setFormPopoverOpen}>
+                      <PopoverTrigger asChild>
+                        <Button size="icon" variant="ghost" title="表单变量">
+                          <Settings2 className="size-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80" align="end">
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-medium">表单变量</h4>
+                          <p className="text-muted-foreground text-xs">
+                            填写表单变量后，对话中的 {"{{变量}}"} 将被替换为实际值
+                          </p>
+                          <Separator />
+                          {formFields.map((field) => (
+                            <div key={field.name} className="space-y-1.5">
+                              <Label className="text-xs">
+                                {field.label}
+                                {field.required ? (
+                                  <span className="text-destructive ml-0.5">*</span>
+                                ) : null}
+                              </Label>
+                              {field.type === "textarea" ? (
+                                <Textarea
+                                  placeholder={`输入 ${field.label}`}
+                                  value={formValues[field.name] ?? ""}
+                                  onChange={(e) =>
+                                    handleFormValueChange(field.name, e.target.value)
+                                  }
+                                  rows={2}
+                                  className="resize-none text-xs"
+                                />
+                              ) : field.type === "select" ? (
+                                <select
+                                  className="border-input bg-background flex h-8 w-full rounded-md border px-2 text-xs"
+                                  value={formValues[field.name] ?? ""}
+                                  onChange={(e) =>
+                                    handleFormValueChange(field.name, e.target.value)
+                                  }
+                                >
+                                  <option value="">请选择</option>
+                                  {getSelectOptions(field).map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <Input
+                                  placeholder={`输入 ${field.label}`}
+                                  value={formValues[field.name] ?? ""}
+                                  onChange={(e) =>
+                                    handleFormValueChange(field.name, e.target.value)
+                                  }
+                                  className="h-8 text-xs"
+                                  maxLength={field.maxLength}
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              </header>
+              <AssistantProvider {...contextValue}>
+                <ChatContent
+                  agentAvatar={agentAvatar}
+                  agentName={agent?.name}
+                  formFields={formFields}
+                  formValues={formValues}
+                  onOpenForm={() => setFormPopoverOpen(true)}
+                  openingStatement={agent?.openingStatement}
+                  openingQuestions={agent?.openingQuestions ?? []}
+                />
+              </AssistantProvider>
             </div>
-          </div>
-        </SheetContent>
-      </div>
-    </Sheet>
+          )}
+          <SheetContent
+            side="left"
+            className="bg-sidebar flex h-full w-[min(20rem,calc(100vw-1rem))] max-w-[min(20rem,calc(100vw-1rem))] flex-col gap-0 border-r p-0 sm:max-w-sm"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>智能体信息</SheetTitle>
+              <SheetDescription>智能体详情与历史对话</SheetDescription>
+            </SheetHeader>
+            <div className="chat-scroll flex min-h-0 flex-1 flex-col overflow-hidden py-2">
+              <div className="w-full min-w-0 [&>div]:w-full [&>div]:max-w-full">
+                <AgentInfoPanel
+                  agent={agent}
+                  isLoading={isAgentLoading}
+                  conversations={conversations}
+                  isLoadingConversations={isLoadingConversations}
+                  currentConversationId={uuid}
+                  backgroundStreamingConversationIds={backgroundStreamingConversationIds}
+                />
+              </div>
+            </div>
+          </SheetContent>
+        </div>
+      </Sheet>
+    </>
   );
 };
 

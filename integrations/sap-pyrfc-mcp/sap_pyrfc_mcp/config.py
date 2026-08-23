@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import parse_qsl
 
 BackendMode = Literal["auto", "pyrfc", "adt"]
 
@@ -35,6 +37,70 @@ _ENV_KEYS = frozenset(
         "SAPNWRFC_HOME",
     }
 )
+
+_CONNECTION_KEY_ALIASES = {
+    "ashost": "ashost",
+    "host": "ashost",
+    "sysnr": "sysnr",
+    "client": "client",
+    "clnt": "client",
+    "user": "user",
+    "username": "user",
+    "password": "password",
+    "passwd": "password",
+    "pwd": "password",
+    "language": "language",
+    "lang": "language",
+    "saprouter": "saprouter",
+    "mshost": "mshost",
+    "msserv": "msserv",
+    "group": "group",
+    "r3name": "r3name",
+}
+
+
+def parse_conn_string(raw: str) -> dict[str, str]:
+    """Parse an ERP-style SAP connection string without logging credentials."""
+    value = (raw or "").strip()
+    if not value:
+        return {}
+
+    result: dict[str, str] = {}
+    parts = re.split(r"[&;]", value)
+    first = parts[0].strip()
+    route = first.split("=", 1)[1].strip() if "=" in first and first.split("=", 1)[0].lower() == "conn" else first
+    if route.startswith("/H/"):
+        hops = re.findall(r"/H/([^/]+)(?:/S/(\d+))?", route, flags=re.IGNORECASE)
+        if hops:
+            host, port = hops[-1]
+            result["ashost"] = host
+            if port:
+                result["sysnr"] = port[-2:]
+            if len(hops) > 1:
+                result["saprouter"] = "".join(
+                    f"/H/{hop_host}{f'/S/{hop_port}' if hop_port else ''}"
+                    for hop_host, hop_port in hops[:-1]
+                )
+
+    fields = parts[1:] if route != first or route.startswith("/H/") else parts
+    for key, field_value in parse_qsl("&".join(fields), keep_blank_values=False):
+        canonical = _CONNECTION_KEY_ALIASES.get(key.strip().lower())
+        normalized_value = re.split(r"[,，]", field_value, maxsplit=1)[0].strip()
+        if canonical and normalized_value:
+            result[canonical] = normalized_value
+
+    if "password" not in result:
+        password = re.search(
+            r"(?:password|passwd|pwd|sap[_-]?password|密码)\s*(?:=|:|是|为)\s*([^\s,&;，；]+)",
+            value,
+            flags=re.IGNORECASE,
+        )
+        if password:
+            result["password"] = password.group(1)
+
+    if result.get("language"):
+        result["language"] = result["language"].upper()
+    return result
 
 
 def _env(name: str, default: str = "") -> str:

@@ -51,6 +51,11 @@ export { MembershipPlanDuration, MembershipPlans } from "./membership-plans.enti
 export { Menu, MenuSourceType, MenuType } from "./menu.entity";
 export { NoticeSetting } from "./notice-setting.entity";
 export { Payconfig } from "./payconfig.entity";
+export {
+    PersonalTodo,
+    PERSONAL_TODO_STATUSES,
+    type PersonalTodoStatus,
+} from "./personal-todo.entity";
 export { Permission, PermissionType } from "./permission.entity";
 export { Recharge } from "./recharge.entity";
 export { RechargeOrder } from "./recharge-order.entity";

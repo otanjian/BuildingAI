@@ -8,6 +8,7 @@ import { BowiCheckRunsService } from "./bowi-check-runs.service";
 import { BowiMcpRuntimeService } from "./bowi-mcp-runtime.service";
 import { BowiMcpToolSyncService } from "./bowi-mcp-tool-sync.service";
 import { BowiMcpToolsExecutor } from "./bowi-mcp-tools.executor";
+import { EhcsBowiMcpProvider } from "./ehcs-bowi-mcp.provider";
 import { BowiSqlService } from "./bowi-sql.service";
 
 @Module({
@@ -18,9 +19,10 @@ import { BowiSqlService } from "./bowi-sql.service";
         BowiCheckRunsService,
         BowiSqlService,
         BowiMcpToolsExecutor,
+        EhcsBowiMcpProvider,
         BowiMcpRuntimeService,
         BowiMcpToolSyncService,
     ],
-    exports: [BowiMcpToolSyncService],
+    exports: [BowiMcpToolSyncService, EhcsBowiMcpProvider],
 })
 export class BowiMcpModule {}

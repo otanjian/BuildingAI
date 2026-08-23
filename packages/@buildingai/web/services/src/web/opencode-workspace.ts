@@ -18,8 +18,10 @@ export type OpencodeWorkspaceListResult = {
 
 export type OpencodeWorkspaceFileContent = {
     path: string;
+    type: "text" | "binary";
     content: string;
     encoding?: string;
+    mimeType?: string;
 };
 
 export async function listOpencodeWorkspaceFiles(

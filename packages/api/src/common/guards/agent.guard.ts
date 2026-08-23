@@ -4,6 +4,7 @@ import { Agent, User } from "@buildingai/db/entities";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { getOverrideMetadata } from "@buildingai/utils";
 import { DECORATOR_KEYS } from "@common/constants/decorators-key.constant";
+import { setRequestAuthContext, type RequestAuthSource } from "@common/types/request-auth-context";
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
@@ -46,13 +47,14 @@ export class AgentGuard implements CanActivate {
         }
 
         request["user"] = result.user;
+        setRequestAuthContext(request, { source: result.authSource, agentId: result.agentId });
         return true;
     }
 
     private async resolveUserByPublishBearer(
         token: string,
         agentId?: string,
-    ): Promise<{ user: UserPlayground; agentId: string } | null> {
+    ): Promise<{ user: UserPlayground; agentId: string; authSource: RequestAuthSource } | null> {
         const query = this.agentRepository.createQueryBuilder("agent").where(
             `(
                     (agent.publish_config ->> 'apiKey' = :token AND agent.publish_config ->> 'enableApiKey' = 'true')
@@ -74,6 +76,8 @@ export class AgentGuard implements CanActivate {
 
         return {
             agentId: agent.id,
+            authSource:
+                agent.publishConfig?.apiKey === token ? "publish_key" : "site_access_token",
             user: {
                 id: user.id,
                 username: user.username,

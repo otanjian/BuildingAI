@@ -52,6 +52,7 @@ export interface UseAgentMessagesPagingOptions {
   setMessages: (messages: UIMessage[] | ((prev: UIMessage[]) => UIMessage[])) => void;
   lastMessageDbIdRef: React.RefObject<string | null>;
   shouldLoadInitial: boolean;
+  skipHistoryFetch?: boolean;
   getLiveMessageCount?: () => number;
   getDbMessageId: (clientMessageId: string) => string | undefined;
 }
@@ -72,6 +73,7 @@ export function useAgentMessagesPaging(
     setMessages,
     lastMessageDbIdRef,
     shouldLoadInitial,
+    skipHistoryFetch = false,
     getLiveMessageCount,
     getDbMessageId,
   } = options;
@@ -100,13 +102,14 @@ export function useAgentMessagesPaging(
 
     prevConversationIdRef.current = conversationId;
 
-    if (!conversationId) return;
+    if (!conversationId || skipHistoryFetch) return;
 
     const liveMessageCount = getLiveMessageCountRef.current?.() ?? 0;
     const shouldFetch = shouldApplyHistoryPageToChat({
       shouldLoadInitial,
       switched,
       liveMessageCount,
+      skipHistoryFetch,
     });
     if (!shouldFetch) return;
 
@@ -127,9 +130,10 @@ export function useAgentMessagesPaging(
           const reconciled = mergeHistoryPageWithLiveMessages(sorted, live, getDbMessageId);
           const latestPersistedId = [...reconciled]
             .reverse()
-            .map((message) =>
-              getDbMessageId(message.id) ??
-              (persistedIds.has(message.id) ? message.id : undefined),
+            .map(
+              (message) =>
+                getDbMessageId(message.id) ??
+                (persistedIds.has(message.id) ? message.id : undefined),
             )
             .find((id): id is string => Boolean(id));
           if (latestPersistedId) {
@@ -142,7 +146,15 @@ export function useAgentMessagesPaging(
       .finally(() => {
         setIsLoadingMessages(false);
       });
-  }, [agentId, conversationId, shouldLoadInitial, setMessages, lastMessageDbIdRef, getDbMessageId]);
+  }, [
+    agentId,
+    conversationId,
+    shouldLoadInitial,
+    skipHistoryFetch,
+    setMessages,
+    lastMessageDbIdRef,
+    getDbMessageId,
+  ]);
 
   const loadMoreMessages = useCallback(() => {
     if (!conversationId) return;

@@ -5,6 +5,7 @@ import {
     OPENCODE_TURN_ACTIVE_STATUSES,
 } from "@buildingai/db/entities";
 import { DataSource, In, Not, type EntityManager, type QueryRunner } from "@buildingai/db/typeorm";
+import { UserDictService } from "@buildingai/dict";
 import { Injectable, Optional } from "@nestjs/common";
 
 import {
@@ -16,6 +17,10 @@ import {
     type OpencodeDispatchSnapshot,
     validateOpencodeDispatchSnapshot,
 } from "../utils/opencode-turn-command";
+import {
+    buildOpencodeSessionContext,
+    OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY,
+} from "../utils/opencode-session-context";
 import { AgentsService } from "./agents.service";
 import { OpencodeArtifactBaselineService } from "./opencode-artifact-baseline.service";
 import { OpencodeTurnLeaseLostError, OpencodeTurnRepository } from "./opencode-turn.repository";
@@ -54,6 +59,8 @@ export class OpencodeTurnMutationCoordinator {
         private readonly turnRepository: OpencodeTurnRepository,
         @Optional()
         private readonly telemetry?: OpencodeTurnTelemetryService,
+        @Optional()
+        private readonly userDictService?: UserDictService,
     ) {}
 
     async dispatch(input: {
@@ -113,12 +120,23 @@ export class OpencodeTurnMutationCoordinator {
                         ...operationOptions,
                     });
                 }
+                const sessionContext = await this.buildSessionContext(turn);
                 const mappedSession =
                     session ??
                     (await this.opencodeApiService.createSession(
                         turn.conversation.agent?.thirdPartyIntegration,
                         turn.conversation.title,
-                        { ...operationOptions, turnReceipt: turn.id },
+                        {
+                            ...operationOptions,
+                            turnReceipt: turn.id,
+                            ...(sessionContext
+                                ? {
+                                      metadata: {
+                                          [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionContext,
+                                      },
+                                  }
+                                : {}),
+                        },
                     ));
                 sessionId = mappedSession.id;
                 await queryRunner.startTransaction("READ COMMITTED");
@@ -372,7 +390,7 @@ export class OpencodeTurnMutationCoordinator {
                 conversationId,
                 status: In([...OPENCODE_TURN_ACTIVE_STATUSES]),
             },
-            relations: { conversation: { agent: true } },
+            relations: { conversation: { agent: true, user: true } },
         });
         if (!turn || turn.leaseToken !== input.leaseToken) {
             throw new OpencodeTurnLeaseLostError(input.turnId);
@@ -447,6 +465,26 @@ export class OpencodeTurnMutationCoordinator {
         }
         turn.conversation.agent = agent;
         return runtime;
+    }
+
+    private async buildSessionContext(turn: ClaimedTurn): Promise<string | undefined> {
+        if (!this.userDictService || !turn.conversation.userId) return undefined;
+        let personalParams: Record<string, unknown> | undefined;
+        try {
+            personalParams = await this.userDictService.getGroupValues(
+                turn.conversation.userId,
+                "personalParams",
+            );
+        } catch {
+            personalParams = undefined;
+        }
+        return buildOpencodeSessionContext({
+            userId: turn.conversation.userId,
+            username: turn.conversation.user?.username,
+            personalParams,
+            sensitiveWordConfig: turn.conversation.agent?.sensitiveWordConfig,
+            agentId: turn.conversation.agentId,
+        });
     }
 
     private snapshot(turn: AgentOpencodeTurn, workspace: string): OpencodeDispatchSnapshot {

@@ -39,6 +39,7 @@ import { join } from "path";
 
 import { AiModule } from "./ai/ai.module";
 import { ConfigModule as AppConfigModule } from "./config/config.module";
+import { BowiMcpModule } from "./bowi-mcp/bowi-mcp.module";
 import { ConsoleMcpModule } from "./console-mcp/console-mcp.module";
 import { DecorateModule } from "./decorate/decorate.module";
 import { FinanceModule } from "./finance/finance.module";
@@ -52,6 +53,7 @@ import { RoleModule } from "./role/role.module";
 import { ScheduleModule } from "./schedule/schedule.module";
 import { SystemModule } from "./system/system.module";
 import { TagModule } from "./tag/tag.module";
+import { TodoModule } from "./todo/todo.module";
 import { UploadModule } from "./upload/upload.module";
 import { UserModule } from "./user/user.module";
 @Module({})
@@ -102,6 +104,7 @@ export class AppModule {
                 CDKModule, //
                 ChannelModule,
                 AiModule,
+                BowiMcpModule,
                 ConsoleMcpModule,
                 AppConfigModule,
                 DecorateModule,
@@ -116,6 +119,7 @@ export class AppModule {
                 RoleModule,
                 SystemModule,
                 TagModule,
+                TodoModule,
                 CoreUploadModule,
                 UploadModule,
                 AnalyseModule,

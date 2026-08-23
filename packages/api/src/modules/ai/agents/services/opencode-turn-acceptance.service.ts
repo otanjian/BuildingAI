@@ -10,6 +10,7 @@ import {
 import { DataSource, In, type Repository } from "@buildingai/db/typeorm";
 import { UserDictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
+import type { RequestAuthSource } from "@common/types/request-auth-context";
 import { AgentConfigService } from "@modules/config/services/agent-config.service";
 import { Injectable, Optional } from "@nestjs/common";
 import { createIdGenerator } from "ai";
@@ -39,6 +40,7 @@ export type OpencodeTurnAcceptanceInput = {
     agentId: string;
     userId?: string;
     anonymousIdentifier?: string;
+    authSource?: RequestAuthSource;
     message: { role: string; parts?: Array<Record<string, unknown>> };
     formVariables?: Record<string, string>;
     formFieldsInputs?: Record<string, unknown>;
@@ -232,9 +234,20 @@ export class OpencodeTurnAcceptanceService {
                     consumedPower: 0,
                     isDeleted: false,
                     feedbackStatus: { like: 0, dislike: 0 },
-                    metadata: input.isDebug ? { isDebug: true } : undefined,
+                    metadata: {
+                        ...(input.isDebug ? { isDebug: true } : {}),
+                        bowiAuthSource: input.authSource ?? "anonymous",
+                    },
                 });
                 record = await queryRunner.manager.save(AgentChatRecord, record);
+            } else {
+                record.metadata = {
+                    ...(record.metadata ?? {}),
+                    bowiAuthSource: input.authSource ?? "anonymous",
+                };
+                await queryRunner.manager.update(AgentChatRecord, record.id, {
+                    metadata: record.metadata,
+                });
             }
 
             const latestMessage = await queryRunner.manager.findOne(AgentChatMessage, {

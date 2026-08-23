@@ -43,16 +43,54 @@ describe("opencode-workspace-path", () => {
         ).toThrow(/Invalid/);
     });
 
+    it("rejects dot-prefixed and noise path segments at any depth", () => {
+        expect(() => resolveSafeWorkspaceRelativePath({ workspace, requestPath: ".env" })).toThrow(
+            /hidden workspace path/,
+        );
+        expect(() =>
+            resolveSafeWorkspaceRelativePath({ workspace, requestPath: "src/.private/token" }),
+        ).toThrow(/hidden workspace path/);
+        expect(() =>
+            resolveSafeWorkspaceRelativePath({ workspace, requestPath: "src/node_modules/pkg" }),
+        ).toThrow(/hidden workspace path/);
+        expect(() =>
+            resolveSafeWorkspaceRelativePath({
+                workspace,
+                requestPath: "src/.private/../visible.txt",
+            }),
+        ).toThrow(/hidden workspace path/);
+    });
+
+    it("allows normal names containing dots", () => {
+        expect(
+            resolveSafeWorkspaceRelativePath({
+                workspace,
+                requestPath: "src/v1.2/config.prod.json",
+            }),
+        ).toBe("src/v1.2/config.prod.json");
+    });
+
     it("filters ignored, noise, and dotfile basenames", () => {
         const entries = [
             { name: "src", path: "src", type: "directory" as const, ignored: false },
-            { name: "node_modules", path: "node_modules", type: "directory" as const, ignored: false },
+            {
+                name: "node_modules",
+                path: "node_modules",
+                type: "directory" as const,
+                ignored: false,
+            },
             { name: ".git", path: ".git", type: "directory" as const, ignored: false },
             { name: ".opencode", path: ".opencode", type: "directory" as const, ignored: false },
             { name: ".env", path: ".env", type: "file" as const, ignored: false },
             { name: "secret.env", path: "secret.env", type: "file" as const, ignored: true },
             { name: "README.md", path: "README.md", type: "file" as const, ignored: false },
             { name: "dist", path: "dist", type: "directory" as const, ignored: false },
+            {
+                name: "leaked.txt",
+                path: ".private/leaked.txt",
+                type: "file" as const,
+                ignored: false,
+            },
         ];
         const filtered = filterWorkspaceEntries(entries);
         expect(filtered.map((e) => e.name)).toEqual(["src", "README.md"]);

@@ -1,6 +1,10 @@
 import { BooleanNumber } from "@buildingai/constants/shared";
 import type { DecorateMenuItem } from "@buildingai/services/web";
-import { useDecorateMenuQuery, useUnifiedConversationsQuery } from "@buildingai/services/web";
+import {
+  useDecorateMenuQuery,
+  useTodoAssignedCountQuery,
+  useUnifiedConversationsQuery,
+} from "@buildingai/services/web";
 import { useAuthStore } from "@buildingai/stores";
 import {
   Sidebar,
@@ -23,6 +27,7 @@ import { DefaultNavGroup } from "./default-group";
 import { DefaultLogo } from "./default-logo";
 import { DefaultNavMain, type NavItem } from "./default-nav-main";
 import { DefaultNavUser } from "./default-nav-user";
+import { TodoSidebarBadge } from "./todo-sidebar-badge";
 
 /**
  * Keyboard shortcut component that registers a global shortcut and displays the key hint
@@ -62,6 +67,7 @@ function KeyboardShortcut({
 
 const MENU_HOME_FIXED = "menu_home_fixed";
 const MENU_HISTORY_FIXED = "menu_history_fixed";
+const MENU_PERSONAL_TODOS = "menu_personal_todos";
 
 /**
  * Default chat component path used to identify if home page is the chat page.
@@ -85,6 +91,7 @@ function useMenuItems(
     agentName?: string;
   }[],
   homeAction?: React.ReactNode,
+  todoAction?: React.ReactNode,
   userPermissions?: string[],
   isRoot?: boolean,
 ): NavItem[] {
@@ -120,15 +127,22 @@ function useMenuItems(
           icon: menu.icon,
           target: menu.link.target,
           ...(menu.id === MENU_HOME_FIXED && homeAction ? { action: homeAction } : {}),
+          ...(menu.id === MENU_PERSONAL_TODOS && todoAction ? { action: todoAction } : {}),
         };
       });
-  }, [menus, conversationItems, homeAction, userPermissions, isRoot]);
+  }, [menus, conversationItems, homeAction, todoAction, userPermissions, isRoot]);
 }
 
 export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate();
   const { userInfo } = useAuthStore((state) => state.auth);
   const { data: menuConfig, isLoading: isMenuLoading } = useDecorateMenuQuery();
+  const hasTodoMenu = menuConfig?.menus?.some(
+    (menu) => menu.id === MENU_PERSONAL_TODOS && !menu.isHidden,
+  );
+  const { data: todoCount, isLoading: isTodoCountLoading } = useTodoAssignedCountQuery({
+    enabled: Boolean(hasTodoMenu),
+  });
   const { data: conversationsData } = useUnifiedConversationsQuery(
     { page: 1, pageSize: 20 },
     { refetchOnWindowFocus: false },
@@ -161,6 +175,9 @@ export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Side
       className="text-muted-foreground/70 opacity-0 group-hover/link-menu-item:opacity-100"
     />
   ) : undefined;
+  const todoAction = hasTodoMenu ? (
+    <TodoSidebarBadge count={todoCount?.count} isLoading={isTodoCountLoading} />
+  ) : undefined;
 
   const permissionsCodes = userInfo?.permissionsCodes ?? [];
   const isRoot = userInfo?.isRoot === BooleanNumber.YES;
@@ -168,6 +185,7 @@ export function DefaultAppSidebar({ ...props }: React.ComponentProps<typeof Side
     menuConfig?.menus ?? [],
     conversationItems,
     homeAction,
+    todoAction,
     permissionsCodes,
     isRoot,
   );

@@ -32,6 +32,8 @@ import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatMessageUsage, ChatUIMessage } from "@buildingai/types";
 import type { ModelReference } from "@buildingai/types/ai/agent-config.interface";
 import { getProviderSecret } from "@buildingai/utils";
+import type { RequestAuthSource } from "@common/types/request-auth-context";
+import { buildBowiMcpHeaders } from "@modules/bowi-mcp/utils/bowi-agent-invocation";
 import { UserService } from "@modules/user/services/user.service";
 import { Injectable, Logger } from "@nestjs/common";
 import type { LanguageModel, Tool, UIMessage } from "ai";
@@ -88,6 +90,8 @@ type PreHandleQuickCommandResult = {
 export interface AgentChatCompletionParams {
     agentId: string;
     userId: string;
+    username?: string;
+    authSource?: RequestAuthSource;
     anonymousIdentifier?: string;
     conversationId?: string;
     saveConversation?: boolean;
@@ -225,7 +229,10 @@ export class AgentChatCompletionService {
                     userId: params.userId,
                     anonymousIdentifier: params.anonymousIdentifier,
                     title: initialTitle,
-                    metadata: params.isDebug ? { isDebug: true } : undefined,
+                    metadata: {
+                        ...(params.isDebug ? { isDebug: true } : {}),
+                        bowiAuthSource: params.authSource ?? "anonymous",
+                    },
                 });
                 conversationId = record.id;
             }
@@ -402,7 +409,13 @@ export class AgentChatCompletionService {
                             : modelMsgs;
                         const promptText = formatMessagesForTokenCount(finalMessages);
 
-                        const mcpResult = await this.initMcpClients(agent.mcpServerIds);
+                        const mcpResult = await this.initMcpClients(agent.mcpServerIds, {
+                            userId: params.userId,
+                            agentId: params.agentId,
+                            agentName: agent.name,
+                            conversationId,
+                            authSource: params.authSource ?? "anonymous",
+                        });
                         mcpClients = mcpResult.clients;
 
                         const lastUserMsg = this.extractLastUserText(processed);
@@ -949,6 +962,13 @@ export class AgentChatCompletionService {
 
     private async initMcpClients(
         mcpServerIds?: string[],
+        invocation?: {
+            userId: string;
+            agentId: string;
+            agentName: string;
+            conversationId?: string;
+            authSource: RequestAuthSource;
+        },
     ): Promise<{ clients: McpClient[]; tools: Record<string, unknown> }> {
         if (!mcpServerIds?.length) return { clients: [], tools: {} };
 
@@ -965,7 +985,11 @@ export class AgentChatCompletionService {
                     description: s.description ?? undefined,
                     url: s.url,
                     communicationType: s.communicationType,
-                    headers: s.headers ?? undefined,
+                    headers: buildBowiMcpHeaders({
+                        serverName: s.name,
+                        existing: s.headers ?? undefined,
+                        invocation,
+                    }),
                 }));
 
             if (!serverConfigs.length) return { clients: [], tools: {} };
@@ -1219,7 +1243,10 @@ export class AgentChatCompletionService {
                 userId: chatParams.userId,
                 anonymousIdentifier: chatParams.anonymousIdentifier,
                 title: initialTitle,
-                metadata: chatParams.isDebug ? { isDebug: true } : undefined,
+                metadata: {
+                    ...(chatParams.isDebug ? { isDebug: true } : {}),
+                    bowiAuthSource: chatParams.authSource ?? "anonymous",
+                },
             });
             conversationId = record.id;
         }

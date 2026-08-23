@@ -2,6 +2,8 @@
 
 Connect BuildingAI chat to SAP via **PyRFC** and **SAP NW RFC SDK** (`libsapnwrfc`). Complements the ADT-based `sap-abap` integration for arbitrary RFC/BAPI calls.
 
+For normal agent use, register only Bowi MCP and follow [`BOWI_SAP.md`](../../BOWI_SAP.md). Direct registration below is retained for administrator diagnostics.
+
 Supports **dynamic multi-user connections** (same chat UX as sap-abap):
 
 ```
@@ -49,7 +51,9 @@ Design: [`docs/design-dynamic-connections.md`](docs/design-dynamic-connections.m
 | ABAP source, transports, syntax check | No | Yes |
 | Requires NW RFC SDK | Yes | No |
 
-## Chat usage (multi-user)
+## Direct diagnostic usage (multi-user)
+
+Normal OpenCode/agent calls use Bowi's `sap_*` tools and never see credentials or `connection_id`. The sequence below is only for administrators diagnosing this private upstream directly.
 
 ```text
 1) sap_connect(ashost, sysnr, user, password, client[, saprouter][, url])
@@ -139,16 +143,16 @@ pip install pyrfc
 ./start.sh restart sap-pyrfc
 ```
 
-## BuildingAI registration
+## Direct BuildingAI registration (administrator diagnostics only)
 
 1. Start the server (listens on `http://127.0.0.1:8200/mcp` by default).
 2. Console → **AI → MCP Services** → add server:
    - **Name:** `SAP-PyRFC`
    - **Type:** Streamable HTTP
    - **URL:** `http://127.0.0.1:8200/mcp`
-3. Enable in chat, call `sap_connect`, then `read_table` / `call_rfc` with the returned `connection_id`.
+3. Diagnose with `sap_connect`, then `read_table` / `call_rfc`, remove the temporary direct entry afterward, and restart OpenCode.
 
-Root `mcp.json` includes the same URL for local Cursor use.
+Root `mcp.json` intentionally points normal clients at Bowi instead of this upstream.
 
 ## MCP tools
 

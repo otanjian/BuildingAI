@@ -81,6 +81,9 @@ Environment (root .env or shell):
   OPENCODE_PORT=4096                    OpenCode serve HTTP port
   OPENCODE_BIN                          Optional path to opencode binary
   OPENCODE_WORKSPACE_DIR                OpenCode source workspace (default: ../opencode)
+  BUILDINGAI_API_URL                    Internal API base used by OpenCode credential injection (default: API :4090)
+  BUILDINGAI_OPENCODE_INTERNAL_KEY      Private API/OpenCode bridge key (override in shared deployments)
+  BOWI_MCP_INVOCATION_SECRET            HMAC secret for short-lived first-party Bowi assertions (falls back to JWT_SECRET)
   MCP_PORT=8100                         SAP ADT MCP HTTP port
   SAP_PYRFC_MCP_PORT=8200               SAP PyRFC MCP HTTP port
 
@@ -101,7 +104,7 @@ Examples:
   ./start.sh -f restart           # force-free ports, then start
 
 MCP endpoints (register in console when running):
-  SAP ADT:    http://127.0.0.1:8100/sse
+  SAP ADT:    http://127.0.0.1:8100/mcp
   SAP PyRFC:  http://127.0.0.1:8200/mcp
   ERPNext:    http://127.0.0.1:8000/... (external; not started by this script)
 
@@ -128,7 +131,7 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
@@ -148,6 +151,9 @@ load_root_env() {
   DB_PORT="${DB_PORT:-5432}"
   REDIS_HOST="${REDIS_HOST:-localhost}"
   REDIS_PORT="${REDIS_PORT:-6379}"
+  BUILDINGAI_API_URL="${BUILDINGAI_API_URL:-$(api_url)}"
+  BUILDINGAI_OPENCODE_INTERNAL_KEY="${BUILDINGAI_OPENCODE_INTERNAL_KEY:-buildingai-local-opencode}"
+  export BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY
   refresh_dev_ports
 }
 
@@ -718,15 +724,25 @@ start_sap_mcp() {
     exit 1
   fi
 
+  load_nvm
+  cd "${ROOT_DIR}"
+  pnpm exec pm2 delete sap-adt-mcp 2>/dev/null || true
   stop_pid_file "sap-mcp"
   ensure_ports_available "$force" "$SAP_PORT"
 
   echo "Starting SAP ABAP ADT MCP on port ${SAP_PORT}..."
   clear_broken_proxy
+  : >>"${RUN_DIR}/sap-mcp.log"
   SAP_MCP_SKIP_BUILD="$skip_build" \
-    nohup env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
-      "${SAP_DIR}/start.sh" >>"${RUN_DIR}/sap-mcp.log" 2>&1 &
-  echo $! >"${RUN_DIR}/sap-mcp.pid"
+    MCP_PORT="$SAP_PORT" \
+    pnpm exec pm2 start "${SAP_DIR}/start.sh" --name sap-adt-mcp --time \
+      --output "${RUN_DIR}/sap-mcp.log" \
+      --error "${RUN_DIR}/sap-mcp.log" \
+      --merge-logs --interpreter bash
+  local pm2_pid
+  pm2_pid="$(pnpm exec pm2 pid sap-adt-mcp 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$pm2_pid" =~ ^[0-9]+$ ]] && echo "$pm2_pid" >"${RUN_DIR}/sap-mcp.pid"
+  pnpm exec pm2 save 2>/dev/null || true
 
   local i=0
   while [[ $i -lt 120 ]]; do
@@ -749,7 +765,12 @@ start_sap_mcp() {
 }
 
 stop_sap_mcp() {
+  if cd "${ROOT_DIR}" 2>/dev/null; then
+    load_nvm
+    pnpm exec pm2 delete sap-adt-mcp 2>/dev/null || true
+  fi
   stop_pid_file "sap-mcp"
+  kill_port "${SAP_PORT:-8100}"
 }
 
 start_sap_pyrfc_mcp() {
@@ -766,16 +787,25 @@ start_sap_pyrfc_mcp() {
     exit 1
   fi
 
+  load_nvm
+  cd "${ROOT_DIR}"
+  pnpm exec pm2 delete sap-pyrfc-mcp 2>/dev/null || true
   stop_pid_file "sap-pyrfc-mcp"
   ensure_ports_available "$force" "$SAP_PYRFC_PORT"
 
   echo "Starting SAP PyRFC MCP on port ${SAP_PYRFC_PORT}..."
   clear_broken_proxy
+  : >>"${RUN_DIR}/sap-pyrfc-mcp.log"
   SAP_PYRFC_SKIP_INSTALL="${SAP_PYRFC_SKIP_INSTALL:-1}" \
     MCP_PORT="$SAP_PYRFC_PORT" \
-    nohup env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
-      "${SAP_PYRFC_DIR}/start.sh" >>"${RUN_DIR}/sap-pyrfc-mcp.log" 2>&1 &
-  echo $! >"${RUN_DIR}/sap-pyrfc-mcp.pid"
+    pnpm exec pm2 start "${SAP_PYRFC_DIR}/start.sh" --name sap-pyrfc-mcp --time \
+      --output "${RUN_DIR}/sap-pyrfc-mcp.log" \
+      --error "${RUN_DIR}/sap-pyrfc-mcp.log" \
+      --merge-logs --interpreter bash
+  local pm2_pid
+  pm2_pid="$(pnpm exec pm2 pid sap-pyrfc-mcp 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$pm2_pid" =~ ^[0-9]+$ ]] && echo "$pm2_pid" >"${RUN_DIR}/sap-pyrfc-mcp.pid"
+  pnpm exec pm2 save 2>/dev/null || true
 
   local i=0
   while [[ $i -lt 90 ]]; do
@@ -797,7 +827,12 @@ start_sap_pyrfc_mcp() {
 }
 
 stop_sap_pyrfc_mcp() {
+  if cd "${ROOT_DIR}" 2>/dev/null; then
+    load_nvm
+    pnpm exec pm2 delete sap-pyrfc-mcp 2>/dev/null || true
+  fi
   stop_pid_file "sap-pyrfc-mcp"
+  kill_port "${SAP_PYRFC_PORT:-8200}"
 }
 
 start_opencode() {
@@ -960,7 +995,7 @@ BuildingAI dev server
   Install wizard (first run): $(api_url)/install
 $(should_start_opencode && echo "  OpenCode: http://127.0.0.1:${OPENCODE_PORT}/")
 
-$(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/sse")
+$(should_start_sap && echo "  SAP ADT MCP: http://127.0.0.1:${SAP_PORT}/mcp")
 $(should_start_sap_pyrfc && echo "  SAP PyRFC MCP: http://127.0.0.1:${SAP_PYRFC_PORT}/mcp")
 $(port_in_use "$ERPNEXT_PORT" && echo "  ERPNext MCP: http://127.0.0.1:${ERPNEXT_PORT}/ (detected)" || echo "  ERPNext MCP: port ${ERPNEXT_PORT} not listening (start ERPNext separately)")
 

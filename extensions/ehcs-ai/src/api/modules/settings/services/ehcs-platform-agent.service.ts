@@ -238,7 +238,9 @@ export class EhcsPlatformAgentService {
                 sortOrder: 0,
             });
         } else {
-            server.url = url;
+            if (!server.url?.includes("/mcp/bowi-mcp")) {
+                server.url = url;
+            }
             server.communicationType = McpCommunicationType.STREAMABLEHTTP;
             server.isDisabled = false;
             if (!server.creatorId) {

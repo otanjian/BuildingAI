@@ -6,6 +6,10 @@ import {
     DEFAULT_ARTIFACT_DIR_TEMPLATE,
     DEFAULT_OPENCODE_WORKSPACE,
 } from "../utils/opencode-artifact-path";
+import {
+    type NormalizedOpencodeFileContent,
+    normalizeOpencodeFileContentPayload,
+} from "../utils/opencode-file-content";
 
 export interface OpencodeNormalizedConfig {
     provider: "opencode";
@@ -41,6 +45,8 @@ export type OpencodeSessionMessage = {
         finish?: string | null;
         error?: unknown;
         time?: { created?: number; updated?: number; completed?: number };
+        tokens?: unknown;
+        cost?: unknown;
     };
     parts?: Array<Record<string, unknown>>;
 };
@@ -129,11 +135,7 @@ export type OpencodeFileNode = {
     ignored?: boolean;
 };
 
-export type OpencodeFileContent = {
-    path: string;
-    content: string;
-    encoding?: string;
-};
+export type OpencodeFileContent = NormalizedOpencodeFileContent;
 
 export type OpencodeSseHandler = (event: {
     type: string;
@@ -217,7 +219,11 @@ export class OpencodeApiService {
     async createSession(
         config: ThirdPartyIntegrationConfig | null | undefined,
         title?: string,
-        options: OpencodeOperationOptions & { turnReceipt?: string } = {},
+        options: OpencodeOperationOptions & {
+            turnReceipt?: string;
+            metadata?: Record<string, unknown>;
+            useDefaultTitle?: boolean;
+        } = {},
     ): Promise<OpencodeSession> {
         const normalized = this.normalizeConfig(config);
         const operation = "create-session";
@@ -225,20 +231,47 @@ export class OpencodeApiService {
         const receiptSuffix = receipt ? ` [${receipt}]` : "";
         const baseTitle = title?.trim() || "Bowi AI conversation";
         const sessionTitle = `${baseTitle.slice(0, Math.max(0, 120 - receiptSuffix.length))}${receiptSuffix}`;
+        const useDefaultTitle = options.useDefaultTitle === true && !title?.trim() && !receipt;
         const response = await this.requestWithDeadline(
             normalized,
             "/session",
             {
                 method: "POST",
                 body: JSON.stringify({
-                    title: sessionTitle,
-                    ...(receipt ? { metadata: { buildingaiTurnReceipt: receipt } } : {}),
+                    ...(useDefaultTitle ? {} : { title: sessionTitle }),
+                    ...(receipt || options.metadata
+                        ? {
+                              metadata: {
+                                  ...(options.metadata ?? {}),
+                                  ...(receipt ? { buildingaiTurnReceipt: receipt } : {}),
+                              },
+                          }
+                        : {}),
                 }),
             },
             { operation, ...options },
         );
         await this.assertOperationResponse(response, operation);
         return (await this.parseJson(response, operation)) as OpencodeSession;
+    }
+
+    async getSession(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSession> {
+        const body = await this.requestJson<unknown>({
+            operation: "get-session",
+            config: params.config,
+            path: `/session/${encodeURIComponent(params.sessionId)}`,
+            signal: params.signal,
+            timeoutMs: params.timeoutMs,
+        });
+        if (!body || typeof body !== "object" || typeof (body as OpencodeSession).id !== "string") {
+            throw this.invalidResponse("get-session", "Session response is missing its id");
+        }
+        return body as OpencodeSession;
     }
 
     async findSessionsByTurnReceipt(
@@ -701,49 +734,29 @@ export class OpencodeApiService {
     /**
      * List messages for an OpenCode session (`GET /session/:id/message`).
      */
-    async listSessionMessages(params: {
-        config?: ThirdPartyIntegrationConfig | null;
-        sessionId: string;
-    }): Promise<
-        Array<{
-            info?: {
-                id?: string;
-                role?: string;
-                finish?: string | null;
-                error?: unknown;
-                time?: { created?: number; updated?: number };
-            };
-            parts?: Array<Record<string, unknown>>;
-        }>
-    > {
+    async listSessionMessages(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSessionMessage[]> {
+        const operation = "list-session-messages";
         const normalized = this.normalizeConfig(params.config);
-        const response = await this.request(
+        const response = await this.requestWithDeadline(
             normalized,
             `/session/${encodeURIComponent(params.sessionId)}/message`,
             { method: "GET" },
+            { operation, signal: params.signal, timeoutMs: params.timeoutMs },
         );
-        if (!response.ok) {
-            const text = await response.text();
-            throw HttpErrorFactory.badRequest(
-                `OpenCode list session messages failed: ${response.status} ${text}`,
-            );
-        }
-        const body = (await response.json()) as unknown;
+        await this.assertOperationResponse(response, operation);
+        const body = await this.parseJson(response, operation);
         if (!Array.isArray(body)) {
-            throw HttpErrorFactory.badRequest(
-                "OpenCode list session messages returned unexpected payload",
+            throw this.invalidResponse(
+                operation,
+                "OpenCode list session messages response is not an array",
             );
         }
-        return body as Array<{
-            info?: {
-                id?: string;
-                role?: string;
-                finish?: string | null;
-                error?: unknown;
-                time?: { created?: number; updated?: number };
-            };
-            parts?: Array<Record<string, unknown>>;
-        }>;
+        return body as OpencodeSessionMessage[];
     }
 
     /**
@@ -796,21 +809,15 @@ export class OpencodeApiService {
                 `OpenCode file content failed: ${response.status} ${text}`,
             );
         }
-        const body = (await response.json()) as Record<string, unknown>;
-        const content =
-            typeof body.content === "string"
-                ? body.content
-                : typeof body.text === "string"
-                  ? body.text
-                  : null;
-        if (content === null) {
-            throw HttpErrorFactory.badRequest("Unsupported or binary file content");
+        try {
+            return normalizeOpencodeFileContentPayload(await response.json(), filePath);
+        } catch (error) {
+            throw HttpErrorFactory.badRequest(
+                error instanceof Error
+                    ? error.message
+                    : "OpenCode file content returned unexpected payload",
+            );
         }
-        return {
-            path: typeof body.path === "string" ? body.path : filePath,
-            content,
-            encoding: typeof body.encoding === "string" ? body.encoding : undefined,
-        };
     }
 
     private normalizeFileNode(item: unknown): OpencodeFileNode {

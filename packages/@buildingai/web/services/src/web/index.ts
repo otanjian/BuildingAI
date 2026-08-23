@@ -25,6 +25,7 @@ export * from "./opencode-workspace";
 export * from "./recharge";
 export * from "./tag";
 export * from "./task-award";
+export * from "./todo";
 export * from "./user";
 export * from "./user-memory";
 export * from "./workflow";

@@ -384,6 +384,36 @@ describe("OpencodeApiService durable read adapter", () => {
         });
     });
 
+    it("lets OpenCode assign its recognized default title for an embedded placeholder", async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+            response({
+                id: "ses_embed",
+                title: "New session - 2026-08-22T00:00:00.000Z",
+            }),
+        );
+
+        await service.createSession(CONFIG, undefined, { useDefaultTitle: true });
+
+        const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+        expect(JSON.parse(String(init.body))).toEqual({});
+    });
+
+    it("reads an exact OpenCode session snapshot", async () => {
+        global.fetch = jest
+            .fn()
+            .mockResolvedValue(
+                response({ id: "ses_embed", title: "采购订单分析", time: { updated: 456 } }),
+            );
+
+        await expect(
+            service.getSession({ config: CONFIG, sessionId: "ses_embed" }),
+        ).resolves.toEqual({
+            id: "ses_embed",
+            title: "采购订单分析",
+            time: { updated: 456 },
+        });
+    });
+
     it("lists only exact-session permissions and replies to the exact request", async () => {
         global.fetch = jest
             .fn()

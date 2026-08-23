@@ -3,6 +3,7 @@ import { HttpErrorFactory } from "@buildingai/errors";
 import { getOverrideMetadata } from "@buildingai/utils";
 import { DECORATOR_KEYS } from "@common/constants/decorators-key.constant";
 import { AuthService } from "@common/modules/auth/services/auth.service";
+import { setRequestAuthContext } from "@common/types/request-auth-context";
 import { CanActivate, ExecutionContext, Injectable, Logger } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request, Response } from "express";
@@ -55,6 +56,7 @@ export class AuthGuard implements CanActivate {
         if (isPublic || isAgentApiKeyEnabled) {
             if (validateTokenRes.user) {
                 request["user"] = validateTokenRes.user;
+                setRequestAuthContext(request, { source: "login" });
             }
             return true;
         }
@@ -104,6 +106,7 @@ export class AuthGuard implements CanActivate {
         }
 
         request["user"] = validateTokenRes.user;
+        setRequestAuthContext(request, { source: "login" });
 
         if (validateTokenRes.tokenRecord && validateTokenRes.user) {
             const response = context.switchToHttp().getResponse<Response>();

@@ -37,6 +37,47 @@ export type AgentChatConversationDetail = {
     metadata?: Record<string, unknown> | null;
 };
 
+export type OpencodeEmbedSession = {
+    conversationId: string;
+    sessionId: string;
+    url: string;
+    title: string;
+    titleSynced: boolean;
+};
+
+export function getAgentOpencodeEmbedSession(
+    agentId: string,
+    conversationId: string,
+): Promise<OpencodeEmbedSession> {
+    return apiHttpClient.get<OpencodeEmbedSession>(
+        `/ai-agents/${agentId}/chat/conversations/${conversationId}/opencode-embed`,
+        { silent: true },
+    );
+}
+
+export function useAgentOpencodeEmbedSessionQuery(
+    agentId: string | undefined,
+    conversationId: string | undefined,
+    options?: {
+        enabled?: boolean;
+        retry?: (failureCount: number, error: unknown) => boolean;
+        retryDelay?: (failureCount: number, error: unknown) => number;
+        refetchInterval?: (data: OpencodeEmbedSession | undefined) => number | false;
+    },
+) {
+    return useQuery({
+        queryKey: ["agents", "chat", "opencode-embed", agentId ?? "", conversationId ?? ""],
+        queryFn: () => getAgentOpencodeEmbedSession(agentId!, conversationId!),
+        enabled: Boolean(agentId && conversationId) && options?.enabled !== false,
+        retry: options?.retry ?? 1,
+        retryDelay: options?.retryDelay,
+        refetchInterval: (query) =>
+            options?.refetchInterval?.(query.state.data as OpencodeEmbedSession | undefined) ??
+            false,
+        staleTime: 30_000,
+    });
+}
+
 export async function replyLegacyAgentOpencodeQuestion(
     agentId: string,
     conversationId: string,
@@ -125,6 +166,10 @@ export type ListConversationMessagesParams = {
     pageSize?: number;
 };
 
+export type ListConversationMessagesOptions = {
+    silent?: boolean;
+};
+
 export type ListConversationMessagesResult = {
     items: AgentChatMessageItem[];
     total: number;
@@ -137,6 +182,7 @@ export async function listAgentConversationMessages(
     agentId: string,
     conversationId: string,
     params?: ListConversationMessagesParams,
+    options?: ListConversationMessagesOptions,
 ): Promise<ListConversationMessagesResult> {
     const search = new URLSearchParams();
     if (params?.page != null) search.set("page", String(params.page));
@@ -145,7 +191,9 @@ export async function listAgentConversationMessages(
     const path = qs
         ? `/ai-agents/${agentId}/chat/conversations/${conversationId}/messages?${qs}`
         : `/ai-agents/${agentId}/chat/conversations/${conversationId}/messages`;
-    return apiHttpClient.get<ListConversationMessagesResult>(path);
+    return apiHttpClient.get<ListConversationMessagesResult>(path, {
+        silent: options?.silent,
+    });
 }
 
 export async function createOperatorAgentMessage(

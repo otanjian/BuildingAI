@@ -11,7 +11,7 @@ load_dotenv() {
     [[ "$line" =~ ^[[:space:]]*$ ]] && continue
     case "$line" in
       SAP_URL=*|SAP_USER=*|SAP_PASSWORD=*|SAP_CLIENT=*|SAP_LANGUAGE=*|SAP_SESSION_TYPE=*|\
-NODE_TLS_REJECT_UNAUTHORIZED=*|MCP_HOST=*|MCP_PORT=*|MCP_PATH=*|MCP_SSE_PATH=*|MCP_MESSAGE_PATH=*|MCP_ABAP_ADT_REPO=*|MCP_ABAP_ADT_REF=*)
+NODE_TLS_REJECT_UNAUTHORIZED=*|MCP_HOST=*|MCP_PORT=*|MCP_PATH=*|MCP_SESSION_TIMEOUT_MS=*|SUPERGATEWAY_VERSION=*|MCP_ABAP_ADT_REPO=*|MCP_ABAP_ADT_REF=*)
         key="${line%%=*}"
         val="${line#*=}"
         key="${key#"${key%%[![:space:]]*}"}"
@@ -31,7 +31,7 @@ export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
 export no_proxy="$NO_PROXY"
 
 REPO="${MCP_ABAP_ADT_REPO:-https://github.com/yan252/mcp-abap-abap-adt-api.git}"
-REF="${MCP_ABAP_ADT_REF:-main}"
+REF="${MCP_ABAP_ADT_REF:-1df910b80f5def81f309d05b34c8c6fde9d678bd}"
 VENDOR="$ROOT/vendor/mcp-abap-abap-adt-api"
 
 require_env() {
@@ -61,19 +61,21 @@ git_no_proxy() {
 }
 
 if [[ -d "$VENDOR" && ! -d "$VENDOR/.git" ]]; then
-  echo "Removing incomplete vendor directory ..."
-  rm -rf "$VENDOR"
+  echo "Incomplete vendor directory found: $VENDOR" >&2
+  echo "Move or remove that exact directory, then retry." >&2
+  exit 1
 fi
 
 if [[ ! -d "$VENDOR/.git" ]]; then
   echo "Cloning $REPO ($REF) ..."
   mkdir -p "$(dirname "$VENDOR")"
-  git_no_proxy clone --depth 1 --branch "$REF" "$REPO" "$VENDOR"
+  git_no_proxy clone --filter=blob:none --no-checkout "$REPO" "$VENDOR"
+  git_no_proxy -C "$VENDOR" fetch --depth 1 origin "$REF"
+  git_no_proxy -C "$VENDOR" checkout --detach FETCH_HEAD
 elif [[ -n "${MCP_ABAP_ADT_PULL:-}" ]]; then
   echo "Updating vendor ..."
   git_no_proxy -C "$VENDOR" fetch --depth 1 origin "$REF"
-  git_no_proxy -C "$VENDOR" checkout "$REF"
-  git_no_proxy -C "$VENDOR" pull --ff-only origin "$REF" || true
+  git_no_proxy -C "$VENDOR" checkout --detach FETCH_HEAD
 fi
 
 if [[ -z "${SAP_MCP_SKIP_BUILD:-}" ]] || [[ "${SAP_MCP_SKIP_BUILD}" == "0" ]]; then
@@ -100,10 +102,9 @@ fi
 
 MCP_HOST="${MCP_HOST:-127.0.0.1}"
 MCP_PORT="${MCP_PORT:-8100}"
-# BuildingAI's @ai-sdk/mcp HTTP (streamable-http) client hangs against supergateway's
-# streamableHttp mode; SSE is the compatible local transport.
-MCP_SSE_PATH="${MCP_SSE_PATH:-/sse}"
-MCP_MESSAGE_PATH="${MCP_MESSAGE_PATH:-/message}"
+MCP_PATH="${MCP_PATH:-/mcp}"
+MCP_SESSION_TIMEOUT_MS="${MCP_SESSION_TIMEOUT_MS:-1800000}"
+SUPERGATEWAY_VERSION="${SUPERGATEWAY_VERSION:-3.4.3}"
 
 export SAP_URL SAP_USER SAP_PASSWORD
 export SAP_CLIENT="${SAP_CLIENT:-}"
@@ -113,14 +114,16 @@ export NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-0}"
 
 STDIO_CMD="node $VENDOR/dist/index.js"
 
-echo "Starting SSE gateway on http://${MCP_HOST}:${MCP_PORT}${MCP_SSE_PATH}"
-echo "Register in BuildingAI console: type=sse, url=http://127.0.0.1:${MCP_PORT}${MCP_SSE_PATH}"
+echo "Starting stateful Streamable HTTP gateway on http://${MCP_HOST}:${MCP_PORT}${MCP_PATH}"
+echo "Register in BuildingAI console: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
 
 exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
-  npx -y supergateway@latest \
+  npx -y "supergateway@${SUPERGATEWAY_VERSION}" \
   --stdio "$STDIO_CMD" \
-  --outputTransport sse \
+  --outputTransport streamableHttp \
   --port "$MCP_PORT" \
-  --ssePath "$MCP_SSE_PATH" \
-  --messagePath "$MCP_MESSAGE_PATH" \
+  --streamableHttpPath "$MCP_PATH" \
+  --stateful \
+  --sessionTimeout "$MCP_SESSION_TIMEOUT_MS" \
+  --healthEndpoint /healthz \
   --logLevel info

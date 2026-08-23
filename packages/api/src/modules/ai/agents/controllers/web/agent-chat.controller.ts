@@ -1,6 +1,7 @@
 import type { PaginationResult } from "@buildingai/base";
 import { type UserPlayground } from "@buildingai/db";
 import type { AgentChatMessage } from "@buildingai/db/entities";
+import { UserDictService } from "@buildingai/dict";
 import { BuildFileUrl } from "@buildingai/decorators";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -23,6 +24,10 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 import { validate as isUUID } from "uuid";
 
+import {
+    getRequestAuthContext,
+    type RequestAuthSource,
+} from "../../../../../common/types/request-auth-context";
 import { AgentChatRequestDto } from "../../dto/web/chat/agent-chat-request.dto";
 import { CreateAgentMessageFeedbackDto } from "../../dto/web/chat/agent-message-feedback.dto";
 import { AgentSpeechRequestDto } from "../../dto/web/chat/agent-speech-request.dto";
@@ -46,6 +51,12 @@ import { OpencodeArtifactService } from "../../services/opencode-artifact.servic
 import { OpencodeWorkspaceService } from "../../services/opencode-workspace.service";
 import { OpencodeChatProvider } from "../../providers/opencode-chat.provider";
 import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
+import { buildOpencodeEmbedUrl } from "../../utils/opencode-embed";
+import { hashOpencodeRuntime } from "../../utils/opencode-turn-command";
+import {
+    buildOpencodeSessionContext,
+    OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY,
+} from "../../utils/opencode-session-context";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
@@ -60,6 +71,7 @@ export class AgentChatWebController {
         private readonly opencodeArtifactService: OpencodeArtifactService,
         private readonly opencodeWorkspaceService: OpencodeWorkspaceService,
         private readonly opencodeChatProvider: OpencodeChatProvider,
+        private readonly userDictService: UserDictService,
     ) {}
 
     /**
@@ -105,6 +117,7 @@ export class AgentChatWebController {
         @Req() req: Request,
     ) {
         const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const authSource = this.resolveAuthSource(req, anonymousIdentifier);
 
         if (anonymousIdentifier && dto.conversationId && isUUID(dto.conversationId)) {
             const record = await this.agentChatRecordService.getConversation(dto.conversationId);
@@ -139,7 +152,14 @@ export class AgentChatWebController {
         }
 
         if (dto.responseMode === "blocking") {
-            return this.handleBlockingChat(dto, agentId, playground.id, anonymousIdentifier, res);
+            return this.handleBlockingChat(
+                dto,
+                agentId,
+                playground.id,
+                anonymousIdentifier,
+                authSource,
+                res,
+            );
         }
 
         const abortController = new AbortController();
@@ -173,6 +193,8 @@ export class AgentChatWebController {
             {
                 agentId,
                 userId: playground.id,
+                username: playground.username,
+                authSource,
                 anonymousIdentifier,
                 conversationId: dto.conversationId,
                 saveConversation: dto.saveConversation ?? true,
@@ -197,6 +219,7 @@ export class AgentChatWebController {
         agentId: string,
         userId: string,
         anonymousIdentifier: string | undefined,
+        authSource: RequestAuthSource,
         res: Response,
     ): Promise<void> {
         let fullText = "";
@@ -254,6 +277,7 @@ export class AgentChatWebController {
             {
                 agentId,
                 userId,
+                authSource,
                 anonymousIdentifier,
                 conversationId: dto.conversationId,
                 saveConversation: dto.saveConversation ?? true,
@@ -821,6 +845,143 @@ export class AgentChatWebController {
         };
     }
 
+    @Get(":id/chat/conversations/:conversationId/opencode-embed")
+    @AgentPublicAccess({
+        route: "conversations/:conversationId/opencode-embed",
+        targetPath: ":id/chat/conversations/:conversationId/opencode-embed",
+        method: "GET",
+    })
+    async getOpencodeEmbed(
+        @Param("id") agentId: string,
+        @Param("conversationId") conversationId: string,
+        @Playground() playground: UserPlayground,
+        @Req() req: Request,
+    ): Promise<{
+        conversationId: string;
+        sessionId: string;
+        url: string;
+        title: string;
+        titleSynced: boolean;
+    }> {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
+        const agent = await this.agentsService.findOneById(agentId);
+        if (!agent || agent.createMode !== "opencode") {
+            throw HttpErrorFactory.badRequest("Only OpenCode agents support iframe embedding");
+        }
+
+        let record = await this.agentChatRecordService.getConversation(conversationId);
+        if (!record) {
+            if (!isUUID(conversationId)) throw HttpErrorFactory.notFound("对话不存在");
+            try {
+                record = await this.agentChatRecordService.createConversation({
+                    id: conversationId,
+                    agentId,
+                    userId: playground.id,
+                    anonymousIdentifier,
+                    metadata: {
+                        provider: "opencode",
+                        bowiAuthSource: this.resolveAuthSource(req, anonymousIdentifier),
+                    },
+                });
+            } catch {
+                record = await this.agentChatRecordService.getConversation(conversationId);
+                if (!record) throw HttpErrorFactory.conflict("无法初始化 OpenCode 对话");
+            }
+        }
+        if (record.agentId !== agentId) throw HttpErrorFactory.notFound("对话不存在");
+        if (record.userId !== playground.id) throw HttpErrorFactory.forbidden("无权查看该对话");
+        if (anonymousIdentifier && record.anonymousIdentifier !== anonymousIdentifier) {
+            throw HttpErrorFactory.forbidden("无权查看该对话");
+        }
+        const runtime = this.opencodeApiService.normalizeConfig(agent.thirdPartyIntegration);
+        let sessionId = record.opencodeSessionId;
+        if (!sessionId && typeof record.metadata?.opencodeSessionId === "string") {
+            sessionId = record.metadata.opencodeSessionId;
+        }
+        if (!sessionId) {
+            const personalParams = await this.userDictService.getGroupValues(
+                playground.id,
+                "personalParams",
+            );
+            const sessionContext = buildOpencodeSessionContext({
+                userId: playground.id,
+                username: playground.username,
+                personalParams,
+                sensitiveWordConfig: agent.sensitiveWordConfig,
+                agentId,
+            });
+            const session = await this.opencodeApiService.createSession(
+                agent.thirdPartyIntegration,
+                this.agentChatRecordService.isPlaceholderConversationTitle(record.title)
+                    ? undefined
+                    : record.title,
+                sessionContext
+                    ? {
+                          useDefaultTitle:
+                              this.agentChatRecordService.isPlaceholderConversationTitle(
+                                  record.title,
+                              ),
+                          metadata: { [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionContext },
+                      }
+                    : {
+                          useDefaultTitle:
+                              this.agentChatRecordService.isPlaceholderConversationTitle(
+                                  record.title,
+                              ),
+                      },
+            );
+            sessionId = session.id;
+            const bound = await this.agentChatRecordService.bindOpencodeSession(
+                conversationId,
+                sessionId,
+                hashOpencodeRuntime(runtime),
+            );
+            if (bound?.opencodeSessionId && bound.opencodeSessionId !== sessionId) {
+                await this.opencodeApiService.deleteSession({
+                    config: agent.thirdPartyIntegration,
+                    sessionId,
+                });
+                sessionId = bound.opencodeSessionId;
+            }
+        } else if (!record.opencodeSessionId || !record.opencodeRuntimeHash) {
+            const bound = await this.agentChatRecordService.bindOpencodeSession(
+                conversationId,
+                sessionId,
+                hashOpencodeRuntime(runtime),
+            );
+            if (bound?.opencodeSessionId) sessionId = bound.opencodeSessionId;
+        }
+
+        let title = record.title;
+        let titleSynced = false;
+        if (this.agentChatRecordService.isPlaceholderConversationTitle(record.title)) {
+            try {
+                const session = await this.opencodeApiService.getSession({
+                    config: agent.thirdPartyIntegration,
+                    sessionId,
+                    timeoutMs: 2_000,
+                });
+                titleSynced = await this.agentChatRecordService.syncGeneratedOpencodeTitle(
+                    conversationId,
+                    session.title,
+                );
+                if (titleSynced && session.title) title = session.title.trim();
+            } catch {
+                // Keep embed access available while OpenCode title generation is unavailable.
+            }
+        }
+
+        await this.agentChatRecordService.initializeOpencodeIframeBilling(conversationId);
+
+        return {
+            conversationId,
+            sessionId,
+            url: buildOpencodeEmbedUrl(runtime.baseURL, sessionId),
+            title,
+            titleSynced,
+        };
+    }
+
     @Post(":id/chat/conversations/:conversationId/opencode-question/reply")
     @AgentPublicAccess({
         route: "conversations/:conversationId/opencode-question/reply",
@@ -989,5 +1150,13 @@ export class AgentChatWebController {
         if (typeof v !== "string") return undefined;
         const trimmed = v.trim();
         return trimmed || undefined;
+    }
+
+    private resolveAuthSource(
+        req: Request,
+        anonymousIdentifier?: string,
+    ): RequestAuthSource {
+        if (anonymousIdentifier) return "anonymous";
+        return getRequestAuthContext(req)?.source ?? "anonymous";
     }
 }

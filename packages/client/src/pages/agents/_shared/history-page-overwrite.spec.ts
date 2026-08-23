@@ -57,6 +57,17 @@ describe("shouldApplyHistoryPageToChat", () => {
     ).toBe(false);
   });
 
+  it("does not fetch history for a local draft during route switching", () => {
+    expect(
+      shouldApplyHistoryPageToChat({
+        shouldLoadInitial: false,
+        switched: true,
+        liveMessageCount: 0,
+        skipHistoryFetch: true,
+      }),
+    ).toBe(false);
+  });
+
   it("preserves persisted history when a live user message arrives before page one", () => {
     const history: UIMessage[] = [
       {

@@ -3,6 +3,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Agent, User } from "@buildingai/db/entities";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { agentPublicAccessRegistry } from "@common/decorators/agent-public-access.registry";
+import { setRequestAuthContext } from "@common/types/request-auth-context";
 import { Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { Repository } from "typeorm";
@@ -64,6 +65,10 @@ export class AgentAliasRewriteMiddleware implements NestMiddleware {
         };
 
         req["user"] = playground;
+        setRequestAuthContext(req, {
+            source: agent.publishConfig?.apiKey === token ? "publish_key" : "site_access_token",
+            agentId: agent.id,
+        });
 
         const webPrefix = process.env.VITE_APP_WEB_API_PREFIX?.replace(/^\/+/, "") ?? "api/web";
 

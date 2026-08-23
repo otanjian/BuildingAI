@@ -9,13 +9,19 @@ import {
     OPENCODE_TURN_ACTIVE_STATUSES,
     User,
 } from "@buildingai/db/entities";
-import { In, Repository, type EntityManager } from "@buildingai/db/typeorm";
+import { In, IsNull, Repository, type EntityManager } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import type { ChatUIMessage } from "@buildingai/types";
 import { Injectable } from "@nestjs/common";
 import { generateId } from "ai";
 
 import type { ListAgentConversationsDto } from "../dto/web/chat/list-agent-conversations.dto";
+import {
+    initializeOpencodeIframeBillingState,
+    OPENCODE_IFRAME_BILLING_METADATA_KEY,
+    readOpencodeIframeBillingState,
+    type OpencodeIframeBillingState,
+} from "../utils/opencode-iframe-billing";
 import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
 import { AgentChatMessageService } from "./agent-chat-message.service";
 
@@ -51,6 +57,12 @@ export type AgentChatThreadResult = {
 
 @Injectable()
 export class AgentChatRecordService extends BaseService<AgentChatRecord> {
+    private static readonly PLACEHOLDER_TITLES = [
+        "新对话",
+        "New conversation",
+        "Bowi AI conversation",
+    ];
+
     constructor(
         @InjectRepository(AgentChatRecord)
         private readonly chatRecordRepository: Repository<AgentChatRecord>,
@@ -66,6 +78,7 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
     }
 
     async createConversation(params: {
+        id?: string;
         agentId: string;
         userId?: string;
         anonymousIdentifier?: string;
@@ -74,6 +87,7 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
     }): Promise<AgentChatRecord> {
         try {
             const record = this.chatRecordRepository.create({
+                ...(params.id ? { id: params.id } : {}),
                 agentId: params.agentId,
                 userId: params.userId,
                 anonymousIdentifier: params.anonymousIdentifier,
@@ -259,6 +273,21 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         });
     }
 
+    async findConversationByOpencodeSessionId(sessionId: string): Promise<AgentChatRecord | null> {
+        const record = await this.chatRecordRepository.findOne({
+            where: { opencodeSessionId: sessionId, isDeleted: false },
+        });
+        if (record) return record;
+
+        // Older records stored the remote session only in JSON metadata. Keep the
+        // credential bridge compatible with those sessions after a page refresh.
+        return this.chatRecordRepository
+            .createQueryBuilder("record")
+            .where("record.is_deleted = false")
+            .andWhere("record.metadata ->> 'opencodeSessionId' = :sessionId", { sessionId })
+            .getOne();
+    }
+
     async findConversationByCozeConversationId(params: {
         agentId: string;
         userId?: string;
@@ -310,6 +339,33 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         await this.chatRecordRepository.update(conversationId, { title });
     }
 
+    isPlaceholderConversationTitle(title?: string | null): boolean {
+        const normalized = (title ?? "").replace(/\s+/g, " ").trim();
+        return !normalized || AgentChatRecordService.PLACEHOLDER_TITLES.includes(normalized);
+    }
+
+    async syncGeneratedOpencodeTitle(
+        conversationId: string,
+        title?: string | null,
+    ): Promise<boolean> {
+        const normalized = (title ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+        if (
+            this.isPlaceholderConversationTitle(normalized) ||
+            /^New session - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(normalized)
+        ) {
+            return false;
+        }
+        const result = await this.chatRecordRepository.update(
+            {
+                id: conversationId,
+                isDeleted: false,
+                title: In(AgentChatRecordService.PLACEHOLDER_TITLES),
+            },
+            { title: normalized },
+        );
+        return Number(result.affected ?? 0) > 0;
+    }
+
     /**
      * 更新对话扩展元数据。
      */
@@ -330,17 +386,82 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         });
     }
 
+    async initializeOpencodeIframeBilling(
+        conversationId: string,
+    ): Promise<OpencodeIframeBillingState | null> {
+        return this.chatRecordRepository.manager.transaction(async (manager) => {
+            const record = await manager.findOne(AgentChatRecord, {
+                where: { id: conversationId, isDeleted: false },
+                lock: { mode: "pessimistic_write" },
+            });
+            if (!record) return null;
+
+            const current = record.metadata?.[OPENCODE_IFRAME_BILLING_METADATA_KEY];
+            const existing = readOpencodeIframeBillingState(current);
+            if (existing) return existing;
+            const state = initializeOpencodeIframeBillingState(current);
+
+            await manager.update(
+                AgentChatRecord,
+                { id: conversationId },
+                {
+                    metadata: {
+                        ...(record.metadata ?? {}),
+                        [OPENCODE_IFRAME_BILLING_METADATA_KEY]: state,
+                    } as any,
+                },
+            );
+            return state;
+        });
+    }
+
+    async bindOpencodeSession(
+        conversationId: string,
+        sessionId: string,
+        runtimeHash: string,
+    ): Promise<AgentChatRecord | null> {
+        const record = await this.chatRecordRepository.findOne({
+            where: { id: conversationId, isDeleted: false },
+        });
+        if (!record) return null;
+        if (record.opencodeSessionId) return record;
+        const metadata: Record<string, any> = {
+            ...(record.metadata ?? {}),
+            provider: "opencode",
+            opencodeSessionId: sessionId,
+        };
+        const result = await this.chatRecordRepository.update(
+            { id: conversationId, isDeleted: false, opencodeSessionId: IsNull() },
+            { opencodeSessionId: sessionId, opencodeRuntimeHash: runtimeHash, metadata },
+        );
+        if (result.affected === 0) {
+            return this.chatRecordRepository.findOne({
+                where: { id: conversationId, isDeleted: false },
+            });
+        }
+        return {
+            ...record,
+            opencodeSessionId: sessionId,
+            opencodeRuntimeHash: runtimeHash,
+            metadata,
+        };
+    }
+
     async updateStats(conversationId: string, manager?: EntityManager): Promise<void> {
         if (manager) {
             const stats = await this.agentChatMessageService.getMessageStats(
                 conversationId,
                 manager,
             );
-            await manager.update(AgentChatRecord, { id: conversationId }, {
-                messageCount: stats.messageCount,
-                totalTokens: stats.totalTokens,
-                consumedPower: stats.totalPower,
-            });
+            await manager.update(
+                AgentChatRecord,
+                { id: conversationId },
+                {
+                    messageCount: stats.messageCount,
+                    totalTokens: stats.totalTokens,
+                    consumedPower: stats.totalPower,
+                },
+            );
             return;
         }
         try {
@@ -483,13 +604,7 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         const records = await this.withActiveOpencodeTurnSummaries(
             result.items as AgentChatRecord[],
         );
-        const userIds = [
-            ...new Set(
-                records
-                    .map((r) => r.userId)
-                    .filter(Boolean) as string[],
-            ),
-        ];
+        const userIds = [...new Set(records.map((r) => r.userId).filter(Boolean) as string[])];
         if (userIds.length === 0) {
             return { ...result, items: records };
         }
@@ -553,17 +668,19 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
     async getOpencodeTurnConversationProjection(
         conversationId: string,
     ): Promise<OpencodeTurnConversationProjection> {
-        const turn = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).findOne({
-            where: { conversationId },
-            select: {
-                id: true,
-                status: true,
-                lastActivityAt: true,
-                cancelRequestedAt: true,
-                errorCode: true,
-            },
-            order: { createdAt: "DESC" },
-        });
+        const turn = await this.chatRecordRepository.manager
+            .getRepository(AgentOpencodeTurn)
+            .findOne({
+                where: { conversationId },
+                select: {
+                    id: true,
+                    status: true,
+                    lastActivityAt: true,
+                    cancelRequestedAt: true,
+                    errorCode: true,
+                },
+                order: { createdAt: "DESC" },
+            });
         return this.toOpencodeTurnConversationProjection(turn);
     }
 
@@ -571,21 +688,23 @@ export class AgentChatRecordService extends BaseService<AgentChatRecord> {
         records: T[],
     ): Promise<Array<T & { activeTurn: OpencodeActiveTurnSummary | null }>> {
         if (!records.length) return [];
-        const turns = await this.chatRecordRepository.manager.getRepository(AgentOpencodeTurn).find({
-            where: {
-                conversationId: In(records.map((record) => record.id)),
-            },
-            select: {
-                id: true,
-                conversationId: true,
-                status: true,
-                lastActivityAt: true,
-                cancelRequestedAt: true,
-                errorCode: true,
-                createdAt: true,
-            },
-            order: { createdAt: "DESC" },
-        });
+        const turns = await this.chatRecordRepository.manager
+            .getRepository(AgentOpencodeTurn)
+            .find({
+                where: {
+                    conversationId: In(records.map((record) => record.id)),
+                },
+                select: {
+                    id: true,
+                    conversationId: true,
+                    status: true,
+                    lastActivityAt: true,
+                    cancelRequestedAt: true,
+                    errorCode: true,
+                    createdAt: true,
+                },
+                order: { createdAt: "DESC" },
+            });
         const byConversation = new Map<string, OpencodeTurnConversationProjection>();
         for (const turn of turns) {
             if (!byConversation.has(turn.conversationId)) {

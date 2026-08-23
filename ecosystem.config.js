@@ -1,4 +1,7 @@
 const clientDevPort = Number(process.env.CLIENT_DEV_PORT || 4091);
+const buildingaiApiUrl = process.env.BUILDINGAI_API_URL || "http://127.0.0.1:4090";
+const buildingaiOpencodeInternalKey =
+  process.env.BUILDINGAI_OPENCODE_INTERNAL_KEY || "buildingai-local-opencode";
 
 module.exports = {
   apps: [
@@ -9,6 +12,8 @@ module.exports = {
       env: {
         NO_PROXY: "localhost,127.0.0.1,::1",
         no_proxy: "localhost,127.0.0.1,::1",
+        BUILDINGAI_API_URL: buildingaiApiUrl,
+        BUILDINGAI_OPENCODE_INTERNAL_KEY: buildingaiOpencodeInternalKey,
       },
       log_file: ".run/dev.log",
       out_file: ".run/dev.log",

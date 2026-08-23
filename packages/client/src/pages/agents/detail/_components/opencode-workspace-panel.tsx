@@ -1,5 +1,7 @@
 import {
+  getOpencodeWorkspaceFileContent,
   type OpencodeWorkspaceEntry,
+  type OpencodeWorkspaceFileContent,
   useOpencodeWorkspaceFileContentQuery,
   useOpencodeWorkspaceFilesQuery,
 } from "@buildingai/services/web";
@@ -23,9 +25,15 @@ import {
 import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { cn } from "@buildingai/ui/lib/utils";
 import { normalizeWorkspaceRelativePath } from "@buildingai/ui/lib/workspace-relative-path";
-import { Copy, Loader2 } from "lucide-react";
+import { Copy, Download, Loader2 } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+
+import {
+  createOpencodeWorkspaceFileBlob,
+  getOpencodeWorkspaceFileName,
+  isOpencodeWorkspaceImage,
+} from "../_utils/opencode-workspace-file";
 
 type OpencodeWorkspacePanelProps = {
   agentId: string;
@@ -36,6 +44,33 @@ async function copyRelativePath(path: string) {
   const relative = normalizeWorkspaceRelativePath(path);
   await navigator.clipboard.writeText(relative);
   toast.success("已复制相对路径", { description: relative });
+}
+
+function saveWorkspaceFile(payload: OpencodeWorkspaceFileContent) {
+  const objectUrl = URL.createObjectURL(createOpencodeWorkspaceFileBlob(payload));
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = getOpencodeWorkspaceFileName(payload.path);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
+async function downloadWorkspaceFile(
+  agentId: string,
+  path: string,
+  payload?: OpencodeWorkspaceFileContent,
+) {
+  try {
+    const content = payload ?? (await getOpencodeWorkspaceFileContent(agentId, path));
+    saveWorkspaceFile(content);
+    toast.success("文件下载已开始", { description: normalizeWorkspaceRelativePath(path) });
+  } catch (error) {
+    toast.error("文件下载失败", {
+      description: error instanceof Error ? error.message : normalizeWorkspaceRelativePath(path),
+    });
+  }
 }
 
 function CopyPathControl({ path, className }: { path: string; className?: string }) {
@@ -64,6 +99,33 @@ function CopyPathControl({ path, className }: { path: string; className?: string
       }}
     >
       <Copy className="size-3" />
+    </span>
+  );
+}
+
+function DownloadFileControl({ agentId, path }: { agentId: string; path: string }) {
+  const onActivate = useCallback(
+    (event: MouseEvent | KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void downloadWorkspaceFile(agentId, path);
+    },
+    [agentId, path],
+  );
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      className="text-muted-foreground hover:text-foreground inline-flex size-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100"
+      title="下载文件"
+      aria-label="下载文件"
+      onClick={onActivate}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") onActivate(event);
+      }}
+    >
+      <Download className="size-3" />
     </span>
   );
 }
@@ -137,7 +199,12 @@ function DirectoryListing({
                 <FileTreeFile
                   path={entry.path}
                   name={entry.name}
-                  actions={<CopyPathControl path={entry.path} />}
+                  actions={
+                    <span className="flex items-center gap-0.5">
+                      <CopyPathControl path={entry.path} />
+                      <DownloadFileControl agentId={agentId} path={entry.path} />
+                    </span>
+                  }
                 />
               )}
             </div>
@@ -150,6 +217,15 @@ function DirectoryListing({
             >
               复制相对路径
             </ContextMenuItem>
+            {entry.type === "file" ? (
+              <ContextMenuItem
+                onSelect={() => {
+                  void downloadWorkspaceFile(agentId, entry.path);
+                }}
+              >
+                下载文件
+              </ContextMenuItem>
+            ) : null}
           </ContextMenuContent>
         </ContextMenu>
       ))}
@@ -260,23 +336,59 @@ export function OpencodeWorkspacePanel({ agentId, className }: OpencodeWorkspace
                   >
                     <Copy className="size-3" />
                   </Button>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                    title="下载文件"
+                    aria-label="下载文件"
+                    disabled={!contentQuery.data}
+                    onClick={() =>
+                      void downloadWorkspaceFile(agentId, previewPath, contentQuery.data)
+                    }
+                  >
+                    <Download className="size-3" />
+                  </Button>
                 </div>
-                <ScrollArea className="min-h-0 flex-1">
-                  <pre className="px-3 py-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">
-                    {contentQuery.isLoading ? (
-                      <span className="text-muted-foreground inline-flex items-center gap-2">
-                        <Loader2 className="size-3 animate-spin" />
-                        Loading file…
-                      </span>
-                    ) : contentQuery.isError ? (
-                      <span className="text-destructive">
-                        {(contentQuery.error as Error)?.message || "Unable to preview file"}
-                      </span>
-                    ) : (
-                      (contentQuery.data?.content ?? "")
-                    )}
-                  </pre>
-                </ScrollArea>
+                {contentQuery.isLoading ? (
+                  <div className="text-muted-foreground flex min-h-0 flex-1 items-center justify-center gap-2 text-xs">
+                    <Loader2 className="size-3 animate-spin" />
+                    Loading file…
+                  </div>
+                ) : contentQuery.isError ? (
+                  <div className="text-destructive flex min-h-0 flex-1 items-center justify-center px-4 text-center text-xs">
+                    {(contentQuery.error as Error)?.message || "Unable to preview file"}
+                  </div>
+                ) : contentQuery.data && isOpencodeWorkspaceImage(contentQuery.data) ? (
+                  <div className="bg-muted/30 flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+                    <img
+                      src={`data:${contentQuery.data.mimeType};base64,${contentQuery.data.content}`}
+                      alt={normalizeWorkspaceRelativePath(previewPath)}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                ) : contentQuery.data?.type === "binary" ? (
+                  <div className="text-muted-foreground flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 text-center text-xs">
+                    <p>此二进制格式不支持预览，请下载后查看。</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void downloadWorkspaceFile(agentId, previewPath, contentQuery.data)
+                      }
+                    >
+                      <Download className="mr-1.5 size-3.5" /> 下载文件
+                    </Button>
+                  </div>
+                ) : (
+                  <ScrollArea className="min-h-0 flex-1">
+                    <pre className="px-3 py-2 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap">
+                      {contentQuery.data?.content ?? ""}
+                    </pre>
+                  </ScrollArea>
+                )}
               </>
             ) : (
               <div className="text-muted-foreground flex h-full items-center justify-center px-4 text-center text-xs">

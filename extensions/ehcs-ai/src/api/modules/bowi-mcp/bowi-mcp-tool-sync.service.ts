@@ -25,7 +25,6 @@ export class BowiMcpToolSyncService {
 
         const existing = await this.mcpToolRepo.find({ where: { mcpServerId } });
         const existingMap = new Map(existing.map((row) => [row.name, row]));
-        const newNames = new Set(tools.map((t) => t.name));
 
         for (const tool of tools) {
             const row = existingMap.get(tool.name);
@@ -41,12 +40,6 @@ export class BowiMcpToolSyncService {
                     description: tool.description,
                     inputSchema: tool.inputSchema,
                 });
-            }
-        }
-
-        for (const row of existing) {
-            if (!newNames.has(row.name)) {
-                await this.mcpToolRepo.delete(row.id);
             }
         }
 

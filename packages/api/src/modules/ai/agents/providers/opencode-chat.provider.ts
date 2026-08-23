@@ -49,6 +49,10 @@ import {
     persistOpencodeAssistantMessageSafely,
     prepareOpencodeAssistantMessageForPersistence,
 } from "../utils/opencode-message-persistence";
+import {
+    buildOpencodeSessionContext,
+    OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY,
+} from "../utils/opencode-session-context";
 import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
@@ -146,14 +150,19 @@ export class OpencodeChatProvider {
                 userId: params.userId,
                 anonymousIdentifier: params.anonymousIdentifier,
                 title: initialTitle,
-                metadata: params.isDebug
-                    ? { isDebug: true, provider: "opencode" }
-                    : { provider: "opencode" },
+                metadata: {
+                    ...(params.isDebug ? { isDebug: true } : {}),
+                    provider: "opencode",
+                    bowiAuthSource: params.authSource ?? "anonymous",
+                },
             });
             localConversationId = record.id;
         }
 
         if (localConversationId) {
+            await this.agentChatRecordService.updateMetadata(localConversationId, {
+                bowiAuthSource: params.authSource ?? "anonymous",
+            });
             await this.sessionRecover.recoverConversation({
                 agent,
                 conversationId: localConversationId,
@@ -264,11 +273,39 @@ export class OpencodeChatProvider {
                 await fs.mkdir(artifactRoot, { recursive: true });
                 const preExistingHtmlFiles = await this.snapshotHtmlFiles(artifactRoot);
 
+                let personalParams: Record<string, unknown> | undefined;
+                try {
+                    personalParams = await this.userDictService.getGroupValues(
+                        params.userId,
+                        "personalParams",
+                    );
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to load personalParams for OpenCode session context: ${
+                            error instanceof Error ? error.message : String(error)
+                        }`,
+                    );
+                }
+                const sessionContext = buildOpencodeSessionContext({
+                    userId: params.userId,
+                    username: params.username,
+                    personalParams,
+                    sensitiveWordConfig: agent.sensitiveWordConfig,
+                    agentId: params.agentId,
+                });
+
                 let opencodeSessionId = await this.resolveRemoteSessionId(localConversationId);
                 if (!opencodeSessionId) {
                     const session = await this.opencodeApiService.createSession(
                         agent.thirdPartyIntegration,
                         initialTitle || "Bowi AI conversation",
+                        sessionContext
+                            ? {
+                                  metadata: {
+                                      [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionContext,
+                                  },
+                              }
+                            : {},
                     );
                     opencodeSessionId = session.id;
                     await this.agentChatRecordService.updateMetadata(localConversationId, {
@@ -285,26 +322,12 @@ export class OpencodeChatProvider {
                     "Do not write HTML reports into other conversations' artifact directories.",
                 ].join("\n");
 
-                let personalParams: Record<string, unknown> | undefined;
-                if (params.userId) {
-                    try {
-                        personalParams = await this.userDictService.getGroupValues(
-                            params.userId,
-                            "personalParams",
-                        );
-                    } catch (error) {
-                        this.logger.warn(
-                            `Failed to load personalParams for OpenCode system: ${
-                                error instanceof Error ? error.message : String(error)
-                            }`,
-                        );
-                    }
-                }
                 const system = buildOpencodeSystemPrompt({
                     rolePrompt: agent.rolePrompt,
                     personalParams,
                     systemHint,
                 });
+                const safeSystem = sensitiveWordFilter.filterText(system);
 
                 // Detached turn: lifetime is owned by the runner, not HTTP abortSignal.
                 turnHandle = this.turnRunner.start(localConversationId);
@@ -557,7 +580,7 @@ export class OpencodeChatProvider {
                         sessionId: opencodeSessionId,
                         text: userText,
                         parts: mappedPrompt.parts as Array<Record<string, unknown>>,
-                        system,
+                        system: safeSystem,
                         model: config.model,
                     });
                     // Race: a permission.asked may fire before /event is fully attached.

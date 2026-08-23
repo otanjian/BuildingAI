@@ -114,6 +114,7 @@ function makeHarness(options: {
             saved.push({ target, entity: value });
             return value;
         }),
+        update: jest.fn(async () => ({ affected: 1 })),
         increment: jest.fn(async () => ({ affected: 1 })),
         count: jest.fn(async () => 1),
     };
@@ -372,6 +373,22 @@ describe("OpencodeTurnAcceptanceService", () => {
         );
         expect(harness.opencodeApiService.createSession).not.toHaveBeenCalled();
         expect(harness.opencodeApiService.promptAsync).not.toHaveBeenCalled();
+    });
+
+    it("refreshes auth provenance before an existing conversation turn is dispatched", async () => {
+        const module = loadModule();
+        if (!module) return;
+        const harness = makeHarness({
+            existingConversation: conversation({ metadata: { bowiAuthSource: "login" } }),
+        });
+
+        await createService(module, harness).accept(input({ authSource: "publish_key" }));
+
+        expect(harness.manager.update).toHaveBeenCalledWith(
+            expect.anything(),
+            CONVERSATION_ID,
+            { metadata: { bowiAuthSource: "publish_key" } },
+        );
     });
 
     it("returns a duplicate found after lock without repeating prechecks", async () => {

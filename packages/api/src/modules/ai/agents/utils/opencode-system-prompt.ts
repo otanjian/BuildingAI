@@ -1,3 +1,5 @@
+import { sanitizeOpencodePersonalParamValue } from "./opencode-session-context";
+
 export type OpencodePersonalParams = Record<string, unknown>;
 
 export function buildOpencodePersonalParamsSection(
@@ -9,12 +11,7 @@ export function buildOpencodePersonalParamsSection(
     for (const [rawKey, rawValue] of Object.entries(personalParams)) {
         const key = rawKey.trim();
         if (!key) continue;
-        const value =
-            typeof rawValue === "string"
-                ? rawValue
-                : rawValue == null
-                  ? ""
-                  : JSON.stringify(rawValue);
+        const value = sanitizeOpencodePersonalParamValue(key, rawValue);
         lines.push(`- ${key}: ${value}`);
     }
     if (lines.length === 0) return undefined;

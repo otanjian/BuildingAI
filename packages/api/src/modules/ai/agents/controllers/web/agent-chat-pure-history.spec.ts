@@ -11,12 +11,20 @@ jest.mock("@buildingai/decorators", () => ({ BuildFileUrl: () => () => undefined
 jest.mock("@buildingai/decorators/playground.decorator", () => ({
     Playground: () => () => undefined,
 }));
-jest.mock("@common/decorators/controller.decorator", () => ({
-    WebController: () => (target: unknown) => target,
-}), { virtual: true });
-jest.mock("@common/decorators/agent-public-access.decorator", () => ({
-    AgentPublicAccess: () => () => undefined,
-}), { virtual: true });
+jest.mock(
+    "@common/decorators/controller.decorator",
+    () => ({
+        WebController: () => (target: unknown) => target,
+    }),
+    { virtual: true },
+);
+jest.mock(
+    "@common/decorators/agent-public-access.decorator",
+    () => ({
+        AgentPublicAccess: () => () => undefined,
+    }),
+    { virtual: true },
+);
 jest.mock("../../integrations/opencode-api.service", () => ({
     OpencodeApiService: class OpencodeApiService {},
 }));
@@ -57,19 +65,56 @@ const USER_ID = "33333333-3333-4333-8333-333333333333";
 describe("AgentChatWebController pure BuildingAI history", () => {
     function harness() {
         const records = {
-            getConversation: jest.fn(async () => ({
+            getConversation: jest.fn(
+                async (): Promise<any> => ({
+                    id: CONVERSATION_ID,
+                    agentId: AGENT_ID,
+                    userId: USER_ID,
+                    anonymousIdentifier: null,
+                    title: "Conversation",
+                    archivedAt: null,
+                    opencodeSessionId: "ses_embed",
+                    opencodeRuntimeHash: "runtime-hash",
+                    metadata: undefined,
+                }),
+            ),
+            createConversation: jest.fn(async () => ({
+                id: CONVERSATION_ID,
+                agentId: AGENT_ID,
+                userId: USER_ID,
+                anonymousIdentifier: null,
+                title: "新对话",
+                archivedAt: null,
+                opencodeSessionId: null,
+                opencodeRuntimeHash: null,
+                metadata: { provider: "opencode" },
+            })),
+            bindOpencodeSession: jest.fn(async (_conversationId, sessionId, runtimeHash) => ({
                 id: CONVERSATION_ID,
                 agentId: AGENT_ID,
                 userId: USER_ID,
                 anonymousIdentifier: null,
                 title: "Conversation",
                 archivedAt: null,
+                opencodeSessionId: sessionId,
+                opencodeRuntimeHash: runtimeHash,
+                metadata: { provider: "opencode", opencodeSessionId: sessionId },
             })),
             listUserConversations: jest.fn(async () => ({ items: [], total: 0 })),
             findActiveOpencodeTurn: jest.fn(async () => null),
             getOpencodeTurnConversationProjection: jest.fn(async () => ({
                 activeTurn: null,
                 legacyStatus: null,
+            })),
+            isPlaceholderConversationTitle: jest.fn(
+                (title?: string | null) => !title?.trim() || title.trim() === "新对话",
+            ),
+            syncGeneratedOpencodeTitle: jest.fn(
+                async (_conversationId: string, title?: string) => title === "采购订单分析",
+            ),
+            initializeOpencodeIframeBilling: jest.fn(async () => ({
+                version: 1,
+                startedAt: "2026-08-23T04:00:00.000Z",
             })),
         };
         const messages = {
@@ -83,9 +128,22 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             listSessionMessages: jest.fn(() => new Promise(() => undefined)),
             approvePendingPermissions: jest.fn(() => new Promise(() => undefined)),
             abortSession: jest.fn(() => new Promise(() => undefined)),
+            normalizeConfig: jest.fn(() => ({
+                baseURL: "http://127.0.0.1:4096",
+                workspace: "/tmp/opencode",
+            })),
+            createSession: jest.fn(async () => ({ id: "ses_embed" })),
+            deleteSession: jest.fn(async () => undefined),
+            getSession: jest.fn(async () => ({
+                id: "ses_embed",
+                title: "New session - 2026-08-22T00:00:00.000Z",
+            })),
         };
         const opencodeProvider = {
             stopTurn: jest.fn(() => new Promise(() => undefined)),
+        };
+        const userDict = {
+            getGroupValues: jest.fn(async () => ({ sap链接参数: "conn=/H/sap" })),
         };
         const completion = { streamChat: jest.fn(async () => undefined) };
         const agents = {
@@ -106,8 +164,18 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             {} as any,
             {} as any,
             opencodeProvider as any,
+            userDict as any,
         );
-        return { controller, completion, records, messages, agents, opencodeApi, opencodeProvider };
+        return {
+            controller,
+            completion,
+            records,
+            messages,
+            agents,
+            opencodeApi,
+            opencodeProvider,
+            userDict,
+        };
     }
 
     it("returns persisted messages without any OpenCode status/recovery/control call", async () => {
@@ -117,7 +185,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
                 AGENT_ID,
                 CONVERSATION_ID,
                 {} as any,
-                { id: USER_ID } as any,
+                { id: USER_ID, username: "S2385" } as any,
                 { headers: {} } as any,
             ),
         ).resolves.toMatchObject({ items: [{ id: "message-1" }] });
@@ -127,6 +195,94 @@ describe("AgentChatWebController pure BuildingAI history", () => {
         expect(test.opencodeApi.approvePendingPermissions).not.toHaveBeenCalled();
         expect(test.opencodeApi.abortSession).not.toHaveBeenCalled();
         expect(test.opencodeProvider.stopTurn).not.toHaveBeenCalled();
+    });
+
+    it("creates one mapped OpenCode session for a new local conversation", async () => {
+        const test = harness();
+        test.records.getConversation.mockResolvedValueOnce(null);
+
+        await expect(
+            test.controller.getOpencodeEmbed(
+                AGENT_ID,
+                CONVERSATION_ID,
+                { id: USER_ID, username: "S2385" } as any,
+                { headers: {} } as any,
+            ),
+        ).resolves.toEqual({
+            conversationId: CONVERSATION_ID,
+            sessionId: "ses_embed",
+            url: "http://127.0.0.1:4096/server/aHR0cDovLzEyNy4wLjAuMTo0MDk2/session/ses_embed?buildingaiEmbed=1",
+            title: "新对话",
+            titleSynced: false,
+        });
+
+        expect(test.opencodeApi.createSession).toHaveBeenCalledTimes(1);
+        expect(test.opencodeApi.createSession).toHaveBeenCalledWith(expect.anything(), undefined, {
+            useDefaultTitle: true,
+            metadata: {
+                "buildingai.systemContext": expect.stringMatching(
+                    /login username: S2385[\s\S]*conn=\/H\/sap/,
+                ),
+            },
+        });
+        expect(test.records.bindOpencodeSession).toHaveBeenCalledWith(
+            CONVERSATION_ID,
+            "ses_embed",
+            expect.any(String),
+        );
+        expect(test.records.initializeOpencodeIframeBilling).toHaveBeenCalledWith(
+            CONVERSATION_ID,
+        );
+    });
+
+    it("synchronizes a generated OpenCode title during embed bootstrap", async () => {
+        const test = harness();
+        test.opencodeApi.getSession.mockResolvedValueOnce({
+            id: "ses_embed",
+            title: "采购订单分析",
+        });
+        test.records.getConversation.mockResolvedValueOnce({
+            id: CONVERSATION_ID,
+            agentId: AGENT_ID,
+            userId: USER_ID,
+            anonymousIdentifier: null,
+            title: "新对话",
+            archivedAt: null,
+            opencodeSessionId: "ses_embed",
+            opencodeRuntimeHash: "runtime-hash",
+            metadata: { provider: "opencode", opencodeSessionId: "ses_embed" },
+        });
+
+        await expect(
+            test.controller.getOpencodeEmbed(
+                AGENT_ID,
+                CONVERSATION_ID,
+                { id: USER_ID, username: "S2385" } as any,
+                { headers: {} } as any,
+            ),
+        ).resolves.toMatchObject({ title: "采购订单分析", titleSynced: true });
+
+        expect(test.opencodeApi.getSession).toHaveBeenCalledWith(
+            expect.objectContaining({ sessionId: "ses_embed" }),
+        );
+        expect(test.records.syncGeneratedOpencodeTitle).toHaveBeenCalledWith(
+            CONVERSATION_ID,
+            "采购订单分析",
+        );
+    });
+
+    it("does not overwrite a meaningful BuildingAI title from OpenCode", async () => {
+        const test = harness();
+
+        await test.controller.getOpencodeEmbed(
+            AGENT_ID,
+            CONVERSATION_ID,
+            { id: USER_ID, username: "S2385" } as any,
+            { headers: {} } as any,
+        );
+
+        expect(test.opencodeApi.getSession).not.toHaveBeenCalled();
+        expect(test.records.syncGeneratedOpencodeTitle).not.toHaveBeenCalled();
     });
 
     it("returns conversation list and detail from BuildingAI while OpenCode is unavailable", async () => {

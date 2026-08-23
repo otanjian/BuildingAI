@@ -29,6 +29,7 @@ import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import { HTTP_CODE_METADATA } from "@nestjs/common/constants";
 import { ValidationPipe } from "@nestjs/common";
+import { setRequestAuthContext } from "../../../../../common/types/request-auth-context";
 
 const CONTROLLER_PATH = resolve(__dirname, "opencode-turn.controller.ts");
 const DTO_PATH = resolve(__dirname, "../../dto/web/chat/opencode-turn.dto.ts");
@@ -163,13 +164,16 @@ describe("OpencodeTurnWebController", () => {
             conversationId: CONVERSATION_ID,
             message: { role: "user", parts: [{ type: "text", text: "hello" }] },
         };
-        const result = await controller.acceptTurn(AGENT_ID, dto, { id: USER_ID }, { headers: {} });
+        const req = { headers: {} } as any;
+        setRequestAuthContext(req, { source: "login" });
+        const result = await controller.acceptTurn(AGENT_ID, dto, { id: USER_ID }, req);
 
         expect(Reflect.getMetadata(HTTP_CODE_METADATA, controller.acceptTurn)).toBe(202);
         expect(acceptance.accept).toHaveBeenCalledWith({
             agentId: AGENT_ID,
             userId: USER_ID,
             anonymousIdentifier: undefined,
+            authSource: "login",
             ...dto,
         });
         expect(result).toMatchObject({ turnId: TURN_ID, conversationId: CONVERSATION_ID });
@@ -197,6 +201,7 @@ describe("OpencodeTurnWebController", () => {
             expect.objectContaining({
                 userId: USER_ID,
                 anonymousIdentifier: "anonymous-owner",
+                authSource: "anonymous",
             }),
         );
         expect(acceptance.getStatus).toHaveBeenCalledWith({

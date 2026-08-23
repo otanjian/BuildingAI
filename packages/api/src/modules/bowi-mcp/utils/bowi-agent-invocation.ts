@@ -1,0 +1,37 @@
+import { EHCS_PLATFORM_AGENT_NAME } from "@buildingai/constants/shared/ehcs-agent.constant";
+import type { RequestAuthSource } from "@common/types/request-auth-context";
+
+import { createBowiInvocationAssertion } from "./bowi-invocation-assertion";
+import type { BowiCapability } from "../types/bowi-mcp.types";
+import { configuredSapCapabilities } from "../sap/sap-capabilities";
+
+export function getAgentBowiCapabilities(agentName: string): BowiCapability[] {
+    return agentName === EHCS_PLATFORM_AGENT_NAME ? ["ehcs.operator"] : [];
+}
+
+export function buildBowiMcpHeaders(input: {
+    serverName: string;
+    existing?: Record<string, string>;
+    invocation?: {
+        userId: string;
+        agentId: string;
+        agentName: string;
+        conversationId?: string;
+        authSource: RequestAuthSource;
+    };
+}): Record<string, string> | undefined {
+    if (input.serverName !== "bowi-mcp" || !input.invocation) return input.existing;
+    return {
+        ...(input.existing ?? {}),
+        "x-buildingai-bowi-invocation": createBowiInvocationAssertion({
+            userId: input.invocation.userId,
+            agentId: input.invocation.agentId,
+            conversationId: input.invocation.conversationId,
+            authSource: input.invocation.authSource,
+            capabilities: [
+                ...getAgentBowiCapabilities(input.invocation.agentName),
+                ...(input.invocation.authSource === "login" ? configuredSapCapabilities() : []),
+            ],
+        }),
+    };
+}

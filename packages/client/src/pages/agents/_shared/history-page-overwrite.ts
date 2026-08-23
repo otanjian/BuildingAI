@@ -5,7 +5,9 @@ export function shouldApplyHistoryPageToChat(params: {
   shouldLoadInitial: boolean;
   switched: boolean;
   liveMessageCount: number;
+  skipHistoryFetch?: boolean;
 }): boolean {
+  if (params.skipHistoryFetch) return false;
   return params.shouldLoadInitial || params.switched;
 }
 

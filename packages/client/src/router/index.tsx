@@ -17,6 +17,7 @@ import AppsIndexPage from "@/pages/apps";
 import DatasetsIndexPage from "@/pages/datasets";
 import DatasetsLayout from "@/pages/datasets/_layouts";
 import DatasetsDetailPage from "@/pages/datasets/detail";
+import PersonalTodosPage from "@/pages/todos";
 import InstallPage from "@/pages/install";
 
 import { usePlatformEmbedNavBridge } from "../helpers/platformEmbedNav";
@@ -204,6 +205,10 @@ export const router = createBrowserRouter([
           {
             path: "/agents/workspace",
             element: <AgentsWorkspacePage />,
+          },
+          {
+            path: "/todos",
+            element: <PersonalTodosPage />,
           },
           {
             path: "*",

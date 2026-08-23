@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 
+import { getRequestAuthContext } from "../../../../../common/types/request-auth-context";
 import { OpencodeTurnRequestDto } from "../../dto/web/chat/opencode-turn.dto";
 import {
     OpencodeQuestionRejectDto,
@@ -43,10 +44,14 @@ export class OpencodeTurnWebController {
         @Playground() playground: UserPlayground,
         @Req() req: Request,
     ) {
+        const anonymousIdentifier = this.extractAnonymousIdentifier(req);
         return this.acceptanceService.accept({
             agentId,
             userId: playground.id,
-            anonymousIdentifier: this.extractAnonymousIdentifier(req),
+            anonymousIdentifier,
+            authSource: anonymousIdentifier
+                ? "anonymous"
+                : (getRequestAuthContext(req)?.source ?? "anonymous"),
             ...dto,
         });
     }

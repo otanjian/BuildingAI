@@ -44,6 +44,7 @@ export interface UseAssistantForAgentOptions {
   showReference?: boolean;
   assistantAvatar?: string;
   conversationId?: string;
+  isLocalConversationDraft?: boolean;
   disableAutoNavigate?: boolean;
   /** True when the server reports the mapped OpenCode turn is still running. */
   isOpencodeTurnRunning?: boolean;
@@ -134,6 +135,7 @@ export function useAssistantForAgent(
     showReference = true,
     assistantAvatar,
     conversationId,
+    isLocalConversationDraft = false,
     disableAutoNavigate = false,
     isOpencodeTurnRunning = false,
     durableOpencodeTurnsEnabled = false,
@@ -249,6 +251,7 @@ export function useAssistantForAgent(
 
   const shouldLoadInitial = Boolean(
     normalizedConversationId &&
+    !isLocalConversationDraft &&
     !(
       durableOpencodeTurnsEnabled &&
       getOpencodeConversationStore(`detail-agent-${agentId}`).isLocalDraft(normalizedConversationId)
@@ -269,6 +272,7 @@ export function useAssistantForAgent(
     setMessages,
     lastMessageDbIdRef,
     shouldLoadInitial,
+    skipHistoryFetch: isLocalConversationDraft,
     getLiveMessageCount: () => liveMessageCountRef.current,
     getDbMessageId,
   });
