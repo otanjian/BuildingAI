@@ -1108,6 +1108,12 @@ start_dev_detached() {
   pnpm exec pm2 save 2>/dev/null || true
 }
 
+clear_dev_pid_metadata() {
+  # Foreground mode has no single managed PID. Remove metadata left by a
+  # previous detached run without signaling a possibly reused PID.
+  rm -f "${RUN_DIR}/dev.pid" "${RUN_DIR}/dev-web.pid" "${RUN_DIR}/dev-api.pid"
+}
+
 start_dev() {
   local force="${1:-0}"
   local detach="${2:-0}"
@@ -1130,6 +1136,7 @@ start_dev() {
     return 0
   fi
 
+  clear_dev_pid_metadata
   print_info
   clear_broken_proxy
   exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
