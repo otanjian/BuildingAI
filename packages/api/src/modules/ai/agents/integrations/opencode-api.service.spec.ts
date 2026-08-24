@@ -414,6 +414,32 @@ describe("OpencodeApiService durable read adapter", () => {
         });
     });
 
+    it("merges BuildingAI metadata while refreshing an existing session", async () => {
+        global.fetch = jest.fn().mockResolvedValue(
+            response({
+                id: "ses_embed",
+                metadata: { existing: "kept", "buildingai.systemContext": "new context" },
+            }),
+        );
+
+        await service.updateSessionMetadata({
+            config: CONFIG,
+            sessionId: "ses_embed",
+            existingMetadata: { existing: "kept", "buildingai.systemContext": "old context" },
+            metadata: { "buildingai.systemContext": "new context" },
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            "http://opencode.test/session/ses_embed",
+            expect.objectContaining({
+                method: "PATCH",
+                body: JSON.stringify({
+                    metadata: { existing: "kept", "buildingai.systemContext": "new context" },
+                }),
+            }),
+        );
+    });
+
     it("lists only exact-session permissions and replies to the exact request", async () => {
         global.fetch = jest
             .fn()

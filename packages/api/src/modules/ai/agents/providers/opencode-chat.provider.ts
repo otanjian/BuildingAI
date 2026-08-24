@@ -21,7 +21,6 @@ import { AgentBillingHandler } from "../handlers/agent-billing";
 import {
     normalizeOpencodePendingQuestion,
     OpencodeApiService,
-    type OpencodePendingQuestion,
 } from "../integrations/opencode-api.service";
 import type { AgentChatCompletionParams } from "../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../services/agent-chat-message.service";
@@ -33,26 +32,27 @@ import {
     preferredHtmlEntryRelativePath,
     resolveArtifactRoot,
 } from "../utils/opencode-artifact-path";
+import {
+    persistOpencodeAssistantMessageSafely,
+    prepareOpencodeAssistantMessageForPersistence,
+} from "../utils/opencode-message-persistence";
 import { OpencodeAssistantPartRouter } from "../utils/opencode-part-router";
+import { extractOpencodePermissionAsk } from "../utils/opencode-permission";
 import {
     convertFilePartsToDataUrls,
     mapUiPartsToOpencodePromptParts,
     OpencodeAttachmentForwardError,
     type UiMessagePartLike,
 } from "../utils/opencode-prompt-parts";
-import { OpencodeTokenUsageAccumulator } from "../utils/opencode-token-usage";
-import { extractOpencodePermissionAsk } from "../utils/opencode-permission";
-import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
-import { mergeOpencodeTurnMetadata } from "../utils/opencode-turn-status";
-import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
-import {
-    persistOpencodeAssistantMessageSafely,
-    prepareOpencodeAssistantMessageForPersistence,
-} from "../utils/opencode-message-persistence";
+import { buildOpencodeArtifactSystemHint } from "../utils/opencode-report-instructions";
 import {
     buildOpencodeSessionContext,
     OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY,
 } from "../utils/opencode-session-context";
+import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
+import { OpencodeTokenUsageAccumulator } from "../utils/opencode-token-usage";
+import { mergeOpencodeTurnMetadata } from "../utils/opencode-turn-status";
+import { createSensitiveWordFilter } from "../utils/sensitive-word-filter";
 import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive-word-stream";
 
 type ProviderWriter = {
@@ -315,12 +315,10 @@ export class OpencodeChatProvider {
                     });
                 }
 
-                const systemHint = [
-                    "You are running as a Bowi AI OpenCode agent.",
-                    `Conversation id: ${localConversationId}`,
-                    `Write report/dashboard HTML artifacts ONLY under: ${artifactRoot}`,
-                    "Do not write HTML reports into other conversations' artifact directories.",
-                ].join("\n");
+                const systemHint = buildOpencodeArtifactSystemHint({
+                    conversationId: localConversationId,
+                    artifactRoot,
+                });
 
                 const system = buildOpencodeSystemPrompt({
                     rolePrompt: agent.rolePrompt,

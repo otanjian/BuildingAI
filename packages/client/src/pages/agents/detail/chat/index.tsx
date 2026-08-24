@@ -46,9 +46,9 @@ import {
   Bot,
   ChevronDown,
   ChevronLeft,
-  FolderTree,
   ListIndentDecrease,
   PanelLeft,
+  PanelRight,
   RefreshCw,
   Settings2,
 } from "lucide-react";
@@ -1044,7 +1044,7 @@ const AgentChatPage = () => {
                           aria-pressed={workspaceOpen}
                           onClick={() => setWorkspaceOpen((open) => !open)}
                         >
-                          <FolderTree className="size-4" />
+                          <PanelRight className="size-4" />
                         </Button>
                       </>
                     }

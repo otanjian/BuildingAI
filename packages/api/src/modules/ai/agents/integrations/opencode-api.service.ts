@@ -274,6 +274,33 @@ export class OpencodeApiService {
         return body as OpencodeSession;
     }
 
+    async updateSessionMetadata(
+        params: {
+            config?: ThirdPartyIntegrationConfig | null;
+            sessionId: string;
+            metadata: Record<string, unknown>;
+            existingMetadata?: Record<string, unknown>;
+        } & OpencodeOperationOptions,
+    ): Promise<OpencodeSession> {
+        const currentMetadata =
+            params.existingMetadata ?? (await this.getSession(params)).metadata ?? {};
+        const operation = "update-session-metadata";
+        const normalized = this.normalizeConfig(params.config);
+        const response = await this.requestWithDeadline(
+            normalized,
+            `/session/${encodeURIComponent(params.sessionId)}`,
+            {
+                method: "PATCH",
+                body: JSON.stringify({
+                    metadata: { ...currentMetadata, ...params.metadata },
+                }),
+            },
+            { operation, signal: params.signal, timeoutMs: params.timeoutMs },
+        );
+        await this.assertOperationResponse(response, operation);
+        return (await this.parseJson(response, operation)) as OpencodeSession;
+    }
+
     async findSessionsByTurnReceipt(
         params: {
             config?: ThirdPartyIntegrationConfig | null;

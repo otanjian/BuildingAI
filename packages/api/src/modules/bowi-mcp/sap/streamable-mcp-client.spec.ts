@@ -25,6 +25,34 @@ describe("StreamableMcpClient", () => {
         expect(transport.terminateSession).toHaveBeenCalled();
     });
 
+    it("unwraps FastMCP structured string results", async () => {
+        const client = {
+            connect: jest.fn().mockResolvedValue(undefined),
+            callTool: jest.fn().mockResolvedValue({
+                structuredContent: {
+                    result: '{"connection_id":"connection-1","connected":true}',
+                },
+                content: [
+                    {
+                        type: "text",
+                        text: '{"connection_id":"connection-1","connected":true}',
+                    },
+                ],
+            }),
+            close: jest.fn().mockResolvedValue(undefined),
+        };
+        const transport = { terminateSession: jest.fn().mockResolvedValue(undefined) };
+        const mcp = new StreamableMcpClient(
+            jest.fn().mockReturnValue({ client, transport }) as never,
+            500,
+        );
+
+        await expect(mcp.call("http://sap.test/mcp", "sap_connect", {})).resolves.toEqual({
+            connection_id: "connection-1",
+            connected: true,
+        });
+    });
+
     it("turns upstream tool errors into sanitized errors and closes", async () => {
         const client = {
             connect: jest.fn().mockResolvedValue(undefined),

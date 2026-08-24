@@ -18,17 +18,18 @@ Design: [`docs/design-dynamic-connections.md`](docs/design-dynamic-connections.m
 
 | Layer | Behavior |
 |-------|----------|
-| **SDK probe** | Detects `legacy` vs `modern` NW RFC SDK |
-| **Legacy patch** | `./install-pyrfc.sh` auto-patches PyRFC when SDK lacks `libsapcrypto` |
+| **SDK probe** | Detects macOS `.dylib` / Linux `.so`, tier, and native architecture |
+| **Installer** | macOS official wheel + private rpath repair; Linux source/legacy build |
 | **ADT fallback** | When PyRFC unavailable or `SAP_ASHOST` unset, uses ADT HTTPS (`read_table`, `run_query`) |
 | **Auto env** | Loads credentials from `../sap-abap-adt-mcp/.env` when local `.env` is empty |
 | **Backend** | `SAP_BACKEND=auto\|pyrfc\|adt` (default `auto`) |
 
 ```bash
-./install-nwrfcsdk.sh --from-github   # DevSidecar proxy supported
-./install-pyrfc.sh                    # legacy SDK patch + build
+./install-nwrfcsdk.sh /path/to/official-sdk-archive
+./install-pyrfc.sh
+./verify.sh                            # local SDK/import check
+./verify.sh --live                     # optional RFC_PING
 ./start.sh
-# healthcheck → shows active_backend: pyrfc | adt
 ```
 
 **Tool availability by backend:**
@@ -69,7 +70,7 @@ Reuse `connection_id` across turns in the same conversation. Concurrent users ea
 
 ## Prerequisites
 
-- Python 3.10+ and `python3-venv` (Debian/Ubuntu: `sudo apt install python3-venv`)
+- Python 3.10–3.12 matching the SDK architecture (`python3-venv` on Debian/Ubuntu)
 - **SAP NW RFC SDK** from [SAP Support Portal](https://support.sap.com/en/product/connectors/nwrfcsdk.html) (S-user required to download)
 - SAP application user with RFC authorization (when connecting to a real system)
 
@@ -88,42 +89,45 @@ chmod +x start.sh install-nwrfcsdk.sh
 
 ## Full setup (with SAP system)
 
-### Option A — GitHub mirror via DevSidecar (no S-user, dev only)
+### macOS (Apple Silicon)
 
-If [DevSidecar](https://github.com/docmirror/dev-sidecar) is running locally (default proxy `127.0.0.1:31181`), clone the community SDK mirror:
-
-```bash
-./install-nwrfcsdk.sh --from-github
-cat .env.local-sdk >> .env
-source .venv/bin/activate
-export SAPNWRFC_HOME="$(grep SAPNWRFC_HOME .env.local-sdk | cut -d= -f2)"
-export LD_LIBRARY_PATH="${SAPNWRFC_HOME}/lib:${LD_LIBRARY_PATH:-}"
-pip install pyrfc
-```
-
-Source: [juanmoura/nwrfcsdk](https://github.com/juanmoura/nwrfcsdk) — use only for local development; production should use the official SAP download.
-
-> **Version note:** The GitHub mirror is often an **older SDK** (no `libsapcrypto`). Current [PyRFC](https://github.com/SAP/PyRFC) requires NW RFC SDK **7.50+** from SAP. If `pip install pyrfc` fails with `RfcLoadCryptoLibrary`, download the official SDK instead.
+PyRFC 3.3.1 provides a Python 3.10–3.12 macOS ARM wheel, but it does **not**
+contain SAP's licensed runtime. Download an official SAP NW RFC SDK package for
+macOS ARM64 from SAP Software Center. A Linux x86_64 `.so` package cannot run on
+macOS and the installer rejects it before replacing an existing SDK.
 
 ```bash
-./install-pyrfc.sh   # after SDK is installed; uses DevSidecar proxy for git
+cd integrations/sap-pyrfc-mcp
+./install-nwrfcsdk.sh ~/Downloads/<official-macos-arm64-sdk>.zip
+./install-pyrfc.sh
+./verify.sh
+./verify.sh --live
 ```
 
-### Option B — Official SAP Software Center
+The installer keeps the SDK inside this integration and repairs the official
+wheel's `/usr/local/sap/nwrfcsdk/lib` rpath with `install_name_tool`; it does not
+need `sudo` or a global `/usr/local/sap` installation. The first native-library
+load may still show normal macOS trust prompts for SAP libraries.
 
-1. Download NW RFC SDK for Linux x86_64 from SAP Software Center.
-2. Install SDK and PyRFC:
+PyRFC 3.3.1 is pinned because it is the last SAP release with these wheels. The
+release is yanked/unmaintained, so keep this upstream private and isolated behind
+Bowi MCP.
+
+### Linux
+
+Download the official SDK matching the Linux host architecture, then run:
 
 ```bash
 ./install-nwrfcsdk.sh /path/to/nwrfcsdk-*.zip
-cat .env.local-sdk >> .env
-source .venv/bin/activate
-export SAPNWRFC_HOME="$(grep SAPNWRFC_HOME .env.local-sdk | cut -d= -f2)"
-export LD_LIBRARY_PATH="${SAPNWRFC_HOME}/lib:${LD_LIBRARY_PATH:-}"
-pip install pyrfc
+./install-pyrfc.sh
+./verify.sh
 ```
 
-3. Edit `.env` with connection details:
+`./install-nwrfcsdk.sh --from-github` remains available only for Linux local
+development. The community mirror contains old Linux `.so` files and is not a
+macOS installation source. Production must use an official SAP download.
+
+Edit `.env` with connection details:
 
 | Variable | Description |
 |----------|-------------|
@@ -135,7 +139,7 @@ pip install pyrfc
 | `SAP_SAPROUTER` | Optional router string |
 | `SAP_MSHOST` / `SAP_MSSERV` / `SAP_GROUP` / `SAP_R3NAME` | Message server logon (alternative) |
 
-4. Start:
+Start:
 
 ```bash
 ./start.sh
@@ -174,6 +178,9 @@ Root `mcp.json` intentionally points normal clients at Bowi instead of this upst
 
 ## Troubleshooting
 
-- **`PyRFC is not available`**: Run `install-nwrfcsdk.sh`, set `SAPNWRFC_HOME`, `pip install pyrfc`.
+- **`platform_mismatch`**: the SDK is for another OS (commonly Linux `.so` on macOS); download the official package for this host.
+- **Architecture mismatch**: Python and both SAP libraries must share `arm64` or `x86_64`; `./verify.sh` prints all detected values.
+- **`PyRFC is not available`**: run `./install-nwrfcsdk.sh <official-sdk>` and `./install-pyrfc.sh`, then inspect `./verify.sh`.
+- **`Library not loaded: @rpath/...` on macOS**: rerun `./install-pyrfc.sh` to repair the wheel and SDK rpaths.
 - **`connection_failed`**: Check firewall, SAProuter, user RFC authorizations, client number.
 - **Port conflict with ADT MCP**: ADT uses `8100`; PyRFC defaults to `8200`.

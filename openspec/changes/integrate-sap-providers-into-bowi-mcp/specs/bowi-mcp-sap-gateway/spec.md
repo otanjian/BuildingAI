@@ -64,6 +64,10 @@ Bowi SHALL route ADT development operations to the ADT runtime and RFC/BAPI oper
 - **WHEN** a cached PyRFC connection becomes invalid or idle-expired
 - **THEN** Bowi discards it, reconnects at most once for a safe retry, and never exposes the replacement handle
 
+#### Scenario: PyRFC returns a FastMCP structured string wrapper
+- **WHEN** the upstream returns its JSON payload inside a single structured `result` string
+- **THEN** Bowi unwraps and parses the payload before consuming internal connection handles, while removing those handles from every model-visible result
+
 #### Scenario: Upstream is unavailable
 - **WHEN** either SAP upstream cannot be reached before its configured timeout
 - **THEN** Bowi returns a sanitized stable upstream-unavailable error and releases affected client resources

@@ -133,6 +133,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
                 workspace: "/tmp/opencode",
             })),
             createSession: jest.fn(async () => ({ id: "ses_embed" })),
+            updateSessionMetadata: jest.fn(async () => ({ id: "ses_embed" })),
             deleteSession: jest.fn(async () => undefined),
             getSession: jest.fn(async () => ({
                 id: "ses_embed",
@@ -206,12 +207,12 @@ describe("AgentChatWebController pure BuildingAI history", () => {
                 AGENT_ID,
                 CONVERSATION_ID,
                 { id: USER_ID, username: "S2385" } as any,
-                { headers: {} } as any,
+                { headers: { origin: "http://127.0.0.1:4091" } } as any,
             ),
         ).resolves.toEqual({
             conversationId: CONVERSATION_ID,
             sessionId: "ses_embed",
-            url: "http://127.0.0.1:4096/server/aHR0cDovLzEyNy4wLjAuMTo0MDk2/session/ses_embed?buildingaiEmbed=1",
+            url: "http://127.0.0.1:4096/server/aHR0cDovLzEyNy4wLjAuMTo0MDk2/session/ses_embed?buildingaiEmbed=1&buildingaiReportBase=http%3A%2F%2F127.0.0.1%3A4091%2Fagents%2F11111111-1111-4111-8111-111111111111%2Fc%2F22222222-2222-4222-8222-222222222222%2Freports%2F&buildingaiArtifactRoot=artifacts%2F22222222-2222-4222-8222-222222222222",
             title: "新对话",
             titleSynced: false,
         });
@@ -230,9 +231,8 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             "ses_embed",
             expect.any(String),
         );
-        expect(test.records.initializeOpencodeIframeBilling).toHaveBeenCalledWith(
-            CONVERSATION_ID,
-        );
+        expect(test.records.initializeOpencodeIframeBilling).toHaveBeenCalledWith(CONVERSATION_ID);
+        expect(test.opencodeApi.updateSessionMetadata).not.toHaveBeenCalled();
     });
 
     it("synchronizes a generated OpenCode title during embed bootstrap", async () => {
@@ -268,6 +268,16 @@ describe("AgentChatWebController pure BuildingAI history", () => {
         expect(test.records.syncGeneratedOpencodeTitle).toHaveBeenCalledWith(
             CONVERSATION_ID,
             "采购订单分析",
+        );
+        expect(test.opencodeApi.updateSessionMetadata).toHaveBeenCalledWith(
+            expect.objectContaining({
+                sessionId: "ses_embed",
+                metadata: {
+                    "buildingai.systemContext": expect.stringMatching(
+                        /artifacts\/22222222-2222-4222-8222-222222222222[\s\S]*cite every generated `\.html` or `\.htm` file/i,
+                    ),
+                },
+            }),
         );
     });
 

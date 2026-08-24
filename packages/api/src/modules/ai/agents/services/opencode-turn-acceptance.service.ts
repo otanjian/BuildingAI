@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import { InjectDataSource, InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import {
     Agent,
@@ -14,13 +16,13 @@ import type { RequestAuthSource } from "@common/types/request-auth-context";
 import { AgentConfigService } from "@modules/config/services/agent-config.service";
 import { Injectable, Optional } from "@nestjs/common";
 import { createIdGenerator } from "ai";
-import { createHash, randomUUID } from "node:crypto";
 
 import { AgentBillingHandler } from "../handlers/agent-billing";
-import { OpencodeApiService } from "../integrations/opencode-api.service";
 import type { OpencodePendingQuestion } from "../integrations/opencode-api.service";
+import { OpencodeApiService } from "../integrations/opencode-api.service";
 import { resolveArtifactRoot } from "../utils/opencode-artifact-path";
 import { isOpencodeDurableTurnsEnabled } from "../utils/opencode-durable-rollout";
+import { buildOpencodeArtifactSystemHint } from "../utils/opencode-report-instructions";
 import { buildOpencodeSystemPrompt } from "../utils/opencode-system-prompt";
 import {
     buildOpencodeDispatchSnapshot,
@@ -193,12 +195,10 @@ export class OpencodeTurnAcceptanceService {
             const system = buildOpencodeSystemPrompt({
                 rolePrompt,
                 personalParams,
-                systemHint: [
-                    "You are running as a Bowi AI OpenCode agent.",
-                    `Conversation id: ${input.conversationId}`,
-                    `Write report/dashboard HTML artifacts ONLY under: ${artifactRoot}`,
-                    "Do not write HTML reports into other conversations' artifact directories.",
-                ].join("\n"),
+                systemHint: buildOpencodeArtifactSystemHint({
+                    conversationId: input.conversationId,
+                    artifactRoot,
+                }),
             });
             const promptParts = command.message.parts.map((part) =>
                 part.type === "text"

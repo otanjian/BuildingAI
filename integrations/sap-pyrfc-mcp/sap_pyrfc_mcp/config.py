@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -164,10 +165,11 @@ def _bootstrap_env() -> None:
     if home:
         lib_dir = Path(home) / "lib"
         if lib_dir.is_dir():
-            current = os.environ.get("LD_LIBRARY_PATH", "")
             lib_path = str(lib_dir)
+            loader_variable = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+            current = os.environ.get(loader_variable, "")
             if lib_path not in current.split(":"):
-                os.environ["LD_LIBRARY_PATH"] = f"{lib_path}:{current}" if current else lib_path
+                os.environ[loader_variable] = f"{lib_path}:{current}" if current else lib_path
 
 
 _bootstrap_env()

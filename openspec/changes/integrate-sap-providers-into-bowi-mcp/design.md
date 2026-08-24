@@ -51,6 +51,8 @@ The RFC adapter also enforces `SAP_RFC_ALLOWLIST` for `sap.rfc`; `sap.rfc.admin`
 
 The PyRFC adapter maintains an in-memory lease keyed by a one-way subject/profile fingerprint. A per-key promise lock prevents duplicate connects. Each lease contains only the upstream handle, last-use timestamp, and fingerprint; it is never returned in Bowi output. Idle leases are swept by a timer and `sap_disconnect` is best-effort on eviction and shutdown.
 
+The shared Streamable HTTP client normalizes FastMCP responses that wrap a JSON string in `structuredContent.result` before adapters inspect them. This preserves `connection_id` for the private lease registry while the PyRFC adapter recursively removes handle fields from model-visible health and operation results.
+
 Read-only PyRFC calls may reconnect once when the upstream reports an unknown/expired handle. RFC/BAPI calls are not automatically retried because their side effects are not generally knowable.
 
 Alternative: require the model to call `sap_connect`. Rejected because it exposes credentials and connection capabilities to prompt/tool state.

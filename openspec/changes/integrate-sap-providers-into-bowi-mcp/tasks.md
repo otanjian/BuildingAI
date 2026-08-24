@@ -28,6 +28,7 @@
 - [x] 4.4 Update deployment environment examples and operator documentation for upstream URLs, profile modes, capability grants, timeouts, and RFC allowlist
 - [x] 4.5 Expose Todo schemas to trusted OpenCode discovery, then add and validate usage rules for Bowi Todo/SAP routing and correct direct ADT/PyRFC diagnostic lifecycles
 - [x] 4.6 Remove direct `sap-abap` and `sap-pyrfc` registrations from ordinary OpenCode configuration while retaining their upstream runtimes
+- [x] 4.7 Unwrap FastMCP structured string results so Bowi can retain hidden PyRFC connection handles and execute SAP reads without exposing those handles
 
 ## 5. Verification
 
@@ -35,3 +36,4 @@
 - [x] 5.2 Run SAP PyRFC tests and shell syntax checks for integration startup scripts
 - [x] 5.3 Run API typecheck/lint and OpenSpec strict validation, documenting any unrelated pre-existing failures
 - [x] 5.4 Perform live Bowi `initialize`, `tools/list`, and authorized/unauthorized SAP tool smoke checks without destructive SAP calls
+- [x] 5.5 Re-run focused adapter tests and perform an authorized live `bowi_sap_read_table` smoke check

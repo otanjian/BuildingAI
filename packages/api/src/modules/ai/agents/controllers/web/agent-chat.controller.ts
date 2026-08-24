@@ -1,9 +1,11 @@
+import path from "node:path";
+
 import type { PaginationResult } from "@buildingai/base";
 import { type UserPlayground } from "@buildingai/db";
 import type { AgentChatMessage } from "@buildingai/db/entities";
-import { UserDictService } from "@buildingai/dict";
 import { BuildFileUrl } from "@buildingai/decorators";
 import { Playground } from "@buildingai/decorators/playground.decorator";
+import { UserDictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { AgentPublicAccess } from "@common/decorators/agent-public-access.decorator";
 import { WebController } from "@common/decorators/controller.decorator";
@@ -40,6 +42,7 @@ import {
     OpencodeQuestionReplyDto,
 } from "../../dto/web/chat/opencode-question.dto";
 import { OpencodeApiService } from "../../integrations/opencode-api.service";
+import { OpencodeChatProvider } from "../../providers/opencode-chat.provider";
 import { AgentChatCompletionService } from "../../services/agent-chat-completion.service";
 import { AgentChatMessageService } from "../../services/agent-chat-message.service";
 import { AgentChatMessageFeedbackService } from "../../services/agent-chat-message-feedback.service";
@@ -49,14 +52,19 @@ import { AgentVoiceService } from "../../services/agent-voice.service";
 import { AgentsService } from "../../services/agents.service";
 import { OpencodeArtifactService } from "../../services/opencode-artifact.service";
 import { OpencodeWorkspaceService } from "../../services/opencode-workspace.service";
-import { OpencodeChatProvider } from "../../providers/opencode-chat.provider";
+import { resolveArtifactRoot } from "../../utils/opencode-artifact-path";
 import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
-import { buildOpencodeEmbedUrl } from "../../utils/opencode-embed";
-import { hashOpencodeRuntime } from "../../utils/opencode-turn-command";
+import {
+    buildBuildingAIReportBase,
+    buildOpencodeEmbedUrl,
+    resolveBuildingAIWebOrigin,
+} from "../../utils/opencode-embed";
+import { buildOpencodeArtifactSystemHint } from "../../utils/opencode-report-instructions";
 import {
     buildOpencodeSessionContext,
     OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY,
 } from "../../utils/opencode-session-context";
+import { hashOpencodeRuntime } from "../../utils/opencode-turn-command";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
@@ -894,34 +902,58 @@ export class AgentChatWebController {
             throw HttpErrorFactory.forbidden("无权查看该对话");
         }
         const runtime = this.opencodeApiService.normalizeConfig(agent.thirdPartyIntegration);
+        const artifactRoot = resolveArtifactRoot({
+            workspace: runtime.workspace,
+            conversationId,
+            artifactDirTemplate: runtime.artifactDirTemplate,
+        });
+        const artifactRelativeRoot = path
+            .relative(runtime.workspace, artifactRoot)
+            .split(path.sep)
+            .join("/");
+        const reportSystemHint = buildOpencodeArtifactSystemHint({
+            conversationId,
+            artifactRoot,
+        });
+        const webOrigin = resolveBuildingAIWebOrigin({
+            origin: typeof req.headers.origin === "string" ? req.headers.origin : undefined,
+            referer: typeof req.headers.referer === "string" ? req.headers.referer : undefined,
+            configuredWebOrigin: process.env.VITE_CLIENT_WEB_URL,
+        });
+        const reportBase = buildBuildingAIReportBase(webOrigin, agentId, conversationId);
         let sessionId = record.opencodeSessionId;
         if (!sessionId && typeof record.metadata?.opencodeSessionId === "string") {
             sessionId = record.metadata.opencodeSessionId;
         }
+        let createdSessionId: string | undefined;
+        let sessionSystemContext: string | undefined;
         if (!sessionId) {
             const personalParams = await this.userDictService.getGroupValues(
                 playground.id,
                 "personalParams",
             );
-            const sessionContext = buildOpencodeSessionContext({
+            const personalContext = buildOpencodeSessionContext({
                 userId: playground.id,
                 username: playground.username,
                 personalParams,
                 sensitiveWordConfig: agent.sensitiveWordConfig,
                 agentId,
             });
+            sessionSystemContext = [personalContext, reportSystemHint].filter(Boolean).join("\n\n");
             const session = await this.opencodeApiService.createSession(
                 agent.thirdPartyIntegration,
                 this.agentChatRecordService.isPlaceholderConversationTitle(record.title)
                     ? undefined
                     : record.title,
-                sessionContext
+                sessionSystemContext
                     ? {
                           useDefaultTitle:
                               this.agentChatRecordService.isPlaceholderConversationTitle(
                                   record.title,
                               ),
-                          metadata: { [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionContext },
+                          metadata: {
+                              [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionSystemContext,
+                          },
                       }
                     : {
                           useDefaultTitle:
@@ -931,6 +963,7 @@ export class AgentChatWebController {
                       },
             );
             sessionId = session.id;
+            createdSessionId = session.id;
             const bound = await this.agentChatRecordService.bindOpencodeSession(
                 conversationId,
                 sessionId,
@@ -950,6 +983,32 @@ export class AgentChatWebController {
                 hashOpencodeRuntime(runtime),
             );
             if (bound?.opencodeSessionId) sessionId = bound.opencodeSessionId;
+        }
+
+        if (sessionId !== createdSessionId) {
+            const personalContext = buildOpencodeSessionContext({
+                userId: playground.id,
+                username: playground.username,
+                personalParams: await this.userDictService.getGroupValues(
+                    playground.id,
+                    "personalParams",
+                ),
+                sensitiveWordConfig: agent.sensitiveWordConfig,
+                agentId,
+            });
+            sessionSystemContext = [personalContext, reportSystemHint].filter(Boolean).join("\n\n");
+            try {
+                await this.opencodeApiService.updateSessionMetadata({
+                    config: agent.thirdPartyIntegration,
+                    sessionId,
+                    metadata: {
+                        [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionSystemContext,
+                    },
+                    timeoutMs: 2_000,
+                });
+            } catch {
+                // Keep an existing conversation available when an older runtime cannot refresh metadata.
+            }
         }
 
         let title = record.title;
@@ -976,7 +1035,10 @@ export class AgentChatWebController {
         return {
             conversationId,
             sessionId,
-            url: buildOpencodeEmbedUrl(runtime.baseURL, sessionId),
+            url: buildOpencodeEmbedUrl(runtime.baseURL, sessionId, {
+                reportBase,
+                artifactRoot: artifactRelativeRoot,
+            }),
             title,
             titleSynced,
         };
@@ -1152,10 +1214,7 @@ export class AgentChatWebController {
         return trimmed || undefined;
     }
 
-    private resolveAuthSource(
-        req: Request,
-        anonymousIdentifier?: string,
-    ): RequestAuthSource {
+    private resolveAuthSource(req: Request, anonymousIdentifier?: string): RequestAuthSource {
         if (anonymousIdentifier) return "anonymous";
         return getRequestAuthContext(req)?.source ?? "anonymous";
     }

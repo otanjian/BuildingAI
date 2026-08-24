@@ -17,6 +17,7 @@ CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
 DEV_PORTS=()
 OPENCODE_PORT="${OPENCODE_PORT:-4096}"
 OPENCODE_WORKSPACE_DIR="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
+OPENCODE_WEB_UI_CONTRACT="buildingai-embed-shell-v1"
 SAP_PORT="${MCP_PORT:-8100}"
 SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
 ERPNEXT_PORT=8000
@@ -79,8 +80,9 @@ Environment (root .env or shell):
   SERVER_PORT=4090                      API server HTTP port
   CLIENT_DEV_PORT=4091                  Web development server HTTP port
   OPENCODE_PORT=4096                    OpenCode serve HTTP port
-  OPENCODE_BIN                          Optional path to opencode binary
+  OPENCODE_BIN                          Optional path to an attested master-channel opencode binary
   OPENCODE_WORKSPACE_DIR                OpenCode source workspace (default: ../opencode)
+  OPENCODE_RUNTIME_ATTESTATION          Optional attestation path (default: <binary>.buildingai-attestation)
   BUILDINGAI_API_URL                    Internal API base used by OpenCode credential injection (default: API :4090)
   BUILDINGAI_OPENCODE_INTERNAL_KEY      Private API/OpenCode bridge key (override in shared deployments)
   BOWI_MCP_INVOCATION_SECRET            HMAC secret for short-lived first-party Bowi assertions (falls back to JWT_SECRET)
@@ -131,7 +133,7 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR OPENCODE_RUNTIME_ATTESTATION BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
@@ -263,15 +265,143 @@ web_proxy_ready() {
   curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/api/config" >/dev/null 2>&1
 }
 
-opencode_ready() {
+opencode_health_ready() {
   local port="${OPENCODE_PORT:-4096}"
   curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/global/health" >/dev/null 2>&1
 }
 
-opencode_workspace_version() {
-  local package_json="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}/packages/opencode/package.json"
-  [[ -f "$package_json" ]] || return 1
-  sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$package_json" | head -n 1
+opencode_version_is_master() {
+  local version="${1:-}"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-master($|-) ]]
+}
+
+opencode_html_has_contract() {
+  local html="${1:-}"
+  [[ "$html" == *'name="buildingai-web-ui-contract"'* \
+    && "$html" == *"content=\"${OPENCODE_WEB_UI_CONTRACT}\""* ]]
+}
+
+opencode_web_ui_compatible() {
+  local port="${OPENCODE_PORT:-4096}" html
+  html="$(curl -sf --noproxy '*' --max-time 5 "http://127.0.0.1:${port}/" 2>/dev/null || true)"
+  opencode_html_has_contract "$html"
+}
+
+opencode_ready() {
+  local version
+  opencode_health_ready || return 1
+  version="$(opencode_reported_version || true)"
+  opencode_version_is_master "$version" && opencode_web_ui_compatible
+}
+
+opencode_source_fingerprint() {
+  local workspace="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
+  [[ -d "${workspace}/.git" ]] || {
+    echo "OpenCode source fingerprint failed: ${workspace} is not a Git workspace." >&2
+    return 1
+  }
+
+  (
+    cd "$workspace"
+    git ls-files -z --cached --others --exclude-standard -- \
+      package.json bun.lock \
+      packages/app \
+      packages/opencode/package.json packages/opencode/script packages/opencode/src \
+      packages/script/package.json packages/script/src \
+      packages/session-ui/package.json packages/session-ui/src \
+      packages/ui/package.json packages/ui/src \
+      | perl -0 -ne '
+          chomp;
+          print $_, "\0";
+          open my $file_handle, "<", $_ or die "Cannot read $_: $!\n";
+          binmode $file_handle;
+          local $/;
+          print <$file_handle>;
+        '
+  ) | shasum -a 256 | awk '{print $1}'
+}
+
+opencode_attestation_path() {
+  local bin="$1"
+  printf '%s' "${OPENCODE_RUNTIME_ATTESTATION:-${bin}.buildingai-attestation}"
+}
+
+opencode_attestation_value() {
+  local file="$1" key="$2"
+  sed -nE "s/^${key}=(.*)$/\\1/p" "$file" | head -n 1
+}
+
+opencode_binary_contains_contract() {
+  local bin="$1"
+  [[ -f "$bin" ]] && LC_ALL=C grep -aFq "$OPENCODE_WEB_UI_CONTRACT" "$bin"
+}
+
+opencode_write_runtime_attestation() {
+  local bin="$1" attestation binary_sha source_sha
+  if ! opencode_binary_contains_contract "$bin"; then
+    echo "OpenCode build is missing the embedded BuildingAI Web UI contract: ${OPENCODE_WEB_UI_CONTRACT}" >&2
+    return 1
+  fi
+
+  attestation="$(opencode_attestation_path "$bin")"
+  binary_sha="$(shasum -a 256 "$bin" | awk '{print $1}')"
+  source_sha="$(opencode_source_fingerprint)"
+  {
+    printf 'contract=%s\n' "$OPENCODE_WEB_UI_CONTRACT"
+    printf 'binary_sha256=%s\n' "$binary_sha"
+    printf 'source_sha256=%s\n' "$source_sha"
+  } >"$attestation"
+  echo "OpenCode runtime attested: ${attestation}"
+}
+
+opencode_binary_integrity_valid() {
+  local bin="$1" attestation expected actual version
+  version="$(opencode_binary_version "$bin" || true)"
+  if ! opencode_version_is_master "$version"; then
+    echo "OpenCode master-channel runtime is required; selected version: ${version:-unknown}." >&2
+    return 1
+  fi
+
+  if ! opencode_binary_contains_contract "$bin"; then
+    echo "OpenCode binary is missing the embedded BuildingAI Web UI contract." >&2
+    return 1
+  fi
+
+  attestation="$(opencode_attestation_path "$bin")"
+  if [[ ! -f "$attestation" ]]; then
+    echo "OpenCode runtime attestation is missing: ${attestation}" >&2
+    return 1
+  fi
+
+  expected="$(opencode_attestation_value "$attestation" contract)"
+  if [[ "$expected" != "$OPENCODE_WEB_UI_CONTRACT" ]]; then
+    echo "OpenCode runtime attestation has an incompatible Web UI contract." >&2
+    return 1
+  fi
+
+  expected="$(opencode_attestation_value "$attestation" binary_sha256)"
+  actual="$(shasum -a 256 "$bin" | awk '{print $1}')"
+  if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+    echo "OpenCode binary fingerprint does not match its attestation." >&2
+    return 1
+  fi
+
+  expected="$(opencode_attestation_value "$attestation" source_sha256)"
+  actual="$(opencode_source_fingerprint)"
+  if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+    echo "OpenCode runtime source changed after the binary was built." >&2
+    return 1
+  fi
+}
+
+opencode_rebuild_hint() {
+  echo "  Rebuild with: ./scripts/build-opencode-runtime.sh" >&2
+}
+
+opencode_binary_version() {
+  local bin="$1"
+  [[ -x "$bin" ]] || return 1
+  "$bin" --version 2>/dev/null | head -n 1
 }
 
 opencode_reported_version() {
@@ -280,13 +410,32 @@ opencode_reported_version() {
     | sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p'
 }
 
-opencode_runtime_matches_workspace() {
-  local expected actual
+opencode_active_runtime_path() {
+  printf '%s' "${RUN_DIR}/opencode-runtime.state"
+}
+
+opencode_write_active_runtime() {
+  local bin="$1" state tmp version binary_sha
+  ensure_run_dir
+  state="$(opencode_active_runtime_path)"
+  tmp="${state}.tmp.$$"
+  version="$(opencode_binary_version "$bin")"
+  binary_sha="$(shasum -a 256 "$bin" | awk '{print $1}')"
+  printf 'version=%s\nbinary_sha256=%s\n' "$version" "$binary_sha" >"$tmp"
+  mv "$tmp" "$state"
+}
+
+opencode_runtime_matches_binary() {
+  local bin="$1" state expected_version actual_version expected_sha actual_sha
   opencode_ready || return 1
-  expected="$(opencode_workspace_version || true)"
-  [[ -z "$expected" ]] && return 0
-  actual="$(opencode_reported_version || true)"
-  [[ -n "$actual" && "$actual" == "$expected" ]]
+  state="$(opencode_active_runtime_path)"
+  [[ -f "$state" ]] || return 1
+  expected_version="$(opencode_binary_version "$bin" || true)"
+  actual_version="$(opencode_reported_version || true)"
+  [[ -n "$expected_version" && "$actual_version" == "$expected_version" ]] || return 1
+  expected_sha="$(opencode_attestation_value "$state" binary_sha256)"
+  actual_sha="$(shasum -a 256 "$bin" | awk '{print $1}')"
+  [[ -n "$expected_sha" && "$actual_sha" == "$expected_sha" ]]
 }
 
 resolve_opencode_bin() {
@@ -852,18 +1001,27 @@ start_opencode() {
     return 1
   fi
 
-  if opencode_runtime_matches_workspace; then
+  if ! opencode_binary_integrity_valid "$bin"; then
+    echo "Error: refusing to start an unverified OpenCode runtime: ${bin}" >&2
+    opencode_rebuild_hint
+    return 1
+  fi
+
+  if opencode_runtime_matches_binary "$bin"; then
     echo "  OpenCode: already healthy at http://127.0.0.1:${OPENCODE_PORT}/"
     return 0
   fi
 
-  if opencode_ready; then
-    echo "  OpenCode: running version $(opencode_reported_version || echo unknown), restarting for workspace version $(opencode_workspace_version || echo unknown)..."
+  if opencode_health_ready; then
+    echo "  OpenCode: running version $(opencode_reported_version || echo unknown), restarting for selected build $(opencode_binary_version "$bin" || echo unknown)..."
   fi
 
   load_nvm
   cd "${ROOT_DIR}"
   pnpm exec pm2 delete opencode-serve 2>/dev/null || true
+  # PM2 can report deletion before the child has released its listening socket.
+  # This only targets the managed OpenCode port and prevents a half-finished restart.
+  kill_port "$OPENCODE_PORT"
   ensure_ports_available "$force" "$OPENCODE_PORT"
 
   echo "Starting OpenCode serve on port ${OPENCODE_PORT}..."
@@ -879,13 +1037,27 @@ start_opencode() {
   local i=0
   while [[ $i -lt 30 ]]; do
     if opencode_ready; then
+      opencode_write_active_runtime "$bin"
       echo "  OpenCode: http://127.0.0.1:${OPENCODE_PORT}/  (log: .run/opencode-serve.log)"
       return 0
+    fi
+    if opencode_health_ready; then
+      local reported_version
+      reported_version="$(opencode_reported_version || true)"
+      if ! opencode_version_is_master "$reported_version"; then
+        echo "Error: OpenCode started with non-master version: ${reported_version:-unknown}." >&2
+        echo "  BuildingAI requires a master-channel runtime on port ${OPENCODE_PORT}." >&2
+        return 1
+      fi
     fi
     sleep 1
     i=$((i + 1))
   done
   echo "Warning: OpenCode :${OPENCODE_PORT} did not become healthy. See .run/opencode-serve.log"
+  if opencode_health_ready && ! opencode_web_ui_compatible; then
+    echo "  OpenCode health is green, but the served Web UI lacks ${OPENCODE_WEB_UI_CONTRACT}." >&2
+    opencode_rebuild_hint
+  fi
   tail -20 "${RUN_DIR}/opencode-serve.log" 2>/dev/null || true
   return 1
 }
@@ -1273,6 +1445,25 @@ stop_target() {
   esac
 }
 
+preflight_target() {
+  local target="${1:-all}" bin
+  case "$target" in
+    all | dev | opencode)
+      should_start_opencode || return 0
+      bin="$(resolve_opencode_bin || true)"
+      if [[ -z "$bin" ]]; then
+        echo "Error: OpenCode binary not found for ${target} restart preflight." >&2
+        return 1
+      fi
+      if ! opencode_binary_integrity_valid "$bin"; then
+        echo "Error: refusing to stop services for an unverified OpenCode replacement: ${bin}" >&2
+        opencode_rebuild_hint
+        return 1
+      fi
+      ;;
+  esac
+}
+
 start_target() {
   local target="${1:-all}"
   local force="${2:-0}"
@@ -1288,7 +1479,7 @@ start_target() {
       start_infra
       start_sap_mcp "$force" "$skip_sap_build" 0 || true
       start_sap_pyrfc_mcp "$force" 0 || true
-      start_opencode "$force" || true
+      start_opencode "$force"
       if [[ "$detach" == 1 ]]; then
         start_dev "$force" 1
       else
@@ -1296,7 +1487,7 @@ start_target() {
       fi
       ;;
     dev)
-      start_opencode "$force" || true
+      start_opencode "$force"
       if [[ "$detach" == 1 ]]; then
         start_dev "$force" 1
       else
@@ -1377,6 +1568,7 @@ main() {
       load_root_env
       ensure_run_dir
       echo "Restarting target: ${TARGET}..."
+      preflight_target "$TARGET"
       stop_target "$TARGET"
       start_target "$TARGET" 1 "$DETACH" 1
       ;;

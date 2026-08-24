@@ -45,7 +45,9 @@ export class SapPyrfcMcpAdapter implements OnModuleDestroy {
     }
 
     async health(principal: BowiPrincipal): Promise<unknown> {
-        return this.withLease(principal, "healthcheck", {}, true);
+        return this.withoutConnectionHandles(
+            await this.withLease(principal, "healthcheck", {}, true),
+        );
     }
 
     async readTable(principal: BowiPrincipal, args: Record<string, unknown>): Promise<unknown> {
@@ -207,6 +209,16 @@ export class SapPyrfcMcpAdapter implements OnModuleDestroy {
         if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
         const field = (value as Record<string, unknown>)[key];
         return typeof field === "string" && field.trim() ? field.trim() : undefined;
+    }
+
+    private withoutConnectionHandles(value: unknown): unknown {
+        if (Array.isArray(value)) return value.map((item) => this.withoutConnectionHandles(item));
+        if (!value || typeof value !== "object") return value;
+        return Object.fromEntries(
+            Object.entries(value)
+                .filter(([key]) => key !== "connection_id")
+                .map(([key, nested]) => [key, this.withoutConnectionHandles(nested)]),
+        );
     }
 
     private configuredAllowlist(): string[] {

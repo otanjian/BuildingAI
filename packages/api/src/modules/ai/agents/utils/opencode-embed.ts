@@ -23,12 +23,58 @@ export function encodeOpencodeServerKey(baseURL: string): string {
     return toBase64Url(normalizeOpencodeEmbedOrigin(baseURL));
 }
 
-export function buildOpencodeEmbedUrl(baseURL: string, sessionId: string): string {
+function normalizeHttpOrigin(value: string | undefined): string | undefined {
+    if (!value?.trim()) return undefined;
+    try {
+        const parsed = new URL(value.trim());
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+        if (parsed.username || parsed.password) return undefined;
+        return parsed.origin;
+    } catch {
+        return undefined;
+    }
+}
+
+export function resolveBuildingAIWebOrigin(input: {
+    origin?: string;
+    referer?: string;
+    configuredWebOrigin?: string;
+}): string {
+    const origin = normalizeHttpOrigin(input.origin);
+    if (origin) return origin;
+    const referer = normalizeHttpOrigin(input.referer);
+    if (referer) return referer;
+    const configured = normalizeHttpOrigin(input.configuredWebOrigin);
+    if (configured) return configured;
+    return `http://127.0.0.1:${process.env.CLIENT_DEV_PORT?.trim() || "4091"}`;
+}
+
+export function buildBuildingAIReportBase(
+    webOrigin: string,
+    agentId: string,
+    conversationId: string,
+): string {
+    const origin = normalizeHttpOrigin(webOrigin);
+    if (!origin) throw new Error("BuildingAI web origin must use http or https");
+    return `${origin}/agents/${encodeURIComponent(agentId)}/c/${encodeURIComponent(conversationId)}/reports/`;
+}
+
+export function buildOpencodeEmbedUrl(
+    baseURL: string,
+    sessionId: string,
+    context?: { reportBase?: string; artifactRoot?: string },
+): string {
     const origin = normalizeOpencodeEmbedOrigin(baseURL);
     const url = new URL(
         `${origin}/server/${encodeOpencodeServerKey(origin)}/session/${encodeURIComponent(sessionId)}`,
     );
     url.searchParams.set("buildingaiEmbed", "1");
+    if (context?.reportBase) {
+        url.searchParams.set("buildingaiReportBase", context.reportBase);
+    }
+    if (context?.artifactRoot) {
+        url.searchParams.set("buildingaiArtifactRoot", context.artifactRoot);
+    }
     return url.toString();
 }
 

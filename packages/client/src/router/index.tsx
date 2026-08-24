@@ -11,14 +11,15 @@ import AgentConfigurationPage from "@/pages/agents/detail/configuration";
 import AgentLogsPage from "@/pages/agents/detail/logs";
 import AgentMonitoringPage from "@/pages/agents/detail/monitoring";
 import AgentPublishPage from "@/pages/agents/detail/publish";
+import AgentReportPage from "@/pages/agents/report";
 import PublishChatPage from "@/pages/agents/site-chat";
 import AgentsWorkspacePage from "@/pages/agents/workspace";
 import AppsIndexPage from "@/pages/apps";
 import DatasetsIndexPage from "@/pages/datasets";
 import DatasetsLayout from "@/pages/datasets/_layouts";
 import DatasetsDetailPage from "@/pages/datasets/detail";
-import PersonalTodosPage from "@/pages/todos";
 import InstallPage from "@/pages/install";
+import PersonalTodosPage from "@/pages/todos";
 
 import { usePlatformEmbedNavBridge } from "../helpers/platformEmbedNav";
 import ConsoleLayout from "../layouts/console";
@@ -113,6 +114,14 @@ export const router = createBrowserRouter([
         element: (
           <AuthGuard>
             <AgentChatPage />
+          </AuthGuard>
+        ),
+      },
+      {
+        path: "/agents/:id/c/:uuid/reports/*",
+        element: (
+          <AuthGuard>
+            <AgentReportPage />
           </AuthGuard>
         ),
       },

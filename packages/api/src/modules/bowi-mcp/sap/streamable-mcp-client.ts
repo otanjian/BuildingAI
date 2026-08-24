@@ -82,7 +82,9 @@ export class StreamableMcpClient {
     }
 
     private resultData(result: { structuredContent?: unknown; content?: unknown }): unknown {
-        if (result.structuredContent !== undefined) return result.structuredContent;
+        if (result.structuredContent !== undefined) {
+            return this.structuredData(result.structuredContent);
+        }
         if (!Array.isArray(result.content)) return {};
         const text = result.content
             .filter((item): item is { type: "text"; text: string } =>
@@ -91,6 +93,24 @@ export class StreamableMcpClient {
             .map((item) => item.text)
             .join("\n");
         if (!text) return {};
+        return this.textData(text);
+    }
+
+    private structuredData(value: unknown): unknown {
+        if (
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value) &&
+            Object.keys(value).length === 1 &&
+            "result" in value
+        ) {
+            const wrapped = (value as { result: unknown }).result;
+            return typeof wrapped === "string" ? this.textData(wrapped) : wrapped;
+        }
+        return typeof value === "string" ? this.textData(value) : value;
+    }
+
+    private textData(text: string): unknown {
         try {
             return JSON.parse(text);
         } catch {

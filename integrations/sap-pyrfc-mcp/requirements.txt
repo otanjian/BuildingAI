@@ -1,4 +1,5 @@
 mcp>=1.2.0
 uvicorn>=0.30.0
-# Install after SAP NW RFC SDK is available (see install-nwrfcsdk.sh):
-# pyrfc>=3.3.1
+# PyRFC has native, licensed SDK prerequisites and is intentionally installed by
+# install-pyrfc.sh instead of this generic runtime requirements file.
+# Supported pin: pyrfc==3.3.1 (the last published SAP release; now yanked).

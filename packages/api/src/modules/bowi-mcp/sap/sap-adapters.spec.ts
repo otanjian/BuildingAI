@@ -141,6 +141,41 @@ describe("SAP MCP adapters", () => {
         );
     });
 
+    it("removes internal connection ids from PyRFC health results", async () => {
+        const mcp = {
+            call: jest
+                .fn()
+                .mockResolvedValueOnce({ connection_id: "private-connection" })
+                .mockResolvedValueOnce({
+                    status: "connected",
+                    connection: { connection_id: "private-connection", backend: "adt" },
+                    ping: { status: "ok" },
+                }),
+        };
+        const profiles = {
+            resolvePyrfc: jest.fn().mockResolvedValue({
+                ashost: "sap.test",
+                sysnr: "00",
+                client: "100",
+                user: "SAPUSER",
+                password: "secret",
+                language: "EN",
+                backend: "auto",
+            }),
+            fingerprint: jest.fn().mockReturnValue("fingerprint-user-1"),
+        };
+        const adapter = new SapPyrfcMcpAdapter(profiles as never, mcp as never);
+
+        const result = await adapter.health(principal("user-1"));
+
+        expect(result).toEqual({
+            status: "connected",
+            connection: { backend: "adt" },
+            ping: { status: "ok" },
+        });
+        expect(JSON.stringify(result)).not.toContain("private-connection");
+    });
+
     it("enforces the RFC allowlist unless the principal is an RFC administrator", async () => {
         const mcp = { call: jest.fn() };
         const profiles = {

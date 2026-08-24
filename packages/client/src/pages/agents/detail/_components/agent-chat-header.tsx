@@ -1,9 +1,9 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Button } from "@buildingai/ui/components/ui/button";
-import { cn } from "@buildingai/ui/lib/utils";
-import { Bot, ChevronLeft, ListIndentDecrease, PanelLeft } from "lucide-react";
-import type { ReactNode } from "react";
 import { SheetTrigger } from "@buildingai/ui/components/ui/sheet";
+import { cn } from "@buildingai/ui/lib/utils";
+import { Bot, ChevronLeft, PanelLeft } from "lucide-react";
+import type { ReactNode } from "react";
 
 type AgentChatHeaderProps = {
   avatar?: string | null;
@@ -25,7 +25,12 @@ export function AgentChatHeader({
   className,
 }: AgentChatHeaderProps) {
   return (
-    <header className={cn("sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3", className)}>
+    <header
+      className={cn(
+        "sticky top-0 z-10 flex items-center justify-between gap-2 px-3 pt-3",
+        className,
+      )}
+    >
       <div className="flex items-center gap-1">
         <SheetTrigger asChild>
           <Button
@@ -45,7 +50,7 @@ export function AgentChatHeader({
           aria-label={panelExpanded ? "收起侧栏" : "展开侧栏"}
           onClick={onTogglePanel}
         >
-          <ListIndentDecrease className={cn("size-4", !panelExpanded && "rotate-180")} />
+          <PanelLeft className="size-4" />
         </Button>
         <Button variant="ghost" size="icon-sm" aria-label="返回智能体列表" onClick={onBack}>
           <ChevronLeft />
