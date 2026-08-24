@@ -7,9 +7,7 @@ cd "$ROOT"
 # shellcheck source=scripts/runtime-env.sh
 source "${ROOT}/scripts/runtime-env.sh"
 
-PYRFC_VERSION="${PYRFC_VERSION:-3.3.1}"
 PYRFC_GIT="${PYRFC_GIT:-https://github.com/SAP/PyRFC.git}"
-PYRFC_REF="${PYRFC_REF:-v${PYRFC_VERSION}}"
 BUILD_DIR="${ROOT}/.build/pyrfc-src"
 DEV_SIDECAR_HTTP_PROXY="${DEV_SIDECAR_HTTP_PROXY:-${DS_HTTP_PROXY:-http://127.0.0.1:31180}}"
 DEV_SIDECAR_HTTPS_PROXY="${DEV_SIDECAR_HTTPS_PROXY:-${DS_HTTPS_PROXY:-http://127.0.0.1:31181}}"
@@ -22,6 +20,7 @@ load_env_var() {
 }
 
 if [[ -f .env.local-sdk ]]; then
+  load_sap_pyrfc_runtime_profile .env.local-sdk
   SAPNWRFC_HOME="${SAPNWRFC_HOME:-$(load_env_var SAPNWRFC_HOME .env.local-sdk)}"
 fi
 if [[ -f .env ]]; then
@@ -32,18 +31,31 @@ if [[ -z "${SAPNWRFC_HOME:-}" ]]; then
   exit 1
 fi
 configure_sdk_runtime "$SAPNWRFC_HOME"
+ensure_sap_pyrfc_arch_available
+PYRFC_VERSION="$(sap_pyrfc_version)"
+PYRFC_REF="${PYRFC_REF:-v${PYRFC_VERSION}}"
 
-VENV="${ROOT}/.venv"
+VENV="$(sap_pyrfc_venv "$ROOT")"
 if [[ ! -d "$VENV" ]]; then
-  "$(pick_sap_pyrfc_python)" -m venv "$VENV"
+  PYTHON_BIN="$(pick_sap_pyrfc_python)"
+  echo "Creating ${SAP_PYRFC_EXECUTION_MODE:-native} ${SAP_PYRFC_RUNTIME_ARCH:-$(uname -m)} environment with ${PYTHON_BIN} ..."
+  run_sap_pyrfc_arch "$PYTHON_BIN" -m venv "$VENV"
 fi
 # shellcheck source=/dev/null
 source "${VENV}/bin/activate"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
-python -m sap_pyrfc_mcp.sdk_probe --home "$SAPNWRFC_HOME" --require-ready >/dev/null || {
+run_python() {
+  run_sap_pyrfc_arch "${VENV}/bin/python" "$@"
+}
+
+echo "Installing shared MCP dependencies into $(basename "$VENV") ..."
+run_python -m pip install -q -U pip
+run_python -m pip install -q -r "${ROOT}/requirements.txt"
+
+run_python -m sap_pyrfc_mcp.sdk_probe --home "$SAPNWRFC_HOME" --require-ready >/dev/null || {
   echo "The configured SAP NW RFC SDK is not compatible with this Python runtime." >&2
-  python -m sap_pyrfc_mcp.sdk_probe --home "$SAPNWRFC_HOME" >&2
+  run_python -m sap_pyrfc_mcp.sdk_probe --home "$SAPNWRFC_HOME" >&2
   exit 1
 }
 
@@ -73,7 +85,7 @@ ensure_macos_rpath() {
 }
 
 fix_macos_sdk_paths() {
-  local lib_dir="${SAPNWRFC_HOME}/lib" dylib dependency base binary
+  local lib_dir="${SAPNWRFC_HOME}/lib" dylib dependency base binary replacement
   command -v install_name_tool >/dev/null 2>&1 || {
     echo "Xcode command-line tools are required (install_name_tool missing)." >&2
     exit 1
@@ -85,13 +97,14 @@ fix_macos_sdk_paths() {
     ensure_macos_rpath "$dylib" "$lib_dir"
     while IFS= read -r dependency; do
       base="$(basename "$dependency")"
-      [[ "$dependency" == @loader_path/* ]] || continue
-      [[ -f "${lib_dir}/${base}" ]] || continue
-      install_name_tool -change "$dependency" "@rpath/${base}" "$dylib"
+      replacement="$(macos_sdk_dependency_target "$dependency" "$lib_dir")"
+      [[ -n "$replacement" ]] || continue
+      install_name_tool -change "$dependency" "$replacement" "$dylib"
     done < <(otool -L "$dylib" | tail -n +2 | awk '{print $1}')
+    codesign --force --sign - "$dylib" >/dev/null 2>&1
   done < <(find "$lib_dir" -maxdepth 1 -type f -name '*.dylib' -print)
 
-  binary="$(python - <<'PY'
+  binary="$(run_python - <<'PY'
 from importlib.metadata import files
 from pathlib import Path
 for item in files("pyrfc") or []:
@@ -106,23 +119,24 @@ PY
   }
   chmod u+w "$binary"
   ensure_macos_rpath "$binary" "$lib_dir"
+  codesign --force --sign - "$binary" >/dev/null 2>&1
 }
 
 install_macos_wheel() {
   echo "Installing official PyRFC ${PYRFC_VERSION} macOS wheel ..."
   echo "Note: this pinned release is yanked because upstream maintenance ended."
-  python -m pip install --only-binary=:all: --force-reinstall "pyrfc==${PYRFC_VERSION}"
+  run_python -m pip install --only-binary=:all: --force-reinstall "pyrfc==${PYRFC_VERSION}"
   fix_macos_sdk_paths
 }
 
 install_linux_source() {
   local sdk_tier
-  sdk_tier="$(python - <<'PY'
+  sdk_tier="$(run_python - <<'PY'
 from sap_pyrfc_mcp.sdk_probe import probe_sdk
 print(probe_sdk()["tier"])
 PY
 )"
-  python -m pip install -q -U pip setuptools wheel cython
+  run_python -m pip install -q -U pip setuptools wheel cython
   if [[ -e "$BUILD_DIR" ]]; then
     echo "Removing previous PyRFC build directory: ${BUILD_DIR}"
     find "$BUILD_DIR" -depth -delete
@@ -132,9 +146,9 @@ PY
   git_with_proxy clone --depth 1 --branch "$PYRFC_REF" "$PYRFC_GIT" "$BUILD_DIR"
   if [[ "$sdk_tier" == "legacy" ]]; then
     echo "Applying legacy Linux SDK compatibility patch ..."
-    python "${ROOT}/scripts/patch-pyrfc-legacy-sdk.py" "$BUILD_DIR"
+    run_python "${ROOT}/scripts/patch-pyrfc-legacy-sdk.py" "$BUILD_DIR"
   fi
-  python -m pip install "$BUILD_DIR"
+  run_python -m pip install "$BUILD_DIR"
 }
 
 case "$(sap_pyrfc_platform)" in

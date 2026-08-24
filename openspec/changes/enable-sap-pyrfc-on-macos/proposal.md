@@ -10,6 +10,7 @@ BuildingAI now routes normal SAP work through Bowi MCP, so a Mac development wor
 
 - Add a cross-platform SAP NW RFC SDK installer that accepts an official SDK archive or directory for the current operating system and architecture.
 - Install the official prebuilt PyRFC wheel on macOS while retaining source-build support on Linux and legacy-SDK compatibility where applicable.
+- Select the managed runtime from the supplied SDK architecture: native ARM64 on Apple Silicon when available, or an isolated Rosetta/x86_64 Python environment for an Intel macOS SDK, without replacing the native or Linux runtime path.
 - Detect both macOS `.dylib` and Linux `.so` SDK layouts and report actionable platform/architecture diagnostics.
 - Configure the correct runtime library search path on macOS and Linux before importing or starting PyRFC.
 - Add a repeatable verification command that checks the SDK, PyRFC import, native library architecture, and optional live `RFC_PING`.
@@ -20,7 +21,7 @@ BuildingAI now routes normal SAP work through Bowi MCP, so a Mac development wor
 - Redistributing SAP NW RFC SDK binaries or credentials.
 - Expanding the RFC allowlist or changing SAP authorization policy.
 - Replacing the ADT fallback or combining the ADT and PyRFC processes.
-- Promising compatibility for an SDK whose native architecture does not match the selected Python runtime.
+- Translating or modifying SAP SDK binaries; every selected Python and PyRFC native extension must still match the SDK architecture exactly.
 
 ## Capabilities
 
@@ -34,4 +35,4 @@ None.
 
 ## Impact
 
-This affects the scripts, Python SDK probe, tests, dependency declaration, and operator documentation under `integrations/sap-pyrfc-mcp`. The Bowi MCP API and model-visible SAP tool contracts remain unchanged. Operators must still supply a licensed SAP NW RFC SDK build matching their host operating system and architecture.
+This affects the scripts, Python SDK probe, tests, dependency declaration, and operator documentation under `integrations/sap-pyrfc-mcp`. The Bowi MCP API and model-visible SAP tool contracts remain unchanged. Operators must still supply a licensed SAP NW RFC SDK build matching the operating system. On Apple Silicon, either an ARM64 SDK or an Intel macOS SDK executed through Rosetta is supported.

@@ -30,6 +30,7 @@ if [[ -f .env ]]; then
 fi
 if [[ -f .env.local-sdk ]]; then
   load_dotenv .env.local-sdk
+  load_sap_pyrfc_runtime_profile .env.local-sdk
 fi
 
 unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
@@ -37,22 +38,27 @@ export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
 export no_proxy="$NO_PROXY"
 
 configure_sdk_runtime "${SAPNWRFC_HOME:-}"
+ensure_sap_pyrfc_arch_available
 PYTHON_BIN="$(pick_sap_pyrfc_python)"
 
-VENV="${ROOT}/.venv"
+VENV="$(sap_pyrfc_venv "$ROOT")"
 if [[ ! -d "$VENV" ]]; then
-  echo "Creating Python venv with ${PYTHON_BIN} ..."
-  "$PYTHON_BIN" -m venv "$VENV"
+  echo "Creating Python venv for $(sap_pyrfc_runtime_arch) with ${PYTHON_BIN} ..."
+  run_sap_pyrfc_arch "$PYTHON_BIN" -m venv "$VENV"
 fi
 
 # shellcheck source=/dev/null
 source "${VENV}/bin/activate"
 
+run_python() {
+  run_sap_pyrfc_arch "${VENV}/bin/python" "$@"
+}
+
 if [[ -z "${SAP_PYRFC_SKIP_INSTALL:-}" || "${SAP_PYRFC_SKIP_INSTALL}" == "0" ]]; then
   echo "Installing Python dependencies ..."
-  pip install -q -U pip
-  pip install -q -r requirements.txt
-  if ! python -c "from pyrfc import Connection" 2>/dev/null; then
+  run_python -m pip install -q -U pip
+  run_python -m pip install -q -r requirements.txt
+  if ! run_python -c "from pyrfc import Connection" 2>/dev/null; then
     echo "PyRFC is not ready — run ./install-nwrfcsdk.sh <official-sdk> && ./install-pyrfc.sh."
     echo "  Diagnose local prerequisites with ./verify.sh."
     echo "  ADT fallback works if sap_connect includes url=https://host:44300."
@@ -62,7 +68,7 @@ else
 fi
 
 # uvicorn comes with mcp[cli] / streamable-http path
-python -c "import uvicorn" 2>/dev/null || pip install -q uvicorn
+run_python -c "import uvicorn" 2>/dev/null || run_python -m pip install -q uvicorn
 
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
@@ -83,10 +89,16 @@ if command -v lsof >/dev/null 2>&1; then
 fi
 
 echo "Starting sap-pyrfc multi-user HTTP gateway"
+echo "  runtime: ${SAP_PYRFC_EXECUTION_MODE:-native} $(sap_pyrfc_runtime_arch), venv=$(basename "$VENV")"
 echo "  URL:    http://${MCP_HOST}:${MCP_PORT}${MCP_PATH}"
 echo "  limits: MAX_CONNECTIONS=${MAX_CONNECTIONS} IDLE_TTL_MS=${IDLE_TTL_MS}"
 echo "  flow:   sap_connect → connection_id → call_rfc/read_table/…"
 echo "Register in BuildingAI: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
 
-exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
-  python -m sap_pyrfc_mcp
+if [[ "$(sap_pyrfc_platform)" == Darwin && "$(sap_pyrfc_runtime_arch)" == x86_64 ]]; then
+  exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
+    /usr/bin/arch -x86_64 "${VENV}/bin/python" -m sap_pyrfc_mcp
+else
+  exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
+    "${VENV}/bin/python" -m sap_pyrfc_mcp
+fi

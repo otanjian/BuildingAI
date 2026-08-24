@@ -23,6 +23,7 @@ import { HttpErrorFactory } from "@buildingai/errors";
 import { generateNo, isDisabled, isEnabled } from "@buildingai/utils";
 import { RolePermissionService } from "@common/modules/auth/services/role-permission.service";
 import { UserTokenService } from "@common/modules/auth/services/user-token.service";
+import { resolveUserAvatar } from "@common/utils/default-user-avatar";
 import { Inject, Injectable } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 
@@ -355,9 +356,7 @@ export class UserService extends BaseService<User> {
             nickname,
             source: UserCreateSource.CONSOLE,
             userNo: await generateNo(this.userRepository, "userNo"),
-            avatar: createUserDto.avatar
-                ? createUserDto.avatar
-                : `/static/avatars/${Math.floor(Math.random() * 33) + 1}.png`,
+            avatar: resolveUserAvatar(createUserDto.avatar),
         });
 
         // 如果有角色ID，添加角色关联

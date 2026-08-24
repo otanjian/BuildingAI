@@ -6,6 +6,7 @@ jest.mock("chalk", () => {
 
 import type { BowiPrincipal } from "../types/bowi-mcp.types";
 import { SapAdtMcpAdapter } from "./sap-adt-mcp.adapter";
+import { SapConnectionProfileService } from "./sap-connection-profile.service";
 import { SapPyrfcMcpAdapter } from "./sap-pyrfc-mcp.adapter";
 
 const principal = (id: string, capabilities: string[] = ["sap.read", "sap.rfc"]): BowiPrincipal => ({
@@ -16,6 +17,28 @@ const principal = (id: string, capabilities: string[] = ["sap.read", "sap.rfc"])
 });
 
 describe("SAP MCP adapters", () => {
+    it("allows a verified ADT call when the service profile is explicitly enabled", async () => {
+        const previous = process.env.BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED;
+        process.env.BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED = "true";
+        try {
+            const client = { call: jest.fn().mockResolvedValue({ results: [] }) };
+            const profiles = new SapConnectionProfileService({} as never);
+            const adapter = new SapAdtMcpAdapter(profiles, client as never);
+
+            await expect(
+                adapter.call(principal("user-1"), "searchObject", { query: "Z_TEST" }),
+            ).resolves.toEqual({ results: [] });
+            expect(client.call).toHaveBeenCalledWith(
+                expect.stringContaining("8100/mcp"),
+                "searchObject",
+                { query: "Z_TEST" },
+            );
+        } finally {
+            if (previous === undefined) delete process.env.BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED;
+            else process.env.BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED = previous;
+        }
+    });
+
     it("uses a fresh isolated client for every ADT call", async () => {
         const client = { call: jest.fn().mockResolvedValue({ source: "REPORT z." }) };
         const profile = { requireAdtServiceProfile: jest.fn().mockReturnValue({ mode: "service" }) };

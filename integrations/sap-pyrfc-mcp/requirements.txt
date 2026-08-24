@@ -1,5 +1,9 @@
-mcp>=1.2.0
+mcp>=1.2.0,<2.0.0
 uvicorn>=0.30.0
+# cryptography 43+ no longer publishes a CPython macOS x86_64 wheel. Without
+# this marker pip compiles an arm64 Rust extension while running under Rosetta.
+cryptography==42.0.8; sys_platform == "darwin" and platform_machine == "x86_64"
 # PyRFC has native, licensed SDK prerequisites and is intentionally installed by
 # install-pyrfc.sh instead of this generic runtime requirements file.
-# Supported pin: pyrfc==3.3.1 (the last published SAP release; now yanked).
+# Supported pins: macOS ARM64 pyrfc==3.3.1; macOS x86_64 pyrfc==3.3;
+# Linux keeps the SDK-backed source build. All published pins are now yanked.

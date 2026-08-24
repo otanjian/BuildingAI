@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 type AgentChatHeaderProps = {
   avatar?: string | null;
   name?: string | null;
+  conversationTitle?: string | null;
   panelExpanded: boolean;
   onTogglePanel: () => void;
   onBack: () => void;
@@ -18,6 +19,7 @@ type AgentChatHeaderProps = {
 export function AgentChatHeader({
   avatar,
   name,
+  conversationTitle,
   panelExpanded,
   onTogglePanel,
   onBack,
@@ -62,7 +64,16 @@ export function AgentChatHeader({
               <Bot className="size-4" />
             </AvatarFallback>
           </Avatar>
-          <span className={panelExpanded ? "md:opacity-0" : "opacity-100 transition"}>{name}</span>
+          <span
+            data-slot="conversation-title"
+            className={cn(
+              "max-w-[min(48vw,32rem)] min-w-0 truncate text-sm font-medium",
+              !conversationTitle?.trim() &&
+                (panelExpanded ? "md:opacity-0" : "opacity-100 transition"),
+            )}
+          >
+            {conversationTitle?.trim() || name}
+          </span>
         </div>
       </div>
       <div className="flex items-center gap-0.5">{children}</div>

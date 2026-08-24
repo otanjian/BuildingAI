@@ -70,6 +70,7 @@ export function OpencodeIframePanel({
       <AgentChatHeader
         avatar={agentAvatar}
         name={agentName}
+        conversationTitle={embedQuery.data?.title}
         panelExpanded={panelExpanded}
         onTogglePanel={onTogglePanel}
         onBack={onBack}

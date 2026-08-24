@@ -65,7 +65,64 @@ test_installer_preserves_existing_sdk_on_platform_mismatch() {
   assert_contains "$(<"${temp}/output")" "Linux"
 }
 
+test_runtime_profile_paths() {
+  local root="/private/integration" output
+  output="$({
+    export SAP_PYRFC_PLATFORM=Darwin
+    export SAP_PYRFC_RUNTIME_ARCH=x86_64
+    source "${ROOT}/scripts/runtime-env.sh"
+    printf '%s\n' "$(sap_pyrfc_venv "$root")"
+    printf '%s\n' "$(sap_pyrfc_version)"
+    printf '%s\n' "$(sap_pyrfc_arch_prefix)"
+  })"
+  assert_contains "$output" "${root}/.venv-x86_64"
+  assert_contains "$output" "3.3"
+  assert_contains "$output" "/usr/bin/arch -x86_64"
+
+  output="$({
+    export SAP_PYRFC_PLATFORM=Darwin
+    export SAP_PYRFC_RUNTIME_ARCH=arm64
+    source "${ROOT}/scripts/runtime-env.sh"
+    printf '%s\n' "$(sap_pyrfc_venv "$root")"
+    printf '%s\n' "$(sap_pyrfc_version)"
+    printf '<%s>\n' "$(sap_pyrfc_arch_prefix)"
+  })"
+  assert_contains "$output" "${root}/.venv"
+  assert_contains "$output" "3.3.1"
+  assert_contains "$output" "<>"
+
+  output="$({
+    export SAP_PYRFC_PLATFORM=Linux
+    export SAP_PYRFC_RUNTIME_ARCH=x86_64
+    source "${ROOT}/scripts/runtime-env.sh"
+    printf '%s\n' "$(sap_pyrfc_venv "$root")"
+    printf '%s\n' "$(sap_pyrfc_install_mode)"
+  })"
+  assert_contains "$output" "${root}/.venv"
+  assert_contains "$output" "source"
+}
+
+test_macos_sdk_dependency_target() {
+  local output temp lib_dir
+  temp="$(mktemp -d)"
+  lib_dir="${temp}/lib"
+  mkdir -p "$lib_dir"
+  printf 'icu' >"${lib_dir}/libicudata57.dylib"
+  printf 'icu' >"${lib_dir}/libicuuc57.dylib"
+  output="$({
+    source "${ROOT}/scripts/runtime-env.sh"
+    macos_sdk_dependency_target "libicudata57.dylib" "$lib_dir"
+    macos_sdk_dependency_target "@loader_path/libicuuc57.dylib" "$lib_dir"
+    macos_sdk_dependency_target "/usr/lib/libSystem.B.dylib" "$lib_dir"
+  })"
+  assert_contains "$output" "@rpath/libicudata57.dylib"
+  assert_contains "$output" "@rpath/libicuuc57.dylib"
+  [[ "$output" != *"libSystem"* ]] || fail "System libraries must not be rewritten"
+}
+
 test_darwin_loader_path
 test_linux_loader_path
 test_installer_preserves_existing_sdk_on_platform_mismatch
+test_runtime_profile_paths
+test_macos_sdk_dependency_target
 echo "platform runtime tests passed"

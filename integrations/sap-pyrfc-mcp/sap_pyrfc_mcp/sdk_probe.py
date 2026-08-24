@@ -195,14 +195,113 @@ def probe_sdk(
     return base
 
 
+def select_runtime_profile(
+    home: str,
+    *,
+    platform_name: str | None = None,
+    host_architecture: str | None = None,
+    architecture_reader: ArchitectureReader | None = None,
+) -> dict[str, Any]:
+    """Select a Python/PyRFC runtime that exactly matches the supplied SDK."""
+
+    target_platform = normalize_platform(platform_name)
+    host_arch = normalize_architecture(host_architecture or platform.machine())
+    inspected = probe_sdk(
+        home,
+        platform_name=target_platform,
+        python_architecture=host_arch,
+        host_architecture=host_arch,
+        architecture_reader=architecture_reader,
+    )
+    profile: dict[str, Any] = {
+        "supported": False,
+        "platform": target_platform,
+        "platform_label": _platform_label(target_platform),
+        "host_architecture": host_arch,
+        "sdk_architectures": inspected.get("library_architectures", []),
+        "runtime_architecture": None,
+        "execution_mode": None,
+        "venv_name": None,
+        "python_version": None,
+        "pyrfc_version": None,
+        "pyrfc_install_mode": None,
+        "error": None,
+    }
+    if inspected.get("missing_libraries"):
+        profile["error"] = inspected.get("error") or "SDK layout is incomplete."
+        return profile
+
+    architectures_by_file = inspected.get("library_architectures_by_file", {})
+    architecture_sets = [
+        {normalize_architecture(value) for value in architectures_by_file.get(name, [])}
+        for name in inspected.get("required_libraries", [])
+    ]
+    common_architectures = set.intersection(*architecture_sets) if architecture_sets else set()
+    if not common_architectures:
+        profile["error"] = "SAP SDK libraries do not share a detectable native architecture."
+        return profile
+
+    runtime_arch: str | None = None
+    execution_mode = "native"
+    if host_arch in common_architectures:
+        runtime_arch = host_arch
+    elif target_platform == "darwin" and host_arch == "arm64" and "x86_64" in common_architectures:
+        runtime_arch = "x86_64"
+        execution_mode = "rosetta"
+    else:
+        profile["error"] = (
+            f"{_platform_label(target_platform)} host uses {host_arch}, but SAP SDK libraries contain "
+            f"{', '.join(sorted(common_architectures))}; no supported runtime profile is available."
+        )
+        return profile
+
+    if target_platform == "darwin" and runtime_arch == "arm64":
+        profile.update(
+            venv_name=".venv",
+            python_version="3.10-3.12",
+            pyrfc_version="3.3.1",
+            pyrfc_install_mode="wheel",
+        )
+    elif target_platform == "darwin" and runtime_arch == "x86_64":
+        profile.update(
+            venv_name=".venv-x86_64",
+            python_version="3.10",
+            pyrfc_version="3.3",
+            pyrfc_install_mode="wheel",
+        )
+    elif target_platform == "linux":
+        profile.update(
+            venv_name=".venv",
+            python_version="3.10+",
+            pyrfc_version="3.3.1",
+            pyrfc_install_mode="source",
+        )
+    else:
+        profile["error"] = f"PyRFC runtime selection is not supported for {_platform_label(target_platform)}."
+        return profile
+
+    profile.update(
+        supported=True,
+        runtime_architecture=runtime_arch,
+        execution_mode=execution_mode,
+    )
+    return profile
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Inspect SAP NW RFC SDK compatibility")
     parser.add_argument("--home", default=None, help="SDK root; defaults to SAPNWRFC_HOME")
     parser.add_argument("--require-ready", action="store_true", help="Exit non-zero unless ready")
+    parser.add_argument("--select-runtime", action="store_true", help="Select a runtime from the SDK architecture")
+    parser.add_argument("--require-supported", action="store_true", help="Exit non-zero unless runtime selection succeeds")
     args = parser.parse_args()
-    result = probe_sdk(args.home)
+    result = select_runtime_profile(args.home or sdk_home()) if args.select_runtime else probe_sdk(args.home)
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result["ready"] or not args.require_ready else 1
+    if args.require_ready and not result.get("ready", False):
+        return 1
+    if args.require_supported and not result.get("supported", False):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

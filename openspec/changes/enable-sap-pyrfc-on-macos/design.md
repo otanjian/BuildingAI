@@ -16,7 +16,7 @@ PyRFC 3.3.1 is the latest published compatible release and is now yanked because
 **Non-Goals:**
 
 - Managing SAP Support Portal authentication or accepting SAP license terms for the operator.
-- Building universal or translated binaries from incompatible SDK artifacts.
+- Building universal binaries or translating SAP SDK binaries.
 - Changing Bowi authorization, RFC allowlists, or user credential ownership.
 
 ## Decisions
@@ -33,9 +33,15 @@ The SDK installer will extract or locate the candidate in a temporary directory,
 
 Alternative: continue copying first and checking later. Rejected because a bad macOS archive could destroy a working installation.
 
-### Use the official wheel on macOS and source install on Linux
+### Select a runtime profile from the SDK before creating the virtual environment
 
-On Darwin, `install-pyrfc.sh` will perform an exact `pyrfc==3.3.1` wheel install, which selects the published Python/ARM-compatible artifact. On Linux it will retain the current SDK-backed source path and legacy patch. Both paths end with the same local verifier.
+The installer records a runtime profile alongside `SAPNWRFC_HOME`. Linux selects the native host architecture and keeps `.venv`. macOS selects native ARM64 when the SDK contains ARM64; when an Apple Silicon host receives an x86_64-only macOS SDK, it requires Rosetta and an x86_64-capable Python, then selects `.venv-x86_64`. Existing virtual environments are retained so provisioning one profile does not erase another platform path.
+
+Alternative: validate every SDK against whichever Python happens to run the installer. Rejected because it incorrectly rejects a usable Intel macOS SDK on Apple Silicon and makes service startup depend on the caller's shell architecture.
+
+### Use architecture-specific official wheels on macOS and source install on Linux
+
+On Darwin ARM64, `install-pyrfc.sh` performs an exact `pyrfc==3.3.1` wheel install. On Darwin x86_64 it installs `pyrfc==3.3`, the newest release that publishes a matching Intel macOS wheel. On Linux it retains the current SDK-backed source path and legacy patch. All paths end with the same local verifier running under the selected architecture.
 
 Alternative: build PyRFC from source everywhere. Rejected on macOS because a matching official binary exists and source builds add Xcode/Cython variability. An unconstrained `pip install pyrfc` is also rejected because the upstream is unmaintained and future resolution is not deterministic.
 
@@ -55,7 +61,8 @@ Alternative: make every install contact SAP. Rejected because SDK/Python correct
 
 - [PyRFC 3.3.1 is yanked and unmaintained] → Pin it exactly, document the status, keep the upstream process isolated, and do not broaden the RFC allowlist.
 - [SAP SDK availability and licensing prevent fully automatic provisioning] → Require an operator-supplied official archive/directory and never commit SDK binaries.
-- [Apple Silicon SDK availability varies by SAP patch level] → Detect architecture before install and report the exact mismatch; do not claim Rosetta as a transparent fix.
+- [Apple Silicon SDK availability varies by SAP patch level] → Prefer a native matching SDK; when only an Intel macOS SDK is supplied, make Rosetta selection explicit in health and verification output and keep it isolated from the native environment.
+- [PyRFC 3.3.1 has no Intel macOS wheel] → Pin the Intel profile to PyRFC 3.3 and test the selected wheel tag and native import; do not fall back to an incompatible ARM wheel.
 - [macOS loader behavior can differ between interactive shells and service processes] → Repair explicit rpaths, export paths in the service launcher, and verify through the same virtual-environment Python used by the service.
 - [Existing Linux users depend on legacy mirror behavior] → Preserve it as an explicit development-only Linux path and cover Linux layout in tests.
 
@@ -63,6 +70,6 @@ Alternative: make every install contact SAP. Rejected because SDK/Python correct
 
 1. Add failing unit/shell tests for Darwin/Linux layouts, architecture mismatch, and loader variables.
 2. Implement the shared probe and cross-platform scripts.
-3. On macOS, provision an operator-supplied official SDK and install the pinned wheel.
+3. On macOS, provision an operator-supplied SDK, record the selected native or Rosetta profile, and install the architecture-specific pinned wheel.
 4. Run offline verification, restart the private upstream, then run health and live `RFC_PING` checks.
 5. Roll back by restoring the previous scripts and removing only the generated `.env.local-sdk`, virtual-environment PyRFC package, and local SDK directory; ADT fallback remains available throughout.

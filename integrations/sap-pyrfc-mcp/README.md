@@ -19,7 +19,8 @@ Design: [`docs/design-dynamic-connections.md`](docs/design-dynamic-connections.m
 | Layer | Behavior |
 |-------|----------|
 | **SDK probe** | Detects macOS `.dylib` / Linux `.so`, tier, and native architecture |
-| **Installer** | macOS official wheel + private rpath repair; Linux source/legacy build |
+| **Installer** | macOS architecture-specific wheel + private rpath repair; Linux source/legacy build |
+| **Runtime selection** | macOS ARM64 uses native `.venv`; Intel macOS SDK on Apple Silicon uses Rosetta `.venv-x86_64`; Linux keeps native `.venv` |
 | **ADT fallback** | When PyRFC unavailable or `SAP_ASHOST` unset, uses ADT HTTPS (`read_table`, `run_query`) |
 | **Auto env** | Loads credentials from `../sap-abap-adt-mcp/.env` when local `.env` is empty |
 | **Backend** | `SAP_BACKEND=auto\|pyrfc\|adt` (default `auto`) |
@@ -91,27 +92,35 @@ chmod +x start.sh install-nwrfcsdk.sh
 
 ### macOS (Apple Silicon)
 
-PyRFC 3.3.1 provides a Python 3.10–3.12 macOS ARM wheel, but it does **not**
-contain SAP's licensed runtime. Download an official SAP NW RFC SDK package for
-macOS ARM64 from SAP Software Center. A Linux x86_64 `.so` package cannot run on
-macOS and the installer rejects it before replacing an existing SDK.
+The installer selects one of two macOS profiles from the supplied `.dylib`
+architecture. Neither wheel contains SAP's licensed runtime:
+
+| SDK libraries | Execution | Python | PyRFC | Managed environment |
+|---------------|-----------|--------|-------|---------------------|
+| macOS ARM64 | native | 3.10–3.12 ARM64 | 3.3.1 | `.venv` |
+| macOS x86_64 | Rosetta 2 | 3.10 x86_64 | 3.3 | `.venv-x86_64` |
+
+The environments can coexist. Installing an Intel profile does not remove the
+native environment. A Linux x86_64 `.so` package is still rejected on macOS
+because Rosetta translates macOS Mach-O binaries, not Linux ELF binaries.
 
 ```bash
 cd integrations/sap-pyrfc-mcp
-./install-nwrfcsdk.sh ~/Downloads/<official-macos-arm64-sdk>.zip
+./install-nwrfcsdk.sh ~/Downloads/<macos-sdk-archive-or-directory>
 ./install-pyrfc.sh
 ./verify.sh
 ./verify.sh --live
 ```
 
-The installer keeps the SDK inside this integration and repairs the official
-wheel's `/usr/local/sap/nwrfcsdk/lib` rpath with `install_name_tool`; it does not
-need `sudo` or a global `/usr/local/sap` installation. The first native-library
-load may still show normal macOS trust prompts for SAP libraries.
+The installer keeps the SDK inside this integration, records the selected
+profile in `.env.local-sdk`, and repairs the wheel's
+`/usr/local/sap/nwrfcsdk/lib` rpath with `install_name_tool`; it does not need
+`sudo` or a global `/usr/local/sap` installation. Installation, verification,
+and service startup apply the required Rosetta prefix automatically.
 
-PyRFC 3.3.1 is pinned because it is the last SAP release with these wheels. The
-release is yanked/unmaintained, so keep this upstream private and isolated behind
-Bowi MCP.
+PyRFC 3.3.1 is pinned for ARM64. PyRFC 3.3 is pinned for x86_64 because 3.3.1
+does not publish an Intel macOS wheel. These releases are yanked/unmaintained, so
+keep this upstream private and isolated behind Bowi MCP.
 
 ### Linux
 
@@ -122,6 +131,10 @@ Download the official SDK matching the Linux host architecture, then run:
 ./install-pyrfc.sh
 ./verify.sh
 ```
+
+Linux behavior is retained: it selects native `.venv` and builds PyRFC from
+SDK-backed source, including the existing legacy compatibility patch when
+required. The macOS Rosetta path is never selected on Linux.
 
 `./install-nwrfcsdk.sh --from-github` remains available only for Linux local
 development. The community mirror contains old Linux `.so` files and is not a
@@ -180,6 +193,7 @@ Root `mcp.json` intentionally points normal clients at Bowi instead of this upst
 
 - **`platform_mismatch`**: the SDK is for another OS (commonly Linux `.so` on macOS); download the official package for this host.
 - **Architecture mismatch**: Python and both SAP libraries must share `arm64` or `x86_64`; `./verify.sh` prints all detected values.
+- **Rosetta required**: an Intel macOS SDK on Apple Silicon requires Rosetta 2 and an x86_64-capable Python 3.10; provisioning checks both before changing the active SDK.
 - **`PyRFC is not available`**: run `./install-nwrfcsdk.sh <official-sdk>` and `./install-pyrfc.sh`, then inspect `./verify.sh`.
 - **`Library not loaded: @rpath/...` on macOS**: rerun `./install-pyrfc.sh` to repair the wheel and SDK rpaths.
 - **`connection_failed`**: Check firewall, SAProuter, user RFC authorizations, client number.

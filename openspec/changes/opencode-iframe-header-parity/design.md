@@ -21,8 +21,10 @@ The BuildingAI OpenCode layout already owns local conversation history and embed
 
 1. **Explicit query marker.** Add `buildingaiEmbed=1` to the server-generated iframe URL. This is credential-free, easy to test, and does not affect the canonical route or session ID.
 2. **Shared parent header.** Extract the existing BuildingAI header controls into a small component and render it above the iframe. It receives `panelExpanded`, `onTogglePanel`, `onBack`, and agent identity props so both chat branches use identical markup and behavior.
-3. **OpenCode titlebar gate.** Read the marker in the OpenCode app shell and pass an `embedded` flag to the titlebar. In embedded mode the titlebar slot remains structurally present only as a zero-height hidden element, avoiding layout shifts while removing tabs and home/new-session actions.
-4. **Do not crop the iframe.** Negative margins or clipped iframe wrappers would hide keyboard focus and responsive content. The source-level gate gives OpenCode Web a normal layout viewport and preserves its internal renderer.
+3. **Parent-owned conversation title.** The authenticated embed bootstrap already returns the mapped BuildingAI title and reports generated-title synchronization. Pass that value into the shared parent header and render it beside the avatar, so title updates use the existing query refresh path and remain visible even when the history panel is expanded.
+4. **Embedded timeline title gate.** In addition to the native OpenCode titlebar gate, suppress the message timeline's sticky session-title row only for the exact `buildingaiEmbed=1` marker. The parent header remains the sole title presentation in the embedded route; direct OpenCode routes retain the editable title row.
+5. **OpenCode titlebar gate.** Read the marker in the OpenCode app shell and pass an `embedded` flag to the titlebar. In embedded mode the titlebar slot remains structurally present only as a zero-height hidden element, avoiding layout shifts while removing tabs and home/new-session actions.
+6. **Do not crop the iframe.** Negative margins or clipped iframe wrappers would hide keyboard focus and responsive content. The source-level gate gives OpenCode Web a normal layout viewport and preserves its internal renderer.
 
 ## Risks / Trade-offs
 

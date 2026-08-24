@@ -19,8 +19,14 @@ load_sdk_home() {
 }
 
 load_sdk_home
+load_sap_pyrfc_runtime_profile .env.local-sdk
 configure_sdk_runtime "${SAPNWRFC_HOME:-}"
-PYTHON="${ROOT}/.venv/bin/python"
+ensure_sap_pyrfc_arch_available
+VENV="$(sap_pyrfc_venv "$ROOT")"
+PYTHON="${VENV}/bin/python"
 [[ -x "$PYTHON" ]] || PYTHON="$(pick_sap_pyrfc_python)"
 export PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+if [[ "$(sap_pyrfc_platform)" == Darwin && "$(sap_pyrfc_runtime_arch)" == x86_64 ]]; then
+  exec /usr/bin/arch -x86_64 "$PYTHON" -m sap_pyrfc_mcp.verify "$@"
+fi
 exec "$PYTHON" -m sap_pyrfc_mcp.verify "$@"

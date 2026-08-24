@@ -15,6 +15,7 @@ import { Repository } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { generateNo } from "@buildingai/utils";
 import { isDisabled } from "@buildingai/utils";
+import { getDefaultUserAvatar } from "@common/utils/default-user-avatar";
 import { Injectable } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 import { isEmail, isMobilePhone } from "class-validator";
@@ -682,13 +683,10 @@ export class AuthService extends BaseService<User> {
         const randomIndex = Math.floor(Math.random() * nicknameData.length);
         const randomNickname = nicknameData[randomIndex];
 
-        const randomAvatarIndex = Math.floor(Math.random() * 33) + 1;
-        const randomAvatar = `/static/avatars/${randomAvatarIndex}.png`;
-
         return {
             username: randomUsername,
             nickname: randomNickname,
-            avatar: randomAvatar,
+            avatar: getDefaultUserAvatar(),
         };
     }
 
@@ -713,7 +711,6 @@ export class AuthService extends BaseService<User> {
 
         // 生成随机昵称
         const randomIndex = Math.floor(Math.random() * nicknameData.length);
-        const randomAvatarIndex = Math.floor(Math.random() * 36) + 1;
         const randomNickname = nicknameData[randomIndex];
 
         // 创建用户
@@ -725,7 +722,7 @@ export class AuthService extends BaseService<User> {
                 nickname: randomNickname,
                 status: BooleanNumber.YES, // 默认启用
                 source: UserCreateSource.WECHAT, // 标记为微信注册
-                avatar: `/static/avatars/${randomAvatarIndex}.png`,
+                avatar: getDefaultUserAvatar(),
             },
             { excludeFields: ["password", "openid"] },
         );

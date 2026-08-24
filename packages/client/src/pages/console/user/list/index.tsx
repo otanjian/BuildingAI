@@ -8,7 +8,7 @@ import {
   useUsersListQuery,
 } from "@buildingai/services/console";
 import { PermissionGuard } from "@buildingai/ui/components/auth/permission-guard";
-import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
+import { Avatar, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import {
@@ -41,7 +41,6 @@ import {
   Plus,
   Sparkles,
   Trash2,
-  User as UserIcon,
   Zap,
 } from "lucide-react";
 import { useState } from "react";
@@ -56,6 +55,7 @@ import { MembershipAdjustmentDialog } from "./_components/membership-adjustment-
 import { ResetPasswordDialog } from "./_components/reset-password-dialog";
 import { SubscriptionRecordsDialog } from "./_components/subscription-records-dialog";
 import { UserFormDialog } from "./_components/user-form-dialog";
+import { resolveUserListAvatar } from "./user-avatar";
 
 const PAGE_SIZE = 25;
 
@@ -221,13 +221,10 @@ const UserListIndexPage = () => {
                   <div className="flex items-center gap-3">
                     <Avatar className="relative size-12 rounded-lg after:rounded-lg">
                       <AvatarImage
-                        src={user.avatar || ""}
+                        src={resolveUserListAvatar(user.avatar, user.userNo || user.id)}
                         alt={user.nickname || user.username}
                         className="rounded-lg"
                       />
-                      <AvatarFallback className="size-12 rounded-lg">
-                        <UserIcon className="size-6" />
-                      </AvatarFallback>
                       <PermissionGuard permissions="users:update-status">
                         <div className="center absolute inset-0 z-1 rounded-lg bg-black/5 opacity-0 backdrop-blur-xl transition-opacity group-hover/user-item:opacity-100 dark:bg-black/15">
                           <Switch

@@ -97,6 +97,7 @@ storage/*
 # SAP integration local/vendor artifacts
 integrations/sap-abap-adt-mcp/vendor/
 integrations/sap-pyrfc-mcp/.venv/
+integrations/sap-pyrfc-mcp/.venv-x86_64/
 integrations/sap-pyrfc-mcp/.build/
 integrations/sap-pyrfc-mcp/.env.local-sdk
 integrations/sap-pyrfc-mcp/lib/nwrfcsdk/

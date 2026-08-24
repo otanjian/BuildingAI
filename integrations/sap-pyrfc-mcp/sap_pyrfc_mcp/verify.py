@@ -9,10 +9,11 @@ import os
 import platform
 import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from typing import Any
 
-from sap_pyrfc_mcp.config import is_sap_configured, load_config
+from sap_pyrfc_mcp.config import is_sap_configured, load_config, runtime_profile
 from sap_pyrfc_mcp.sdk_probe import normalize_platform, probe_sdk
 
 
@@ -38,6 +39,36 @@ def _native_dependencies(extension: Path | None) -> list[str]:
     return [line.strip() for line in output.splitlines()[1:] if line.strip()]
 
 
+def _native_architecture_mismatches() -> list[dict[str, Any]]:
+    expected = platform.machine().lower()
+    if expected == "amd64":
+        expected = "x86_64"
+    roots = {
+        Path(value).resolve()
+        for key in ("purelib", "platlib")
+        if (value := sysconfig.get_path(key))
+    }
+    mismatches: list[dict[str, Any]] = []
+    for root in sorted(roots):
+        if not root.is_dir():
+            continue
+        for binary in sorted((*root.rglob("*.so"), *root.rglob("*.dylib"))):
+            try:
+                output = subprocess.run(
+                    ["file", str(binary)], check=True, capture_output=True, text=True, timeout=5
+                ).stdout.lower()
+            except (FileNotFoundError, subprocess.SubprocessError):
+                continue
+            detected = []
+            if "arm64" in output or "aarch64" in output:
+                detected.append("arm64")
+            if "x86_64" in output or "x86-64" in output:
+                detected.append("x86_64")
+            if detected and expected not in detected:
+                mismatches.append({"path": str(binary), "expected": expected, "detected": sorted(set(detected))})
+    return mismatches
+
+
 def _redact(value: str) -> str:
     redacted = value
     for secret in (os.environ.get("SAP_PASSWORD", ""), load_config().password):
@@ -52,6 +83,7 @@ def verify(*, live: bool = False) -> tuple[dict[str, Any], bool]:
     result: dict[str, Any] = {
         "status": "not_ready",
         "python": {"executable": sys.executable, "version": platform.python_version(), "architecture": platform.machine()},
+        "runtime_profile": runtime_profile(),
         "sdk": sdk,
         "pyrfc": {"package_present": extension is not None, "extension": str(extension) if extension else None},
         "live_requested": live,
@@ -68,8 +100,10 @@ def verify(*, live: bool = False) -> tuple[dict[str, Any], bool]:
     except Exception as exc:  # Native loaders can raise subclasses other than ImportError.
         result["pyrfc"].update({"import_ready": False, "error_type": type(exc).__name__, "error": _redact(str(exc))})
     result["pyrfc"]["native_dependencies"] = _native_dependencies(extension)
+    native_mismatches = _native_architecture_mismatches()
+    result["native_architecture_mismatches"] = native_mismatches
 
-    local_ready = bool(sdk.get("ready")) and import_ready
+    local_ready = bool(sdk.get("ready")) and import_ready and not native_mismatches
     result["local_ready"] = local_ready
     if not local_ready:
         return result, False

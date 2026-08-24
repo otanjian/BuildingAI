@@ -19,6 +19,7 @@ describe("SapConnectionProfileService", () => {
 
     beforeEach(() => {
         process.env = { ...previousEnv, NODE_ENV: "test" };
+        delete process.env.BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED;
     });
 
     afterAll(() => {

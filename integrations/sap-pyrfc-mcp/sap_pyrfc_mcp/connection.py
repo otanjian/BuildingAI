@@ -15,6 +15,7 @@ from sap_pyrfc_mcp.config import (
     is_sap_configured,
     load_adt_config,
     load_config,
+    runtime_profile,
     sdk_home,
 )
 from sap_pyrfc_mcp.sdk_probe import probe_sdk
@@ -83,6 +84,7 @@ def pyrfc_status() -> dict[str, Any]:
         "pyrfc_error": _pyrfc_import_error,
         "sapnwrfc_home": sdk_home() or None,
         "sdk": sdk,
+        "runtime_profile": runtime_profile(),
         "sap_rfc_configured": configured,
         "sap_adt_configured": adt_configured,
         "connection_params": load_config().redacted() if configured else None,

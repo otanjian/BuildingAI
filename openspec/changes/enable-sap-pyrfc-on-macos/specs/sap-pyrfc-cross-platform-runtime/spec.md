@@ -22,6 +22,16 @@ The SAP PyRFC integration SHALL accept an operator-supplied SAP NW RFC SDK archi
 - **WHEN** the operator verifies or provisions the SDK
 - **THEN** the integration reports both detected architectures and instructs the operator to obtain a matching SDK or select a matching Python runtime
 
+#### Scenario: Select an Intel SDK on Apple Silicon
+- **GIVEN** an Apple Silicon host, Rosetta, a compatible x86_64 Python, and an Intel macOS SAP NW RFC SDK
+- **WHEN** the operator provisions the SDK
+- **THEN** the integration selects an isolated x86_64 runtime instead of rejecting the SDK or replacing the native managed environment
+
+#### Scenario: Preserve Linux support
+- **GIVEN** a supported Linux host and Linux SAP NW RFC SDK
+- **WHEN** the operator provisions and starts the integration
+- **THEN** the integration retains the existing Linux SDK-backed source-build path and does not depend on macOS runtime selection
+
 ### Requirement: Platform-specific PyRFC installation
 The integration SHALL install a compatible pinned PyRFC release in its managed virtual environment using a prebuilt wheel on macOS and an SDK-backed build on Linux. Installation MUST finish by importing `pyrfc.Connection` with the provisioned SDK available; a package metadata entry alone MUST NOT count as success.
 
@@ -29,6 +39,11 @@ The integration SHALL install a compatible pinned PyRFC release in its managed v
 - **GIVEN** Python and the SDK are compatible Apple Silicon builds
 - **WHEN** the operator runs the PyRFC installer on macOS
 - **THEN** the installer selects a macOS ARM wheel and verifies that `pyrfc.Connection` imports successfully
+
+#### Scenario: Install for an Intel macOS SDK
+- **GIVEN** an Intel macOS SDK selected on an Apple Silicon host
+- **WHEN** the operator runs the PyRFC installer
+- **THEN** the installer creates or reuses a separate Rosetta x86_64 virtual environment, installs the pinned macOS x86_64 PyRFC wheel, repairs its private SDK rpath, and verifies `pyrfc.Connection`
 
 #### Scenario: Native library load fails
 - **GIVEN** the Python package is present but an SDK library cannot be loaded
@@ -42,6 +57,11 @@ The SAP PyRFC service SHALL configure the host-appropriate native library search
 - **GIVEN** a compatible SDK and PyRFC wheel are installed
 - **WHEN** the SAP PyRFC service starts on macOS
 - **THEN** health status reports `pyrfc_installed` as true, the SDK as present, and selects PyRFC for an RFC-configured connection
+
+#### Scenario: Automatically launch the selected architecture
+- **GIVEN** the configured SDK was provisioned for a supported native or Rosetta runtime
+- **WHEN** installation, verification, or service startup runs
+- **THEN** every Python process uses the recorded compatible architecture and virtual environment without an operator-supplied `arch` prefix
 
 #### Scenario: Start without an SDK
 - **GIVEN** no compatible SDK is configured
@@ -60,4 +80,3 @@ The integration SHALL provide a non-secret verification command that checks the 
 - **GIVEN** local prerequisites and valid RFC credentials are configured
 - **WHEN** the operator requests live verification
 - **THEN** the command invokes `RFC_PING`, reports connectivity, redacts secrets, and exits successfully
-

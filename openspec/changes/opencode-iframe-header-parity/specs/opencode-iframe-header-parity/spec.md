@@ -11,7 +11,14 @@ When an OpenCode Web session is rendered inside the BuildingAI OpenCode agent pa
 #### Scenario: OpenCode conversation is embedded
 
 - **WHEN** a user opens an OpenCode agent conversation in BuildingAI
-- **THEN** the right panel has no duplicate OpenCode titlebar/session tabs and its top controls match the middle BuildingAI header
+- **THEN** the right panel has no duplicate OpenCode titlebar/session tabs or sticky session-title row
+- **AND** its top controls and conversation title match the BuildingAI-owned header
+
+#### Scenario: Embedded conversation title is synchronized
+
+- **WHEN** the OpenCode embed bootstrap returns a generated or persisted conversation title
+- **THEN** BuildingAI renders that title beside the agent avatar in the parent header
+- **AND** the title remains visible when the agent history panel is expanded
 
 #### Scenario: Non-OpenCode conversation is opened
 
@@ -44,4 +51,4 @@ The OpenCode iframe URL MUST carry an explicit embed-mode marker, and OpenCode W
 #### Scenario: OpenCode is opened directly
 
 - **WHEN** a user opens the same OpenCode session through the normal OpenCode Web route
-- **THEN** the native titlebar and session tabs remain visible and functional
+- **THEN** the native titlebar, session tabs, and editable session-title row remain visible and functional

@@ -36,6 +36,10 @@ _ENV_KEYS = frozenset(
         "SAP_TLS_VERIFY",
         "SAP_ADT_TIMEOUT",
         "SAPNWRFC_HOME",
+        "SAP_PYRFC_RUNTIME_ARCH",
+        "SAP_PYRFC_EXECUTION_MODE",
+        "SAP_PYRFC_PYTHON_VERSION",
+        "SAP_PYRFC_VERSION",
     }
 )
 
@@ -364,3 +368,18 @@ def is_adt_configured(config: AdtConnectionConfig | None = None) -> bool:
 
 def sdk_home() -> str:
     return _env("SAPNWRFC_HOME")
+
+
+def runtime_profile() -> dict[str, str]:
+    return {
+        "architecture": _env("SAP_PYRFC_RUNTIME_ARCH", platform_machine()),
+        "execution_mode": _env("SAP_PYRFC_EXECUTION_MODE", "native"),
+        "python_version": _env("SAP_PYRFC_PYTHON_VERSION"),
+        "pyrfc_version": _env("SAP_PYRFC_VERSION"),
+    }
+
+
+def platform_machine() -> str:
+    import platform
+
+    return platform.machine()

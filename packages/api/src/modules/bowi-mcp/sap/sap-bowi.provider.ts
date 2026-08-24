@@ -92,6 +92,22 @@ export class SapBowiProvider implements BowiMcpProvider {
                     }),
                 { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
             ),
+            this.adtTool(
+                "sap_run_query",
+                "Run a freestyle SQL query through ADT datapreview. Supports aggregation "
+                    + "(COUNT/SUM/AVG/MAX/MIN), GROUP BY, and ORDER BY ... DESC. "
+                    + "Use for analytics over SAP tables/views. Read-only.",
+                {
+                    sqlQuery: string("Freestyle SQL query text", { minLength: 1 }),
+                    rowCount: integer("Maximum rows", { minimum: 1, maximum: 500, default: 100 }),
+                    decode: { type: "boolean", description: "Whether to decode the result", default: true },
+                },
+                ["sqlQuery"],
+                "sap.read",
+                "runQuery",
+                (args) => ({ sqlQuery: args.sqlQuery, rowNumber: args.rowCount ?? 100, decode: args.decode ?? true }),
+                true,
+            ),
             this.tool(
                 "sap_get_rfc_function_description",
                 "Get metadata for an approved SAP RFC or BAPI function.",

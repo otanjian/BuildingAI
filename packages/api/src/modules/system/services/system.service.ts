@@ -9,6 +9,7 @@ import { generateNo } from "@buildingai/utils";
 import { SYSTEM_CONFIG } from "@common/constants";
 import { AuthService } from "@common/modules/auth/services/auth.service";
 import { RolePermissionService } from "@common/modules/auth/services/role-permission.service";
+import { resolveUserAvatar } from "@common/utils/default-user-avatar";
 import { getOrCreateSystemId } from "@common/utils/system-id";
 import { UserService } from "@modules/user/services/user.service";
 import { Injectable, Logger } from "@nestjs/common";
@@ -91,7 +92,7 @@ export class SystemService {
                 email: dto.email || "",
                 status: BooleanNumber.YES,
                 userNo: await generateNo(this.userRepository, "userNo"),
-                avatar: dto.avatar || `/static/avatars/${Math.floor(Math.random() * 36) + 1}.png`,
+                avatar: resolveUserAvatar(dto.avatar),
                 source: UserCreateSource.CONSOLE,
                 phone: dto.phone || "",
                 power: 0,

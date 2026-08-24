@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from sap_pyrfc_mcp.sdk_probe import probe_sdk  # noqa: E402
+from sap_pyrfc_mcp.sdk_probe import probe_sdk, select_runtime_profile  # noqa: E402
 
 
 class SdkProbeTests(unittest.TestCase):
@@ -109,6 +109,72 @@ class SdkProbeTests(unittest.TestCase):
         self.assertFalse(result["present"])
         self.assertFalse(result["ready"])
         self.assertIn("libsapucum.dylib", result["missing_libraries"])
+
+    def test_selects_native_macos_arm64_profile(self) -> None:
+        temp = self._sdk(("libsapnwrfc.dylib", "libsapucum.dylib"))
+        self.addCleanup(temp.cleanup)
+
+        result = select_runtime_profile(
+            temp.name,
+            platform_name="darwin",
+            host_architecture="arm64",
+            architecture_reader=lambda _path, _platform: ["arm64"],
+        )
+
+        self.assertTrue(result["supported"])
+        self.assertEqual(result["runtime_architecture"], "arm64")
+        self.assertEqual(result["execution_mode"], "native")
+        self.assertEqual(result["venv_name"], ".venv")
+        self.assertEqual(result["pyrfc_version"], "3.3.1")
+
+    def test_selects_rosetta_profile_for_intel_sdk_on_apple_silicon(self) -> None:
+        temp = self._sdk(("libsapnwrfc.dylib", "libsapucum.dylib"))
+        self.addCleanup(temp.cleanup)
+
+        result = select_runtime_profile(
+            temp.name,
+            platform_name="darwin",
+            host_architecture="arm64",
+            architecture_reader=lambda _path, _platform: ["x86_64"],
+        )
+
+        self.assertTrue(result["supported"])
+        self.assertEqual(result["runtime_architecture"], "x86_64")
+        self.assertEqual(result["execution_mode"], "rosetta")
+        self.assertEqual(result["venv_name"], ".venv-x86_64")
+        self.assertEqual(result["python_version"], "3.10")
+        self.assertEqual(result["pyrfc_version"], "3.3")
+
+    def test_preserves_native_linux_profile(self) -> None:
+        temp = self._sdk(("libsapnwrfc.so", "libsapucum.so"))
+        self.addCleanup(temp.cleanup)
+
+        result = select_runtime_profile(
+            temp.name,
+            platform_name="linux",
+            host_architecture="x86_64",
+            architecture_reader=lambda _path, _platform: ["x86_64"],
+        )
+
+        self.assertTrue(result["supported"])
+        self.assertEqual(result["runtime_architecture"], "x86_64")
+        self.assertEqual(result["execution_mode"], "native")
+        self.assertEqual(result["venv_name"], ".venv")
+        self.assertEqual(result["pyrfc_install_mode"], "source")
+
+    def test_rejects_non_native_linux_sdk_architecture(self) -> None:
+        temp = self._sdk(("libsapnwrfc.so", "libsapucum.so"))
+        self.addCleanup(temp.cleanup)
+
+        result = select_runtime_profile(
+            temp.name,
+            platform_name="linux",
+            host_architecture="arm64",
+            architecture_reader=lambda _path, _platform: ["x86_64"],
+        )
+
+        self.assertFalse(result["supported"])
+        self.assertIn("Linux", result["error"])
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ The OpenCode agent currently shows its own browser title bar inside the right if
 
 - Add a BuildingAI embed mode for OpenCode Web that removes the native OpenCode titlebar/session-tab strip from the iframe.
 - Render the same sidebar toggle, back navigation, and agent identity controls above the OpenCode iframe as the middle BuildingAI chat header.
+- Render the current BuildingAI conversation title in that parent header beside the agent avatar.
+- Remove the duplicate OpenCode session-title row from the embedded message timeline while keeping it for direct OpenCode routes.
 - Keep BuildingAI as the owner of agent navigation and conversation history; do not expose OpenCode session tabs in the embedded view.
 - Preserve the existing OpenCode Web conversation renderer, composer, question cards, task progress, tool events, and file views.
 - Limit the change to agents with `createMode=opencode`; all other agent chat headers remain unchanged.
