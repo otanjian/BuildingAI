@@ -2,7 +2,7 @@ import { EHCS_PLATFORM_AGENT_NAME } from "@buildingai/constants/shared/ehcs-agen
 import type { RequestAuthSource } from "@common/types/request-auth-context";
 
 import { createBowiInvocationAssertion } from "./bowi-invocation-assertion";
-import type { BowiCapability } from "../types/bowi-mcp.types";
+import type { BowiAutomationScope, BowiCapability } from "../types/bowi-mcp.types";
 import { configuredSapCapabilities } from "../sap/sap-capabilities";
 
 export function getAgentBowiCapabilities(agentName: string): BowiCapability[] {
@@ -18,6 +18,7 @@ export function buildBowiMcpHeaders(input: {
         agentName: string;
         conversationId?: string;
         authSource: RequestAuthSource;
+        automationScope?: BowiAutomationScope;
     };
 }): Record<string, string> | undefined {
     if (input.serverName !== "bowi-mcp" || !input.invocation) return input.existing;
@@ -32,6 +33,7 @@ export function buildBowiMcpHeaders(input: {
                 ...getAgentBowiCapabilities(input.invocation.agentName),
                 ...(input.invocation.authSource === "login" ? configuredSapCapabilities() : []),
             ],
+            automationScope: input.invocation.automationScope,
         }),
     };
 }

@@ -45,6 +45,7 @@
         "@buildingai/upgrade": "workspace:*",
         "@buildingai/utils": "workspace:*",
         "@buildingai/wechat-sdk": "workspace:*",
+        "@larksuiteoapi/node-sdk": "^1.73.0",
         "@modelcontextprotocol/sdk": "1.21.0",
         "@nestjs/axios": "catalog:api",
         "@nestjs/common": "catalog:api",

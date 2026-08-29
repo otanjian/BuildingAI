@@ -90,12 +90,18 @@ export default defineConfig({
   server: {
     // Use 127.0.0.1 so Vite and start.sh health checks agree (localhost may be IPv6-only on macOS).
     host: host || "127.0.0.1",
+    // The dev server is exposed through frpc under the public BuildingAI domain.
+    // Allow that Host header so proxied requests are not rejected with HTTP 403.
+    allowedHosts: ["mac.bosofts.com"],
     open: true,
     port: Number(process.env.CLIENT_DEV_PORT || process.env.VITE_DEV_SERVER_PORT) || 4091,
     strictPort: true,
     proxy: {
       // Production index.html (cached) preloads /assets/*; serve built chunks from API in dev.
       "/assets": { target: apiTarget, changeOrigin: true },
+      // Static avatars/icons and uploaded files are served by the API server.
+      "/static": { target: apiTarget, changeOrigin: true },
+      "/uploads": { target: apiTarget, changeOrigin: true },
       "/extension": { target: apiTarget, changeOrigin: true },
       "/api": { target: apiTarget, changeOrigin: true },
       // Site-embed OpenAPI aliases (`/v1/chat-messages`, `/v1/conversations`, …)

@@ -34,6 +34,7 @@ import type { ModelReference } from "@buildingai/types/ai/agent-config.interface
 import { getProviderSecret } from "@buildingai/utils";
 import type { RequestAuthSource } from "@common/types/request-auth-context";
 import { buildBowiMcpHeaders } from "@modules/bowi-mcp/utils/bowi-agent-invocation";
+import type { BowiAutomationScope } from "@modules/bowi-mcp/types/bowi-mcp.types";
 import { UserService } from "@modules/user/services/user.service";
 import { Injectable, Logger } from "@nestjs/common";
 import type { LanguageModel, Tool, UIMessage } from "ai";
@@ -74,6 +75,7 @@ import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive
 import { AgentChatMessageService } from "./agent-chat-message.service";
 import { AgentChatRecordService } from "./agent-chat-record.service";
 import { AgentsService } from "./agents.service";
+import type { UnattendedToolPolicy } from "../../../automation/domain/automation.types";
 
 type DataWriter = {
     write: (part: { type: `data-${string}` | string; data: unknown }) => void;
@@ -106,7 +108,13 @@ export interface AgentChatCompletionParams {
     regenerateParentId?: string;
     parentId?: string;
     isToolApprovalFlow?: boolean;
+    automationToolPolicy?: UnattendedToolPolicy;
     sensitiveWordFilter?: SensitiveWordFilter;
+    /** Trusted channel identity used only when constructing MCP invocation headers. */
+    mcpUserId?: string;
+    mcpAuthSource?: RequestAuthSource;
+    mcpConversationId?: string;
+    mcpAutomationScope?: BowiAutomationScope;
 }
 
 interface ResolvedModel {
@@ -410,11 +418,12 @@ export class AgentChatCompletionService {
                         const promptText = formatMessagesForTokenCount(finalMessages);
 
                         const mcpResult = await this.initMcpClients(agent.mcpServerIds, {
-                            userId: params.userId,
+                            userId: params.mcpUserId ?? params.userId,
                             agentId: params.agentId,
                             agentName: agent.name,
-                            conversationId,
-                            authSource: params.authSource ?? "anonymous",
+                            conversationId: params.mcpConversationId ?? conversationId,
+                            authSource: params.mcpAuthSource ?? params.authSource ?? "anonymous",
+                            automationScope: params.mcpAutomationScope,
                         });
                         mcpClients = mcpResult.clients;
 
@@ -440,6 +449,7 @@ export class AgentChatCompletionService {
                                 mcpResult.tools as Record<string, Tool>,
                                 useToolForDocuments ? documentContents : undefined,
                                 planningContext,
+                                params.automationToolPolicy,
                             ),
                         };
 
@@ -614,12 +624,11 @@ export class AgentChatCompletionService {
                                         type: "data-conversation-context",
                                         data: {
                                             messageId: assistantMessageId,
-                                            messages:
-                                                this.serializeContextForDisplay(
-                                                    finalMessages,
-                                                    sensitiveWordFilter,
-                                                    true,
-                                                ),
+                                            messages: this.serializeContextForDisplay(
+                                                finalMessages,
+                                                sensitiveWordFilter,
+                                                true,
+                                            ),
                                         },
                                     });
 
@@ -816,6 +825,7 @@ export class AgentChatCompletionService {
         mcpTools: Record<string, Tool>,
         documentContents?: Array<{ filename: string; content: string }>,
         planningContext?: PlanningContext,
+        automationToolPolicy?: UnattendedToolPolicy,
     ): Record<string, Tool> {
         const tools: Record<string, Tool> = { ...mcpTools };
 
@@ -900,31 +910,72 @@ export class AgentChatCompletionService {
         const requireApproval = agent.toolConfig?.requireApproval === true;
         const toolTimeoutMs = Math.max(0, Number(agent.toolConfig?.toolTimeout) || 0);
 
+        let configuredTools: Record<string, Tool>;
         if (!requireApproval) {
-            return Object.fromEntries(
+            configuredTools = Object.fromEntries(
                 Object.entries(tools).map(([name, t]) => [
                     name,
                     { ...t, needsApproval: false } as Tool,
                 ]),
             );
+        } else {
+            const skipApproval = new Set([
+                "getWeather",
+                "read_attached_file",
+                "request_execution_plan",
+            ]);
+            configuredTools = Object.fromEntries(
+                Object.entries(tools).map(([name, t]) => [
+                    name,
+                    this.wrapToolWithConfig(
+                        t as Tool,
+                        name,
+                        requireApproval && !skipApproval.has(name),
+                        toolTimeoutMs,
+                    ),
+                ]),
+            );
         }
 
-        const skipApproval = new Set([
-            "getWeather",
+        if (!automationToolPolicy) return configuredTools;
+        const allowed = new Set(
+            (automationToolPolicy.allowedTools || []).map((name) => name.toLowerCase()),
+        );
+        const denied = (automationToolPolicy.deniedTools || []).map((name) => name.toLowerCase());
+        const unattendedAutomationManagement = new Set([
+            "automation_create",
+            "automation_update",
+            "automation_pause",
+            "automation_resume",
+            "automation_run",
+            "automation_delete",
+        ]);
+        const safeBuiltins = new Set([
+            "getweather",
             "read_attached_file",
             "request_execution_plan",
+            "datasetssearch",
         ]);
-
         return Object.fromEntries(
-            Object.entries(tools).map(([name, t]) => [
-                name,
-                this.wrapToolWithConfig(
-                    t as Tool,
-                    name,
-                    requireApproval && !skipApproval.has(name),
-                    toolTimeoutMs,
-                ),
-            ]),
+            Object.entries(configuredTools).filter(([name]) => {
+                const normalized = name.toLowerCase();
+                if (unattendedAutomationManagement.has(normalized)) return false;
+                if (allowed.size > 0 && !allowed.has(normalized) && !safeBuiltins.has(normalized))
+                    return false;
+                if (denied.some((term) => normalized.includes(term))) return false;
+                if (
+                    !automationToolPolicy.allowExternalSideEffects &&
+                    /(?:shell|code|browser|approval|delete|destroy|write|send|publish|payment|transfer|http|request)/iu.test(
+                        normalized,
+                    ) &&
+                    !safeBuiltins.has(normalized) &&
+                    !allowed.has(normalized)
+                )
+                    return false;
+                if (requireApproval && !safeBuiltins.has(normalized) && !allowed.has(normalized))
+                    return false;
+                return true;
+            }),
         );
     }
 
@@ -968,6 +1019,7 @@ export class AgentChatCompletionService {
             agentName: string;
             conversationId?: string;
             authSource: RequestAuthSource;
+            automationScope?: BowiAutomationScope;
         },
     ): Promise<{ clients: McpClient[]; tools: Record<string, unknown> }> {
         if (!mcpServerIds?.length) return { clients: [], tools: {} };

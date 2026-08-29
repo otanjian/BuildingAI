@@ -2,6 +2,7 @@ export const BOWI_MCP_PROVIDER_TOKEN = Symbol("BOWI_MCP_PROVIDER_TOKEN");
 
 export const BOWI_CAPABILITIES = [
     "todo.personal",
+    "automation.personal",
     "ehcs.operator",
     "sap.read",
     "sap.write",
@@ -23,6 +24,19 @@ export interface BowiPrincipal {
     sessionId?: string;
     callId?: string;
     capabilities: Set<BowiCapability>;
+    /** Server-signed channel scope used when an automation changes its delivery target. */
+    automationScope?: BowiAutomationScope;
+}
+
+export interface BowiAutomationScope {
+    channel: string;
+    accountId: string;
+    tenantId?: string;
+    conversationId: string;
+    targetType: "chat" | "user";
+    targetId: string;
+    mentionAll?: boolean;
+    failureTargetId?: string;
 }
 
 export interface BowiJsonSchema {

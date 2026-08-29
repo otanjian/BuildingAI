@@ -50,4 +50,10 @@ describe("OpenCode embed bootstrap retry policy", () => {
     expect(shouldRefreshOpencodeTitleHistory("采购订单分析", "采购订单分析", true)).toBe(false);
     expect(shouldRefreshOpencodeTitleHistory(undefined, "新对话", false)).toBe(false);
   });
+
+  it("refreshes history when an async title replaces a placeholder", () => {
+    expect(shouldRefreshOpencodeTitleHistory("新对话", "采购订单分析", false)).toBe(true);
+    expect(shouldRefreshOpencodeTitleHistory("New conversation", "采购订单分析", false)).toBe(true);
+    expect(shouldRefreshOpencodeTitleHistory("采购订单分析", "另一个标题", false)).toBe(false);
+  });
 });

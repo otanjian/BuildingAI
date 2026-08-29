@@ -1,7 +1,7 @@
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
-import { AgentChatRecord, AiMcpServer, AiMcpTool } from "@buildingai/db/entities";
+import { Agent, AgentChatRecord, AiMcpServer, AiMcpTool } from "@buildingai/db/entities";
 import { TodoModule } from "@modules/todo/todo.module";
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { DiscoveryModule } from "@nestjs/core";
 
 import { BowiMcpController } from "./controllers/bowi-mcp.controller";
@@ -16,9 +16,16 @@ import { SapConnectionProfileService } from "./sap/sap-connection-profile.servic
 import { SapPyrfcMcpAdapter } from "./sap/sap-pyrfc-mcp.adapter";
 import { StreamableMcpClient } from "./sap/streamable-mcp-client";
 import { PersonalTodoBowiProvider } from "../todo/mcp/personal-todo-bowi.provider";
+import { AutomationModule } from "../automation/automation.module";
+import { AutomationBowiProvider } from "../automation/mcp/automation-bowi.provider";
 
 @Module({
-    imports: [TypeOrmModule.forFeature([AgentChatRecord, AiMcpServer, AiMcpTool]), DiscoveryModule, TodoModule],
+    imports: [
+        TypeOrmModule.forFeature([Agent, AgentChatRecord, AiMcpServer, AiMcpTool]),
+        DiscoveryModule,
+        TodoModule,
+        forwardRef(() => AutomationModule),
+    ],
     controllers: [BowiMcpController],
     providers: [
         BowiMcpPrincipalService,
@@ -29,8 +36,12 @@ import { PersonalTodoBowiProvider } from "../todo/mcp/personal-todo-bowi.provide
         SapBowiProvider,
         {
             provide: BOWI_MCP_PROVIDER_TOKEN,
-            inject: [PersonalTodoBowiProvider, SapBowiProvider],
-            useFactory: (todo: PersonalTodoBowiProvider, sap: SapBowiProvider) => [todo, sap],
+            inject: [PersonalTodoBowiProvider, SapBowiProvider, AutomationBowiProvider],
+            useFactory: (
+                todo: PersonalTodoBowiProvider,
+                sap: SapBowiProvider,
+                automation: AutomationBowiProvider,
+            ) => [todo, sap, automation],
         },
         BowiMcpRegistry,
         BowiMcpRuntimeService,

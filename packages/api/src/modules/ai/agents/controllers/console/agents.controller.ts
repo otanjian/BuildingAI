@@ -8,6 +8,7 @@ import { ConsoleController } from "@common/decorators/controller.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { UserService } from "@modules/user/services/user.service";
 import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
 
 import { ListConsoleAgentsDto } from "../../dto/list-console-agents.dto";
 import { BatchAgentAssignDto } from "../../dto/batch-agent-assign.dto";
@@ -97,6 +98,7 @@ export class AgentsConsoleController {
                     updatedAt: item.updatedAt,
                     publishedAt: item.publishedAt ?? null,
                     createMode: item.createMode ?? "manual",
+                    durableOpencodeTurnsEnabled: isOpencodeDurableTurnsEnabled(item),
                     userCount: item.userCount ?? 0,
                     tags: item.tags ?? [],
                 };
@@ -168,10 +170,7 @@ export class AgentsConsoleController {
 
     @Delete(":id/assignments")
     @Permissions({ code: "assign", name: "分配用户", description: "批量移除用户分配" })
-    async unassignUsers(
-        @Param("id") agentId: string,
-        @Body() dto: BatchAgentAssignDto,
-    ) {
+    async unassignUsers(@Param("id") agentId: string, @Body() dto: BatchAgentAssignDto) {
         await this.agentsService.unassignUsers(agentId, dto.userIds);
     }
 

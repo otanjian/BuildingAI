@@ -90,6 +90,14 @@ export class RedisService implements OnModuleDestroy {
     }
 
     /**
+     * Atomically read and delete a value. This is used for one-time confirmation tokens where a
+     * get followed by del would allow two concurrent consumers to replay the same action.
+     */
+    async getDel<T>(key: string): Promise<T | null> {
+        return this.redisClient.getDel(key) as Promise<T | null>;
+    }
+
+    /**
      * Set value
      * @param key Key
      * @param value Value

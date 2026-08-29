@@ -42,6 +42,30 @@ describe("BowiMcpPrincipalService", () => {
         ).resolves.toMatchObject({ subjectUserId: "user-1", authSource: "login" });
     });
 
+    it("does not grant a non-login assertion a personal automation scope", async () => {
+        const { service } = harness();
+        const assertion = createBowiInvocationAssertion({
+            userId: "agent-owner",
+            agentId: "agent-1",
+            authSource: "site_access_token",
+            capabilities: ["automation.personal"],
+            automationScope: {
+                channel: "feishu",
+                accountId: "connection-1",
+                conversationId: "chat-1",
+                targetType: "chat",
+                targetId: "chat-1",
+            },
+        });
+        const principal = await service.resolve({
+            headers: { "x-buildingai-bowi-invocation": assertion },
+            requireSubject: false,
+        });
+        expect(principal.subjectUserId).toBeUndefined();
+        expect(principal.automationScope).toBeUndefined();
+        expect(principal.capabilities.has("automation.personal")).toBe(false);
+    });
+
     it("resolves one explicitly login-bound managed OpenCode session", async () => {
         const { service } = harness([
             {

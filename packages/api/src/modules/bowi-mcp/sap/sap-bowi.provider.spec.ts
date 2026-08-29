@@ -47,6 +47,7 @@ describe("SapBowiProvider", () => {
             "sap_get_transport",
             "sap_healthcheck",
             "sap_read_table",
+            "sap_run_query",
             "sap_search_objects",
             "sap_set_object_source",
         ]);

@@ -7,6 +7,7 @@ import { BuildFileUrl } from "@buildingai/decorators";
 import { Playground } from "@buildingai/decorators/playground.decorator";
 import { UserDictService } from "@buildingai/dict";
 import { HttpErrorFactory } from "@buildingai/errors";
+import type { SensitiveWordConfig, ThirdPartyIntegrationConfig } from "@buildingai/types";
 import { AgentPublicAccess } from "@common/decorators/agent-public-access.decorator";
 import { WebController } from "@common/decorators/controller.decorator";
 import {
@@ -65,9 +66,14 @@ import {
     OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY,
 } from "../../utils/opencode-session-context";
 import { hashOpencodeRuntime } from "../../utils/opencode-turn-command";
+import { verifyAutomationPolicy } from "../../../../automation/application/automation-policy-assertion";
+import { resolveFeishuIdentityAssertion } from "../../../../channel/feishu/feishu-identity";
 
 @WebController("ai-agents")
 export class AgentChatWebController {
+    private readonly pendingOpencodeMetadataRefreshes = new Set<string>();
+    private readonly pendingOpencodeTitleSyncs = new Set<string>();
+
     constructor(
         private readonly agentChatCompletionService: AgentChatCompletionService,
         private readonly agentVoiceService: AgentVoiceService,
@@ -126,6 +132,7 @@ export class AgentChatWebController {
     ) {
         const anonymousIdentifier = this.extractAnonymousIdentifier(req);
         const authSource = this.resolveAuthSource(req, anonymousIdentifier);
+        const feishuIdentity = this.resolveFeishuIdentity(req, agentId, anonymousIdentifier);
 
         if (anonymousIdentifier && dto.conversationId && isUUID(dto.conversationId)) {
             const record = await this.agentChatRecordService.getConversation(dto.conversationId);
@@ -166,7 +173,9 @@ export class AgentChatWebController {
                 playground.id,
                 anonymousIdentifier,
                 authSource,
+                feishuIdentity,
                 res,
+                this.getAutomationToolPolicy(req, dto),
             );
         }
 
@@ -204,6 +213,10 @@ export class AgentChatWebController {
                 username: playground.username,
                 authSource,
                 anonymousIdentifier,
+                mcpUserId: feishuIdentity?.userId,
+                mcpAuthSource: feishuIdentity?.authSource,
+                mcpConversationId: feishuIdentity?.conversationId,
+                mcpAutomationScope: feishuIdentity?.automationScope,
                 conversationId: dto.conversationId,
                 saveConversation: dto.saveConversation ?? true,
                 isDebug: dto.isDebug === true,
@@ -217,6 +230,7 @@ export class AgentChatWebController {
                 parentId: isRegenerate ? undefined : dto.parentId,
                 regenerateParentId: isRegenerate ? dto.parentId : undefined,
                 isToolApprovalFlow: !!isToolApprovalFlow,
+                automationToolPolicy: this.getAutomationToolPolicy(req, dto) as any,
             },
             res,
         );
@@ -228,42 +242,78 @@ export class AgentChatWebController {
         userId: string,
         anonymousIdentifier: string | undefined,
         authSource: RequestAuthSource,
+        feishuIdentity: ReturnType<typeof resolveFeishuIdentityAssertion>,
         res: Response,
+        automationToolPolicy?: AgentChatRequestDto["automationToolPolicy"],
     ): Promise<void> {
         let fullText = "";
         let conversationId: string | undefined;
         let messageId: string | undefined;
         let mockWritableEnded = false;
+        let mockHeadersSent = false;
+        let sseBuffer = "";
+        const textDecoder = new TextDecoder();
+        let resolveMockFinished: (() => void) | undefined;
+        const mockFinished = new Promise<void>((resolve) => {
+            resolveMockFinished = resolve;
+        });
+
+        const consumeSseLine = (line: string) => {
+            if (!line.startsWith("data: ")) return;
+            try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === "text-delta" && data.delta) {
+                    fullText += data.delta;
+                }
+                if (data.type === "data-conversation-id") {
+                    conversationId = data.data;
+                }
+                if (data.type === "data-assistant-message-id") {
+                    messageId = data.data;
+                }
+            } catch {
+                // A single SSE event may be split across multiple writes.
+                return;
+            }
+        };
 
         const mockRes = {
             get writableEnded() {
                 return mockWritableEnded;
             },
-            setHeader: () => mockRes,
+            get headersSent() {
+                return mockHeadersSent;
+            },
+            writeHead: () => {
+                mockHeadersSent = true;
+                return mockRes;
+            },
+            statusCode: 200,
+            setHeader: () => {
+                mockHeadersSent = true;
+                return mockRes;
+            },
             write: (chunk: Buffer | string) => {
-                const str = typeof chunk === "string" ? chunk : chunk.toString();
-                const lines = str.split("\n");
+                const str =
+                    typeof chunk === "string"
+                        ? chunk
+                        : chunk instanceof Uint8Array
+                          ? textDecoder.decode(chunk, { stream: true })
+                          : String(chunk);
+                sseBuffer += str;
+                const lines = sseBuffer.split("\n");
+                sseBuffer = lines.pop() ?? "";
                 for (const line of lines) {
-                    if (!line.startsWith("data: ")) continue;
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        if (data.type === "text-delta" && data.delta) {
-                            fullText += data.delta;
-                        }
-                        if (data.type === "data-conversation-id") {
-                            conversationId = data.data;
-                        }
-                        if (data.type === "data-assistant-message-id") {
-                            messageId = data.data;
-                        }
-                    } catch {
-                        continue;
-                    }
+                    consumeSseLine(line.endsWith("\r") ? line.slice(0, -1) : line);
                 }
                 return true;
             },
             end: () => {
+                const remaining = textDecoder.decode();
+                if (remaining) sseBuffer += remaining;
+                if (sseBuffer) consumeSseLine(sseBuffer);
                 mockWritableEnded = true;
+                resolveMockFinished?.();
             },
             on: () => mockRes,
             once: () => mockRes,
@@ -287,6 +337,10 @@ export class AgentChatWebController {
                 userId,
                 authSource,
                 anonymousIdentifier,
+                mcpUserId: feishuIdentity?.userId,
+                mcpAuthSource: feishuIdentity?.authSource,
+                mcpConversationId: feishuIdentity?.conversationId,
+                mcpAutomationScope: feishuIdentity?.automationScope,
                 conversationId: dto.conversationId,
                 saveConversation: dto.saveConversation ?? true,
                 isDebug: dto.isDebug === true,
@@ -299,9 +353,11 @@ export class AgentChatWebController {
                 parentId: isRegenerate ? undefined : dto.parentId,
                 regenerateParentId: isRegenerate ? dto.parentId : undefined,
                 isToolApprovalFlow: !!isToolApprovalFlow,
+                automationToolPolicy: automationToolPolicy as any,
             },
             mockRes,
         );
+        await mockFinished;
 
         res.json({
             event: "message",
@@ -310,6 +366,19 @@ export class AgentChatWebController {
             answer: fullText,
             createdAt: Math.floor(Date.now() / 1000),
         });
+    }
+
+    private getAutomationToolPolicy(req: Request, dto: AgentChatRequestDto) {
+        if (req.headers["x-automation-context"] !== "server") return undefined;
+        const runId = req.headers["x-automation-run"];
+        const signature = req.headers["x-automation-policy-signature"];
+        return verifyAutomationPolicy(
+            Array.isArray(runId) ? runId[0] : runId,
+            dto.automationToolPolicy,
+            Array.isArray(signature) ? signature[0] : signature,
+        )
+            ? dto.automationToolPolicy
+            : undefined;
     }
 
     @AgentPublicAccess({ route: "audio-to-text", targetPath: ":id/voice/transcribe" })
@@ -985,49 +1054,27 @@ export class AgentChatWebController {
             if (bound?.opencodeSessionId) sessionId = bound.opencodeSessionId;
         }
 
-        if (sessionId !== createdSessionId) {
-            const personalContext = buildOpencodeSessionContext({
+        if (sessionId && sessionId !== createdSessionId) {
+            this.enqueueOpencodeSessionMetadataRefresh({
+                agentId,
+                agentConfig: agent.thirdPartyIntegration,
+                agentSensitiveWordConfig: agent.sensitiveWordConfig,
+                conversationId,
+                opencodeSessionId: sessionId,
+                reportSystemHint,
                 userId: playground.id,
                 username: playground.username,
-                personalParams: await this.userDictService.getGroupValues(
-                    playground.id,
-                    "personalParams",
-                ),
-                sensitiveWordConfig: agent.sensitiveWordConfig,
-                agentId,
             });
-            sessionSystemContext = [personalContext, reportSystemHint].filter(Boolean).join("\n\n");
-            try {
-                await this.opencodeApiService.updateSessionMetadata({
-                    config: agent.thirdPartyIntegration,
-                    sessionId,
-                    metadata: {
-                        [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionSystemContext,
-                    },
-                    timeoutMs: 2_000,
-                });
-            } catch {
-                // Keep an existing conversation available when an older runtime cannot refresh metadata.
-            }
         }
 
         let title = record.title;
         let titleSynced = false;
         if (this.agentChatRecordService.isPlaceholderConversationTitle(record.title)) {
-            try {
-                const session = await this.opencodeApiService.getSession({
-                    config: agent.thirdPartyIntegration,
-                    sessionId,
-                    timeoutMs: 2_000,
-                });
-                titleSynced = await this.agentChatRecordService.syncGeneratedOpencodeTitle(
-                    conversationId,
-                    session.title,
-                );
-                if (titleSynced && session.title) title = session.title.trim();
-            } catch {
-                // Keep embed access available while OpenCode title generation is unavailable.
-            }
+            this.enqueueOpencodeTitleSync({
+                config: agent.thirdPartyIntegration,
+                conversationId,
+                sessionId,
+            });
         }
 
         await this.agentChatRecordService.initializeOpencodeIframeBilling(conversationId);
@@ -1042,6 +1089,79 @@ export class AgentChatWebController {
             title,
             titleSynced,
         };
+    }
+
+    private enqueueOpencodeSessionMetadataRefresh(params: {
+        agentId: string;
+        agentConfig: ThirdPartyIntegrationConfig | null | undefined;
+        agentSensitiveWordConfig: SensitiveWordConfig | null | undefined;
+        conversationId: string;
+        opencodeSessionId: string;
+        reportSystemHint: string;
+        userId: string;
+        username?: string | null;
+    }): void {
+        const key = `${params.conversationId}:${params.opencodeSessionId}`;
+        if (this.pendingOpencodeMetadataRefreshes.has(key)) return;
+        this.pendingOpencodeMetadataRefreshes.add(key);
+
+        void (async () => {
+            try {
+                const personalContext = buildOpencodeSessionContext({
+                    userId: params.userId,
+                    username: params.username,
+                    personalParams: await this.userDictService.getGroupValues(
+                        params.userId,
+                        "personalParams",
+                    ),
+                    sensitiveWordConfig: params.agentSensitiveWordConfig,
+                    agentId: params.agentId,
+                });
+                const sessionSystemContext = [personalContext, params.reportSystemHint]
+                    .filter(Boolean)
+                    .join("\n\n");
+                await this.opencodeApiService.updateSessionMetadata({
+                    config: params.agentConfig,
+                    sessionId: params.opencodeSessionId,
+                    metadata: {
+                        [OPENCODE_BUILDINGAI_CONTEXT_METADATA_KEY]: sessionSystemContext,
+                    },
+                    timeoutMs: 2_000,
+                });
+            } catch {
+                // Keep an existing conversation available when an older runtime cannot refresh metadata.
+            } finally {
+                this.pendingOpencodeMetadataRefreshes.delete(key);
+            }
+        })();
+    }
+
+    private enqueueOpencodeTitleSync(params: {
+        config: ThirdPartyIntegrationConfig | null | undefined;
+        conversationId: string;
+        sessionId: string;
+    }): void {
+        const key = `${params.conversationId}:${params.sessionId}`;
+        if (this.pendingOpencodeTitleSyncs.has(key)) return;
+        this.pendingOpencodeTitleSyncs.add(key);
+
+        void (async () => {
+            try {
+                const session = await this.opencodeApiService.getSession({
+                    config: params.config,
+                    sessionId: params.sessionId,
+                    timeoutMs: 2_000,
+                });
+                await this.agentChatRecordService.syncGeneratedOpencodeTitle(
+                    params.conversationId,
+                    session.title,
+                );
+            } catch {
+                // Keep embed access available while OpenCode title generation is unavailable.
+            } finally {
+                this.pendingOpencodeTitleSyncs.delete(key);
+            }
+        })();
     }
 
     @Post(":id/chat/conversations/:conversationId/opencode-question/reply")
@@ -1217,5 +1337,18 @@ export class AgentChatWebController {
     private resolveAuthSource(req: Request, anonymousIdentifier?: string): RequestAuthSource {
         if (anonymousIdentifier) return "anonymous";
         return getRequestAuthContext(req)?.source ?? "anonymous";
+    }
+
+    private resolveFeishuIdentity(
+        req: Request,
+        agentId: string,
+        anonymousIdentifier?: string,
+    ) {
+        if (!anonymousIdentifier?.startsWith("feishu:")) return undefined;
+        const value = req.headers["x-buildingai-feishu-identity"];
+        return resolveFeishuIdentityAssertion(
+            Array.isArray(value) ? value[0] : value,
+            agentId,
+        );
     }
 }

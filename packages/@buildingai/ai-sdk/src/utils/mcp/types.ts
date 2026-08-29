@@ -107,4 +107,9 @@ export interface CreateMcpClientOptions {
      * 客户端版本（可选）
      */
     version?: string;
+    /**
+     * Optional fetch implementation (useful for runtimes and tests that provide
+     * their own HTTP stack). The default remains the global fetch implementation.
+     */
+    fetchFn?: typeof fetch;
 }

@@ -57,6 +57,7 @@ jest.mock("../../services/opencode-workspace.service", () => ({
 }));
 
 import { AgentChatWebController } from "./agent-chat.controller";
+import { createBowiInvocationAssertion } from "../../../../bowi-mcp/utils/bowi-invocation-assertion";
 
 const AGENT_ID = "11111111-1111-4111-8111-111111111111";
 const CONVERSATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -65,19 +66,17 @@ const USER_ID = "33333333-3333-4333-8333-333333333333";
 describe("AgentChatWebController pure BuildingAI history", () => {
     function harness() {
         const records = {
-            getConversation: jest.fn(
-                async (): Promise<any> => ({
-                    id: CONVERSATION_ID,
-                    agentId: AGENT_ID,
-                    userId: USER_ID,
-                    anonymousIdentifier: null,
-                    title: "Conversation",
-                    archivedAt: null,
-                    opencodeSessionId: "ses_embed",
-                    opencodeRuntimeHash: "runtime-hash",
-                    metadata: undefined,
-                }),
-            ),
+            getConversation: jest.fn(async (): Promise<any> => ({
+                id: CONVERSATION_ID,
+                agentId: AGENT_ID,
+                userId: USER_ID,
+                anonymousIdentifier: null,
+                title: "Conversation",
+                archivedAt: null,
+                opencodeSessionId: "ses_embed",
+                opencodeRuntimeHash: "runtime-hash",
+                metadata: undefined,
+            })),
             createConversation: jest.fn(async () => ({
                 id: CONVERSATION_ID,
                 agentId: AGENT_ID,
@@ -235,7 +234,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
         expect(test.opencodeApi.updateSessionMetadata).not.toHaveBeenCalled();
     });
 
-    it("synchronizes a generated OpenCode title during embed bootstrap", async () => {
+    it("eventually synchronizes a generated OpenCode title after embed bootstrap", async () => {
         const test = harness();
         test.opencodeApi.getSession.mockResolvedValueOnce({
             id: "ses_embed",
@@ -260,11 +259,12 @@ describe("AgentChatWebController pure BuildingAI history", () => {
                 { id: USER_ID, username: "S2385" } as any,
                 { headers: {} } as any,
             ),
-        ).resolves.toMatchObject({ title: "采购订单分析", titleSynced: true });
+        ).resolves.toMatchObject({ title: "新对话", titleSynced: false });
 
         expect(test.opencodeApi.getSession).toHaveBeenCalledWith(
             expect.objectContaining({ sessionId: "ses_embed" }),
         );
+        await new Promise<void>((resolve) => setImmediate(resolve));
         expect(test.records.syncGeneratedOpencodeTitle).toHaveBeenCalledWith(
             CONVERSATION_ID,
             "采购订单分析",
@@ -279,6 +279,147 @@ describe("AgentChatWebController pure BuildingAI history", () => {
                 },
             }),
         );
+    });
+
+    it("returns an existing-session embed before metadata refresh completes", async () => {
+        const test = harness();
+        let releaseMetadata!: (value: { id: string }) => void;
+        test.opencodeApi.updateSessionMetadata.mockReturnValueOnce(
+            new Promise((resolve) => {
+                releaseMetadata = resolve;
+            }),
+        );
+
+        let settled = false;
+        const responsePromise = test.controller.getOpencodeEmbed(
+            AGENT_ID,
+            CONVERSATION_ID,
+            { id: USER_ID, username: "S2385" } as any,
+            { headers: {} } as any,
+        );
+        void responsePromise.then(() => {
+            settled = true;
+        });
+
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(settled).toBe(true);
+        await expect(responsePromise).resolves.toMatchObject({
+            sessionId: "ses_embed",
+            title: "Conversation",
+            titleSynced: false,
+        });
+
+        releaseMetadata({ id: "ses_embed" });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+
+    it("returns a placeholder title before generated-title lookup completes", async () => {
+        const test = harness();
+        let releaseTitleLookup!: (value: { id: string; title: string }) => void;
+        test.opencodeApi.getSession.mockReturnValueOnce(
+            new Promise((resolve) => {
+                releaseTitleLookup = resolve;
+            }),
+        );
+        test.records.getConversation.mockResolvedValueOnce({
+            id: CONVERSATION_ID,
+            agentId: AGENT_ID,
+            userId: USER_ID,
+            anonymousIdentifier: null,
+            title: "新对话",
+            archivedAt: null,
+            opencodeSessionId: "ses_embed",
+            opencodeRuntimeHash: "runtime-hash",
+            metadata: { provider: "opencode", opencodeSessionId: "ses_embed" },
+        });
+
+        let settled = false;
+        const responsePromise = test.controller.getOpencodeEmbed(
+            AGENT_ID,
+            CONVERSATION_ID,
+            { id: USER_ID, username: "S2385" } as any,
+            { headers: {} } as any,
+        );
+        void responsePromise.then(() => {
+            settled = true;
+        });
+
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(settled).toBe(true);
+        await expect(responsePromise).resolves.toMatchObject({
+            sessionId: "ses_embed",
+            title: "新对话",
+            titleSynced: false,
+        });
+
+        releaseTitleLookup({ id: "ses_embed", title: "采购订单分析" });
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(test.records.syncGeneratedOpencodeTitle).toHaveBeenCalledWith(
+            CONVERSATION_ID,
+            "采购订单分析",
+        );
+    });
+
+    it("keeps bootstrap successful when optional enrichment fails", async () => {
+        const test = harness();
+        test.opencodeApi.updateSessionMetadata.mockRejectedValueOnce(
+            new Error("PATCH unsupported"),
+        );
+        test.opencodeApi.getSession.mockRejectedValueOnce(new Error("GET unavailable"));
+        test.records.getConversation.mockResolvedValueOnce({
+            id: CONVERSATION_ID,
+            agentId: AGENT_ID,
+            userId: USER_ID,
+            anonymousIdentifier: null,
+            title: "新对话",
+            archivedAt: null,
+            opencodeSessionId: "ses_embed",
+            opencodeRuntimeHash: "runtime-hash",
+            metadata: { provider: "opencode", opencodeSessionId: "ses_embed" },
+        });
+
+        await expect(
+            test.controller.getOpencodeEmbed(
+                AGENT_ID,
+                CONVERSATION_ID,
+                { id: USER_ID, username: "S2385" } as any,
+                { headers: {} } as any,
+            ),
+        ).resolves.toMatchObject({ title: "新对话", titleSynced: false });
+
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(test.opencodeApi.updateSessionMetadata).toHaveBeenCalledTimes(1);
+        expect(test.opencodeApi.getSession).toHaveBeenCalledTimes(1);
+        expect(test.records.syncGeneratedOpencodeTitle).not.toHaveBeenCalled();
+    });
+
+    it("deduplicates enrichment while an embed request is still pending", async () => {
+        const test = harness();
+        let releaseMetadata!: (value: { id: string }) => void;
+        test.opencodeApi.updateSessionMetadata.mockReturnValueOnce(
+            new Promise((resolve) => {
+                releaseMetadata = resolve;
+            }),
+        );
+
+        const first = test.controller.getOpencodeEmbed(
+            AGENT_ID,
+            CONVERSATION_ID,
+            { id: USER_ID, username: "S2385" } as any,
+            { headers: {} } as any,
+        );
+        const second = test.controller.getOpencodeEmbed(
+            AGENT_ID,
+            CONVERSATION_ID,
+            { id: USER_ID, username: "S2385" } as any,
+            { headers: {} } as any,
+        );
+
+        await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+        expect(test.opencodeApi.updateSessionMetadata).toHaveBeenCalledTimes(1);
+
+        releaseMetadata({ id: "ses_embed" });
+        await new Promise<void>((resolve) => setImmediate(resolve));
     });
 
     it("does not overwrite a meaningful BuildingAI title from OpenCode", async () => {
@@ -457,6 +598,100 @@ describe("AgentChatWebController pure BuildingAI history", () => {
             ),
         ).rejects.toThrow(/durable.*turn/i);
         expect(test.completion.streamChat).not.toHaveBeenCalled();
+    });
+
+    it("collects blocking UI message streams before returning the public response", async () => {
+        const test = harness();
+        test.agents.findOneById.mockResolvedValue({
+            id: AGENT_ID,
+            createMode: "direct",
+            thirdPartyIntegration: { extendedConfig: { durableTurnsEnabled: false } },
+        } as any);
+        (test.completion.streamChat as jest.Mock).mockImplementation(
+            async (_params: any, response: any) => {
+                response.write(`data: ${JSON.stringify({ type: "text-delta", delta: "hello" })}\n`);
+                response.write(
+                    `data: ${JSON.stringify({ type: "text-delta", delta: " world" })}\n\n`,
+                );
+                response.write(
+                    `data: ${JSON.stringify({ type: "data-conversation-id", data: CONVERSATION_ID })}\n\n`,
+                );
+                response.end();
+            },
+        );
+        const response = { json: jest.fn() };
+
+        await test.controller.streamChat(
+            AGENT_ID,
+            {
+                responseMode: "blocking",
+                message: { role: "user", parts: [{ type: "text", text: "hi" }] },
+            } as any,
+            { id: USER_ID } as any,
+            response as any,
+            { headers: {} } as any,
+        );
+
+        expect(response.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                answer: "hello world",
+                conversationId: CONVERSATION_ID,
+            }),
+        );
+    });
+
+    it("passes a signed Feishu user identity to MCP without changing chat ownership", async () => {
+        const test = harness();
+        process.env.BOWI_MCP_INVOCATION_SECRET = "feishu-test-secret";
+        test.agents.findOneById.mockResolvedValue({
+            id: AGENT_ID,
+            createMode: "direct",
+            thirdPartyIntegration: { extendedConfig: { durableTurnsEnabled: false } },
+        } as any);
+        (test.completion.streamChat as jest.Mock).mockImplementation(
+            async (_params: any, response: any) => response.end(),
+        );
+        const response = { json: jest.fn() };
+        const assertion = createBowiInvocationAssertion({
+            userId: "buildingai-user-1",
+            agentId: AGENT_ID,
+            conversationId: "chat-1",
+            authSource: "login",
+            capabilities: ["automation.personal"],
+            automationScope: {
+                channel: "feishu",
+                accountId: "connection-1",
+                conversationId: "chat-1",
+                targetType: "chat",
+                targetId: "chat-1",
+            },
+        });
+
+        await test.controller.streamChat(
+            AGENT_ID,
+            {
+                responseMode: "blocking",
+                message: { role: "user", parts: [{ type: "text", text: "当前有哪些定时任务？" }] },
+            } as any,
+            { id: USER_ID } as any,
+            response as any,
+            {
+                headers: {
+                    "x-anonymous-identifier": "feishu:connection-1:chat-1",
+                    "x-buildingai-feishu-identity": assertion,
+                },
+            } as any,
+        );
+
+        expect(test.completion.streamChat).toHaveBeenCalledWith(
+            expect.objectContaining({
+                userId: USER_ID,
+                mcpUserId: "buildingai-user-1",
+                mcpAuthSource: "login",
+                mcpAutomationScope: expect.objectContaining({ targetId: "chat-1" }),
+            }),
+            expect.anything(),
+        );
     });
 
     it("rejects legacy streaming for an active durable conversation after flag rollback", async () => {

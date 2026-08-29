@@ -20,6 +20,7 @@ import {
     UpdateAiMcpServerDto,
 } from "../dto/ai-mcp-server.dto";
 import { AiMcpToolService } from "./ai-mcp-tool.service";
+import { normalizeMcpConnectionError } from "../utils/mcp-connection-error";
 
 /** Max wait for MCP handshake + listTools during connection checks. */
 const MCP_CHECK_CONNECTION_TIMEOUT_MS = 15_000;
@@ -335,7 +336,7 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
         // 更新连接状态和错误信息
         await this.updateById(id, {
             connectable,
-            connectError: connectable ? "" : errorMessage,
+            connectError: connectable ? "" : normalizeMcpConnectionError(errorMessage),
         });
 
         return {

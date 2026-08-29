@@ -1,3 +1,4 @@
 {
-    "extends": "@buildingai/typescript-config/base.json"
+    "extends": "@buildingai/typescript-config/base.json",
+    "exclude": ["src/**/*.spec.ts", "src/**/__tests__/**"]
 }

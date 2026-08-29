@@ -35,5 +35,11 @@ export function shouldRefreshOpencodeTitleHistory(
   currentTitle: string | undefined,
   titleSynced: boolean,
 ): boolean {
-  return Boolean(titleSynced && currentTitle && currentTitle !== previousTitle);
+  if (!currentTitle || currentTitle === previousTitle) return false;
+  if (titleSynced) return true;
+
+  const placeholders = new Set(["新对话", "New conversation"]);
+  return Boolean(
+    previousTitle && placeholders.has(previousTitle) && !placeholders.has(currentTitle),
+  );
 }

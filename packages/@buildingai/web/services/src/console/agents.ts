@@ -49,6 +49,7 @@ export type ConsoleAgentItem = {
     userCount: number;
     tags?: ConsoleAgentItemTag[];
     createMode: string;
+    durableOpencodeTurnsEnabled?: boolean;
 };
 
 export type QueryConsoleAgentsDto = {

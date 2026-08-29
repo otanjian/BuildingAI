@@ -70,6 +70,10 @@ export class AgentChatMessageService extends BaseService<AgentChatMessage> {
         });
     }
 
+    async getMessageById(messageId: string): Promise<AgentChatMessage | null> {
+        return this.messageRepository.findOne({ where: { id: messageId } });
+    }
+
     async listConversationMessages(
         conversationId: string,
         query: ListConversationMessagesDto,
@@ -141,7 +145,10 @@ export class AgentChatMessageService extends BaseService<AgentChatMessage> {
         };
     }
 
-    async getMessageStats(conversationId: string, manager?: EntityManager): Promise<{
+    async getMessageStats(
+        conversationId: string,
+        manager?: EntityManager,
+    ): Promise<{
         messageCount: number;
         totalTokens: number;
         totalPower: number;

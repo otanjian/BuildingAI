@@ -63,4 +63,32 @@ describe("Bowi agent invocation headers", () => {
             capabilities: ["ehcs.operator"],
         });
     });
+
+    it("preserves a server-provided automation channel scope in the signed assertion", () => {
+        const headers = buildBowiMcpHeaders({
+            serverName: "bowi-mcp",
+            invocation: {
+                userId: "user-1",
+                agentId: "agent-1",
+                agentName: "General agent",
+                authSource: "login",
+                automationScope: {
+                    channel: "feishu",
+                    accountId: "connection-1",
+                    conversationId: "chat-1",
+                    targetType: "chat",
+                    targetId: "chat-1",
+                },
+            },
+        });
+        expect(verifyBowiInvocationAssertion(headers!["x-buildingai-bowi-invocation"])).toMatchObject({
+            automationScope: {
+                channel: "feishu",
+                accountId: "connection-1",
+                conversationId: "chat-1",
+                targetType: "chat",
+                targetId: "chat-1",
+            },
+        });
+    });
 });

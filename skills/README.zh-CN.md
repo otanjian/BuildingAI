@@ -1,7 +1,6 @@
 # Skills 管理指南
 
-本项目使用统一的 skills 管理系统，通过 node 命令将根目录 `skills/`
-文件夹下的 skills 同步到各个 AI 编辑器的配置目录中。仅用于开发环境，我们的 skill 默认不生效，仅在你运行`同步`命令后， skill 会自动生效与你的 AI 编辑器中， 在根目录可以查看到对应后缀 如 .cursor/skills/xxx。
+本项目将源 skill 保存在 `skills/`，按需增量同步到 AI 编辑器配置目录。编辑器目录属于开发期生成文件；运行同步命令前 skill 默认不会生效。
 
 初始化：通常情况下开发你仅需要运行 `pnpm skills sync 编辑器名称即可` 如 `pnpm skills sync cursor`
 
@@ -126,6 +125,17 @@ pnpm skills remove all cursor
 - `gemini` - Gemini 编辑器
 - `kiro` - Kiro 编辑器
 - `windsurf` - Windsurf 编辑器
+
+## 校验
+
+同步前可运行只读检查：
+
+```bash
+pnpm skills lint
+```
+
+它会检查 frontmatter、主文件长度、本地链接和已知过时路径。使用
+`pnpm skills sync <skill> <editor> --dry-run` 可以预览变更。
 
 ## Skills 管理流程
 

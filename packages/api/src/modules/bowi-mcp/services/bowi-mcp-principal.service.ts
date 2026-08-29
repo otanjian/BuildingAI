@@ -27,7 +27,9 @@ export class BowiMcpPrincipalService {
             const claims = verifyBowiInvocationAssertion(assertion);
             const isPersonal = claims.authSource === "login";
             const subjectScoped = (capability: string) =>
-                capability === "todo.personal" || capability.startsWith("sap.");
+                capability === "todo.personal" ||
+                capability === "automation.personal" ||
+                capability.startsWith("sap.");
             return {
                 actor: isPersonal
                     ? { kind: "user", id: claims.userId }
@@ -38,10 +40,14 @@ export class BowiMcpPrincipalService {
                 conversationId: claims.conversationId,
                 capabilities: new Set([
                     ...(isPersonal ? (["todo.personal"] as const) : []),
+                    ...(isPersonal ? (["automation.personal"] as const) : []),
                     ...claims.capabilities.filter(
                         (capability) => !subjectScoped(capability) || isPersonal,
                     ),
                 ]),
+                ...(claims.automationScope && isPersonal
+                    ? { automationScope: claims.automationScope }
+                    : {}),
             };
         }
 
@@ -83,7 +89,11 @@ export class BowiMcpPrincipalService {
             conversationId: record.id,
             sessionId,
             ...(callId ? { callId } : {}),
-            capabilities: new Set(["todo.personal", ...configuredSapCapabilities()]),
+            capabilities: new Set([
+                "todo.personal",
+                "automation.personal",
+                ...configuredSapCapabilities(),
+            ]),
         };
     }
 

@@ -8,6 +8,7 @@ import os
 import re
 import yaml
 from pathlib import Path
+from urllib.parse import urlparse
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -82,6 +83,14 @@ def validate_skill(skill_path):
         # Check description length (max 1024 characters per spec)
         if len(description) > 1024:
             return False, f"Description is too long ({len(description)} characters). Maximum is 1024 characters."
+
+    # Catch references that look local but point nowhere. External URLs are ignored.
+    for match in re.finditer(r'\[[^]]+\]\(([^)]+)\)', content):
+        ref = match.group(1).split('#', 1)[0]
+        if not ref or urlparse(ref).scheme or ref.startswith('#'):
+            continue
+        if not (skill_path / ref).exists():
+            return False, f"Broken local reference: {ref}"
 
     return True, "Skill is valid!"
 

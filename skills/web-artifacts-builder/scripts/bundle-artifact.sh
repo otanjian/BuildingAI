@@ -16,9 +16,14 @@ if [ ! -f "index.html" ]; then
   exit 1
 fi
 
-# Install bundling dependencies
-echo "📦 Installing bundling dependencies..."
-pnpm add -D parcel @parcel/config-default parcel-resolver-tspaths html-inline
+# Install bundling dependencies only when they are missing. Reuse the project's lockfile and
+# workspace cache whenever possible; bundling should not mutate dependencies on every run.
+if ! pnpm exec parcel --version >/dev/null 2>&1 || ! pnpm exec html-inline --help >/dev/null 2>&1; then
+  echo "📦 Installing missing bundling dependencies..."
+  pnpm add -D parcel @parcel/config-default parcel-resolver-tspaths html-inline
+else
+  echo "✅ Bundling dependencies already available"
+fi
 
 # Create Parcel config with tspaths resolver
 if [ ! -f ".parcelrc" ]; then

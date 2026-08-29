@@ -25,7 +25,11 @@ import DatasetsIndexPage from "@/pages/console/ai/datasets/list";
 import AiMcpIndexPage from "@/pages/console/ai/mcp";
 import AiProviderIndexPage from "@/pages/console/ai/provider";
 import AiSecretIndexPage from "@/pages/console/ai/secret";
+import ChannelFeishuIndexPage from "@/pages/console/channel/feishu";
+import ChannelFeishuNewPage from "@/pages/console/channel/feishu/new";
+import ChannelFeishuEditPage from "@/pages/console/channel/feishu/edit";
 import ChannelWechatOaIndexPage from "@/pages/console/channel/wechat-oa";
+import ConsoleAutomationsPage from "@/pages/console/automations";
 import ChatConfigIndexPage from "@/pages/console/chat/config";
 import ChatRecordIndexPage from "@/pages/console/chat/record";
 import DashboardPage from "@/pages/console/dashboard";
@@ -106,6 +110,7 @@ function ConsoleRoutes() {
       { path: "/mcp", element: <AiMcpIndexPage /> },
       { path: "/console-mcp-keys", element: <AiConsoleMcpKeysPage /> },
       { path: "/extension", element: <ExtensionIndexPage /> },
+      { path: "/automations", element: <ConsoleAutomationsPage /> },
       { path: "/secret", element: <AiSecretIndexPage /> },
       { path: "/operation", element: <OperationIndexPage /> },
       {
@@ -209,6 +214,14 @@ function ConsoleRoutes() {
           {
             path: "wechat-oa",
             element: <ChannelWechatOaIndexPage />,
+          },
+          {
+            path: "feishu",
+            children: [
+              { index: true, element: <ChannelFeishuIndexPage /> },
+              { path: "new", element: <ChannelFeishuNewPage /> },
+              { path: ":connectionId", element: <ChannelFeishuEditPage /> },
+            ],
           },
         ],
       },

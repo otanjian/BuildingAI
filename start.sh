@@ -11,6 +11,14 @@ SAP_DIR="${ROOT_DIR}/integrations/sap-abap-adt-mcp"
 SAP_ENV="${SAP_DIR}/.env"
 SAP_PYRFC_DIR="${ROOT_DIR}/integrations/sap-pyrfc-mcp"
 SAP_PYRFC_ENV="${SAP_PYRFC_DIR}/.env"
+DORIS_WORKSPACE_DIR="${DORIS_WORKSPACE_DIR:-${ROOT_DIR}/../doris}"
+DORIS_COMPOSE_FILE="${DORIS_COMPOSE_FILE:-${DORIS_WORKSPACE_DIR}/docker-compose.yml}"
+DORIS_MCP_SCRIPT="${DORIS_MCP_SCRIPT:-${DORIS_WORKSPACE_DIR}/db/start-doris-mcp.sh}"
+DORIS_PYTHON="${DORIS_PYTHON:-${DORIS_WORKSPACE_DIR}/db/.venv/bin/python}"
+DORIS_WEB_PORT="${DORIS_WEB_PORT:-8300}"
+DORIS_FE_PORT="${DORIS_FE_PORT:-8030}"
+DORIS_BE_PORT="${DORIS_BE_PORT:-8040}"
+DORIS_MCP_PORT="${DORIS_MCP_PORT:-3000}"
 
 SERVER_PORT="${SERVER_PORT:-4090}"
 CLIENT_DEV_PORT="${CLIENT_DEV_PORT:-4091}"
@@ -67,6 +75,7 @@ Targets (optional, for start/restart/stop):
   sap           SAP ABAP ADT MCP only (:8100)
   sap-pyrfc     SAP PyRFC MCP only (:8200)
   infra         Docker redis + postgres only
+  doris         Doris FE/BE + knowledge hub + Doris MCP
 
 Options:
   -f, --force   Kill processes on busy ports without prompting
@@ -77,6 +86,14 @@ Environment (root .env or shell):
   START_SAP_MCP=auto|true|false         Default auto (start if integrations/sap-abap-adt-mcp/.env exists)
   START_SAP_PYRFC_MCP=auto|true|false   Default auto (start if integrations/sap-pyrfc-mcp/.env exists)
   START_DOCKER_INFRA=true|false         Default false — docker compose up redis postgres
+  START_DORIS=true|false                Default false — include sibling Doris stack in all
+  DORIS_WORKSPACE_DIR                   Doris workspace (default: ../doris)
+  DORIS_COMPOSE_FILE                    Doris FE/BE Compose file
+  DORIS_PYTHON                          Python interpreter for the Doris static server
+  DORIS_WEB_PORT=8300                   Doris knowledge-hub static frontend port
+  DORIS_FE_PORT=8030                    Doris FE HTTP port
+  DORIS_BE_PORT=8040                    Doris BE HTTP port
+  DORIS_MCP_PORT=3000                   Doris MCP HTTP port
   SERVER_PORT=4090                      API server HTTP port
   CLIENT_DEV_PORT=4091                  Web development server HTTP port
   OPENCODE_PORT=4096                    OpenCode serve HTTP port
@@ -102,6 +119,7 @@ Examples:
   ./start.sh restart sap          # SAP ADT MCP only
   ./start.sh restart sap-pyrfc    # SAP PyRFC MCP only
   ./start.sh restart opencode     # OpenCode serve only
+  ./start.sh restart doris        # Doris FE/BE + knowledge hub + Doris MCP
   ./start.sh infra start          # postgres + redis via Docker
   ./start.sh -f restart           # force-free ports, then start
 
@@ -133,7 +151,7 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR OPENCODE_RUNTIME_ATTESTATION BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA START_DORIS DORIS_WORKSPACE_DIR DORIS_COMPOSE_FILE DORIS_MCP_SCRIPT DORIS_PYTHON DORIS_WEB_PORT DORIS_FE_PORT DORIS_BE_PORT DORIS_MCP_PORT OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR OPENCODE_RUNTIME_ATTESTATION BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
@@ -145,10 +163,19 @@ load_root_env() {
   OPENCODE_WORKSPACE_DIR="${OPENCODE_WORKSPACE_DIR:-${ROOT_DIR}/../opencode}"
   SAP_PORT="${MCP_PORT:-8100}"
   SAP_PYRFC_PORT="${SAP_PYRFC_MCP_PORT:-8200}"
+  DORIS_WORKSPACE_DIR="${DORIS_WORKSPACE_DIR:-${ROOT_DIR}/../doris}"
+  DORIS_COMPOSE_FILE="${DORIS_COMPOSE_FILE:-${DORIS_WORKSPACE_DIR}/docker-compose.yml}"
+  DORIS_MCP_SCRIPT="${DORIS_MCP_SCRIPT:-${DORIS_WORKSPACE_DIR}/db/start-doris-mcp.sh}"
+  DORIS_PYTHON="${DORIS_PYTHON:-${DORIS_WORKSPACE_DIR}/db/.venv/bin/python}"
+  DORIS_WEB_PORT="${DORIS_WEB_PORT:-8300}"
+  DORIS_FE_PORT="${DORIS_FE_PORT:-8030}"
+  DORIS_BE_PORT="${DORIS_BE_PORT:-8040}"
+  DORIS_MCP_PORT="${DORIS_MCP_PORT:-3000}"
   START_OPENCODE="${START_OPENCODE:-auto}"
   START_SAP_MCP="${START_SAP_MCP:-auto}"
   START_SAP_PYRFC_MCP="${START_SAP_PYRFC_MCP:-auto}"
   START_DOCKER_INFRA="${START_DOCKER_INFRA:-false}"
+  START_DORIS="${START_DORIS:-false}"
   DB_HOST="${DB_HOST:-localhost}"
   DB_PORT="${DB_PORT:-5432}"
   REDIS_HOST="${REDIS_HOST:-localhost}"
@@ -258,6 +285,11 @@ api_ready() {
 web_ready() {
   local port="${CLIENT_DEV_PORT:-4091}"
   curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/" >/dev/null 2>&1
+}
+
+vite_client_ready() {
+  local port="${CLIENT_DEV_PORT:-4091}"
+  curl -sf --noproxy '*' --max-time 2 "http://127.0.0.1:${port}/@vite/client" >/dev/null 2>&1
 }
 
 web_proxy_ready() {
@@ -487,7 +519,7 @@ warn_if_web_empty() {
   kill_cursor_listeners "$port"
   for i in $(seq 1 "$max_wait"); do
     # IPv4 is enough for dev; do not block on [::1] (Cursor port-forward often breaks IPv6 only).
-    if web_ready && web_proxy_ready; then
+    if web_ready && vite_client_ready && web_proxy_ready; then
       return 0
     fi
     if [[ "$i" == 3 || "$i" == 6 ]]; then
@@ -541,7 +573,7 @@ wait_for_dev_ready() {
     want_opencode=1
   fi
   for i in $(seq 1 "$max_wait"); do
-    if api_ready && web_ready && web_proxy_ready; then
+    if api_ready && web_ready && vite_client_ready && web_proxy_ready; then
       if [[ "$want_opencode" != 1 ]] || opencode_ready; then
         if [[ "$want_opencode" == 1 ]]; then
           echo "  Dev stack ready (api + web + proxy + OpenCode)."
@@ -557,6 +589,7 @@ wait_for_dev_ready() {
   echo "WARNING: Dev stack not fully ready within ${max_wait}s."
   api_ready && echo "  API :${SERVER_PORT:-4090} — ok" || echo "  API :${SERVER_PORT:-4090} — down"
   web_ready && echo "  Web :${CLIENT_DEV_PORT:-4091} — ok" || echo "  Web :${CLIENT_DEV_PORT:-4091} — down"
+  vite_client_ready && echo "  Vite client — ok" || echo "  Vite client — down (stale or broken Vite dependency path)"
   web_proxy_ready && echo "  Proxy /api/config — ok" || echo "  Proxy /api/config — down"
   if [[ "$want_opencode" == 1 ]]; then
     opencode_ready && echo "  OpenCode :${OPENCODE_PORT:-4096} — ok" || echo "  OpenCode :${OPENCODE_PORT:-4096} — down"
@@ -640,7 +673,7 @@ read_pid() {
 
 pid_alive() {
   local pid="${1:-}"
-  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] && kill -0 "$pid" 2>/dev/null
 }
 
 is_postgres_process() {
@@ -832,11 +865,30 @@ docker_available() {
   command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
 }
 
+ensure_docker_available() {
+  docker_available && return 0
+
+  # When the active Docker context is Colima, a stopped VM is a common cause of
+  # failed Doris/infra starts. Wake that profile automatically; never launch
+  # Colima when the user selected Docker Desktop or another context.
+  local context
+  context="$(docker context show 2>/dev/null || true)"
+  if [[ "$context" == "colima" ]] && command -v colima >/dev/null 2>&1; then
+    echo "Docker context 'colima' is unavailable; starting Colima..."
+    if colima start; then
+      docker_available && return 0
+    else
+      echo "Warning: failed to start Colima; Docker remains unavailable." >&2
+    fi
+  fi
+  return 1
+}
+
 start_infra() {
   if [[ "$START_DOCKER_INFRA" != "true" && "$START_DOCKER_INFRA" != "1" ]]; then
     return 0
   fi
-  if ! docker_available; then
+  if ! ensure_docker_available; then
     echo "Warning: START_DOCKER_INFRA=true but Docker is not running. Skipping redis/postgres."
     return 0
   fi
@@ -858,6 +910,220 @@ stop_infra() {
   rm -f "${RUN_DIR}/docker-infra.started"
 }
 
+should_start_doris() {
+  case "${START_DORIS:-false}" in
+    true|1|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+doris_paths_valid() {
+  [[ -d "${DORIS_WORKSPACE_DIR}" ]] || {
+    echo "Error: Doris workspace not found: ${DORIS_WORKSPACE_DIR}" >&2
+    echo "  Set DORIS_WORKSPACE_DIR=/path/to/doris or clone the sibling Doris workspace." >&2
+    return 1
+  }
+  [[ -f "${DORIS_COMPOSE_FILE}" ]] || {
+    echo "Error: Doris Compose file not found: ${DORIS_COMPOSE_FILE}" >&2
+    return 1
+  }
+  [[ -x "${DORIS_MCP_SCRIPT}" ]] || {
+    echo "Error: Doris MCP launcher not found or not executable: ${DORIS_MCP_SCRIPT}" >&2
+    return 1
+  }
+  [[ -x "${DORIS_PYTHON}" ]] || {
+    echo "Error: Doris Python interpreter not found: ${DORIS_PYTHON}" >&2
+    echo "  Run: uv venv --python 3.12 ${DORIS_WORKSPACE_DIR}/db/.venv" >&2
+    return 1
+  }
+}
+
+doris_fe_ready() {
+  curl -sf --noproxy '*' --max-time 3 "http://127.0.0.1:${DORIS_FE_PORT}/" >/dev/null 2>&1
+}
+
+doris_mcp_ready() {
+  curl -sf --noproxy '*' --max-time 3 "http://127.0.0.1:${DORIS_MCP_PORT}/live" >/dev/null 2>&1
+}
+
+doris_web_ready() {
+  curl -sf --noproxy '*' --max-time 3 "http://127.0.0.1:${DORIS_WEB_PORT}/" >/dev/null 2>&1
+}
+
+doris_pm2_service_healthy() {
+  local name="$1" probe="$2" pm2_pid
+  # A previous invocation may already own the port through PM2. Treat that
+  # managed, healthy process as reusable instead of reporting a false port
+  # collision on a normal (non-force) start.
+  pm2_pid="$(pnpm exec pm2 pid "$name" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$pm2_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  pid_alive "$pm2_pid" || return 1
+  "$probe"
+}
+
+pm2_service_port_healthy() {
+  local name="$1" port="$2" pm2_pid
+  pm2_pid="$(pnpm exec pm2 pid "$name" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$pm2_pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  pid_alive "$pm2_pid" && port_in_use "$port"
+}
+
+wait_for_doris_component() {
+  local label="$1" probe="$2" max_wait="${3:-60}" i
+  for i in $(seq 1 "$max_wait"); do
+    if "$probe"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "Error: Doris ${label} did not become ready within ${max_wait}s." >&2
+  return 1
+}
+
+start_doris_docker() {
+  local started=() service
+  if ! ensure_docker_available; then
+    echo "Error: Docker is not running; cannot start Doris FE/BE." >&2
+    echo "  Start Docker Desktop or Colima, then run: ./start.sh -f restart doris" >&2
+    return 1
+  fi
+
+  for service in fe be; do
+    if ! docker compose -f "$DORIS_COMPOSE_FILE" ps --status running -q "$service" 2>/dev/null | grep -q .; then
+      started+=("$service")
+    fi
+  done
+
+  echo "Starting Doris FE/BE via Docker Compose..."
+  docker compose -f "$DORIS_COMPOSE_FILE" up -d fe be
+  if [[ ${#started[@]} -gt 0 ]]; then
+    printf '%s\n' "${started[@]}" >"${RUN_DIR}/doris-docker.started"
+  fi
+  wait_for_doris_component "FE" doris_fe_ready "${DORIS_READY_MAX_WAIT:-90}"
+  if ! port_in_use "$DORIS_BE_PORT"; then
+    echo "Error: Doris BE port ${DORIS_BE_PORT} is not listening." >&2
+    return 1
+  fi
+  echo "  Doris FE : http://127.0.0.1:${DORIS_FE_PORT}/"
+  echo "  Doris BE : port ${DORIS_BE_PORT} listening"
+}
+
+start_doris_web() {
+  local force="${1:-0}" pm2_pid launcher
+  load_nvm
+  if [[ "$force" != 1 ]] && doris_pm2_service_healthy doris-web doris_web_ready; then
+    pm2_pid="$(pnpm exec pm2 pid doris-web 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+    [[ "$pm2_pid" =~ ^[0-9]+$ ]] && echo "$pm2_pid" >"${RUN_DIR}/doris-web.pid"
+    echo "  Doris knowledge hub: already healthy at http://127.0.0.1:${DORIS_WEB_PORT}/"
+    return 0
+  fi
+  ensure_ports_available "$force" "$DORIS_WEB_PORT"
+  pnpm exec pm2 delete doris-web 2>/dev/null || true
+  stop_pid_file "doris-web"
+  ensure_run_dir
+  launcher="${RUN_DIR}/start-doris-web.sh"
+  cat >"$launcher" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+  exec "${DORIS_PYTHON:?DORIS_PYTHON is required}" -m http.server "${DORIS_WEB_PORT:?DORIS_WEB_PORT is required}" --bind 127.0.0.1
+EOF
+  chmod +x "$launcher"
+  : >>"${RUN_DIR}/doris-web.log"
+  echo "Starting Doris knowledge hub on port ${DORIS_WEB_PORT}..."
+  DORIS_WEB_PORT="$DORIS_WEB_PORT" DORIS_PYTHON="$DORIS_PYTHON" pnpm exec pm2 start "$launcher" --name doris-web --time \
+    --output "${RUN_DIR}/doris-web.log" --error "${RUN_DIR}/doris-web.log" \
+    --merge-logs --interpreter bash --cwd "$DORIS_WORKSPACE_DIR"
+  pm2_pid="$(pnpm exec pm2 pid doris-web 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$pm2_pid" =~ ^[0-9]+$ ]] && echo "$pm2_pid" >"${RUN_DIR}/doris-web.pid"
+  pnpm exec pm2 save 2>/dev/null || true
+  wait_for_doris_component "knowledge hub" doris_web_ready "${DORIS_READY_MAX_WAIT:-90}"
+  echo "  Doris knowledge hub: http://127.0.0.1:${DORIS_WEB_PORT}/"
+}
+
+start_doris_mcp() {
+  local force="${1:-0}" pm2_pid launcher
+  load_nvm
+  if [[ "$force" != 1 ]] && doris_pm2_service_healthy doris-mcp doris_mcp_ready; then
+    pm2_pid="$(pnpm exec pm2 pid doris-mcp 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+    [[ "$pm2_pid" =~ ^[0-9]+$ ]] && echo "$pm2_pid" >"${RUN_DIR}/doris-mcp.pid"
+    echo "  Doris MCP: already healthy at http://127.0.0.1:${DORIS_MCP_PORT}/mcp"
+    return 0
+  fi
+  ensure_ports_available "$force" "$DORIS_MCP_PORT"
+  pnpm exec pm2 delete doris-mcp 2>/dev/null || true
+  stop_pid_file "doris-mcp"
+  ensure_run_dir
+  launcher="${RUN_DIR}/start-doris-mcp.sh"
+  cat >"$launcher" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+export SERVER_PORT="${DORIS_MCP_PORT:?DORIS_MCP_PORT is required}"
+exec "${DORIS_MCP_SCRIPT:?DORIS_MCP_SCRIPT is required}"
+EOF
+  chmod +x "$launcher"
+  : >>"${RUN_DIR}/doris-mcp.log"
+  echo "Starting Doris MCP on port ${DORIS_MCP_PORT}..."
+  DORIS_MCP_PORT="$DORIS_MCP_PORT" DORIS_MCP_SCRIPT="$DORIS_MCP_SCRIPT" \
+    pnpm exec pm2 start "$launcher" --name doris-mcp --time \
+      --output "${RUN_DIR}/doris-mcp.log" --error "${RUN_DIR}/doris-mcp.log" \
+      --merge-logs --interpreter bash
+  pm2_pid="$(pnpm exec pm2 pid doris-mcp 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$pm2_pid" =~ ^[0-9]+$ ]] && echo "$pm2_pid" >"${RUN_DIR}/doris-mcp.pid"
+  pnpm exec pm2 save 2>/dev/null || true
+  wait_for_doris_component "MCP" doris_mcp_ready "${DORIS_READY_MAX_WAIT:-90}"
+  echo "  Doris MCP: http://127.0.0.1:${DORIS_MCP_PORT}/mcp"
+}
+
+start_doris_stack() {
+  local force="${1:-0}"
+  doris_paths_valid
+  start_doris_docker
+  start_doris_web "$force"
+  start_doris_mcp "$force"
+}
+
+stop_doris_web() {
+  if cd "${ROOT_DIR}" 2>/dev/null; then
+    load_nvm
+    pnpm exec pm2 delete doris-web 2>/dev/null || true
+  fi
+  stop_pid_file "doris-web"
+  kill_port "${DORIS_WEB_PORT:-8300}"
+}
+
+stop_doris_mcp() {
+  if cd "${ROOT_DIR}" 2>/dev/null; then
+    load_nvm
+    pnpm exec pm2 delete doris-mcp 2>/dev/null || true
+  fi
+  stop_pid_file "doris-mcp"
+  kill_port "${DORIS_MCP_PORT:-3000}"
+}
+
+stop_doris_docker() {
+  local marker="${RUN_DIR}/doris-docker.started" line
+  local services=()
+  [[ -f "$marker" ]] || return 0
+  if ! docker_available; then
+    echo "Warning: Docker is unavailable; leaving Doris containers untouched." >&2
+    return 0
+  fi
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && services+=("$line")
+  done <"$marker"
+  if [[ ${#services[@]} -gt 0 ]]; then
+    echo "Stopping Doris Docker services started by start.sh: ${services[*]}..."
+    docker compose -f "$DORIS_COMPOSE_FILE" stop "${services[@]}" 2>/dev/null || true
+  fi
+  rm -f "$marker"
+}
+
+stop_doris() {
+  stop_doris_web
+  stop_doris_mcp
+  stop_doris_docker
+}
+
 start_sap_mcp() {
   local force="${1:-0}"
   local skip_build="${2:-0}"
@@ -875,6 +1141,13 @@ start_sap_mcp() {
 
   load_nvm
   cd "${ROOT_DIR}"
+  if [[ "$force" != 1 ]] && pm2_service_port_healthy sap-adt-mcp "$SAP_PORT"; then
+    local existing_pid
+    existing_pid="$(pnpm exec pm2 pid sap-adt-mcp 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+    [[ "$existing_pid" =~ ^[0-9]+$ ]] && echo "$existing_pid" >"${RUN_DIR}/sap-mcp.pid"
+    echo "  SAP MCP: already healthy at http://127.0.0.1:${SAP_PORT}/mcp"
+    return 0
+  fi
   pnpm exec pm2 delete sap-adt-mcp 2>/dev/null || true
   stop_pid_file "sap-mcp"
   ensure_ports_available "$force" "$SAP_PORT"
@@ -938,6 +1211,13 @@ start_sap_pyrfc_mcp() {
 
   load_nvm
   cd "${ROOT_DIR}"
+  if [[ "$force" != 1 ]] && pm2_service_port_healthy sap-pyrfc-mcp "$SAP_PYRFC_PORT"; then
+    local existing_pid
+    existing_pid="$(pnpm exec pm2 pid sap-pyrfc-mcp 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+    [[ "$existing_pid" =~ ^[0-9]+$ ]] && echo "$existing_pid" >"${RUN_DIR}/sap-pyrfc-mcp.pid"
+    echo "  SAP PyRFC MCP: already healthy at http://127.0.0.1:${SAP_PYRFC_PORT}/mcp"
+    return 0
+  fi
   pnpm exec pm2 delete sap-pyrfc-mcp 2>/dev/null || true
   stop_pid_file "sap-pyrfc-mcp"
   ensure_ports_available "$force" "$SAP_PYRFC_PORT"
@@ -1118,6 +1398,27 @@ prebuild_db() {
   fi
 }
 
+ai_sdk_need_prebuild() {
+  local ai_sdk_pkg="${ROOT_DIR}/packages/@buildingai/ai-sdk"
+  local marker="${ai_sdk_pkg}/dist/utils/mcp/client.js"
+  local modern_marker="${ai_sdk_pkg}/dist/utils/mcp/modern-http.js"
+  [[ ! -f "$marker" || ! -f "$modern_marker" ]] && return 0
+  if find "${ai_sdk_pkg}/src" "${ai_sdk_pkg}/tsconfig.build.json" "${ai_sdk_pkg}/package.json" -type f \
+    -newer "$marker" 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+prebuild_ai_sdk() {
+  if ai_sdk_need_prebuild; then
+    echo "Prebuilding @buildingai/ai-sdk (API loads compiled MCP client)..."
+    pnpm --filter @buildingai/ai-sdk build >/dev/null 2>&1 || pnpm --filter @buildingai/ai-sdk build
+  else
+    echo "Skipping @buildingai/ai-sdk prebuild (dist is up to date)."
+  fi
+}
+
 ensure_dev_launchers() {
   cat >"${RUN_DIR}/start-api.js" <<'EOF'
 #!/usr/bin/env node
@@ -1152,7 +1453,12 @@ for (const key of ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "AL
 env.NO_PROXY = "localhost,127.0.0.1,::1";
 env.no_proxy = env.NO_PROXY;
 env.CLIENT_DEV_PORT = env.CLIENT_DEV_PORT || "4091";
-const child = spawn("pnpm", ["dev"], { cwd, env, stdio: "inherit" });
+const packageManager = process.env.BUILDINGAI_PNPM_BIN || "pnpm";
+const child = spawn(packageManager, ["--dir", cwd, "exec", "vite", "--host", "127.0.0.1"], {
+  cwd,
+  env,
+  stdio: "inherit",
+});
 child.on("exit", (code) => process.exit(code ?? 0));
 EOF
   chmod +x "${RUN_DIR}/start-api.js" "${RUN_DIR}/start-web.js"
@@ -1294,11 +1600,17 @@ start_dev() {
   check_node
   check_env_file
   ensure_local_infra || exit 1
+  if [[ "$force" != 1 ]] && [[ "$detach" == 1 ]] && dev_pm2_stack_healthy; then
+    print_info
+    echo "  Dev stack: already healthy (PM2 API + web)."
+    return 0
+  fi
   ensure_ports_available "$force" "${DEV_PORTS[@]}"
   kill_cursor_listeners "${CLIENT_DEV_PORT:-4091}"
   check_deps
   prebuild_types
   prebuild_db
+  prebuild_ai_sdk
 
   if [[ "$detach" == 1 ]]; then
     start_dev_detached
@@ -1315,6 +1627,15 @@ start_dev() {
     CLIENT_DEV_PORT="${CLIENT_DEV_PORT}" \
     SERVER_LISTEN_HOST=127.0.0.1 \
     NO_PROXY="${NO_PROXY}" no_proxy="${no_proxy}" pnpm dev:core
+}
+
+dev_pm2_stack_healthy() {
+  local api_pid web_pid
+  api_pid="$(pnpm exec pm2 pid buildingai-api 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  web_pid="$(pnpm exec pm2 pid buildingai-web 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+  [[ "$api_pid" =~ ^[1-9][0-9]*$ ]] && pid_alive "$api_pid" || return 1
+  [[ "$web_pid" =~ ^[1-9][0-9]*$ ]] && pid_alive "$web_pid" || return 1
+  api_ready && web_proxy_ready
 }
 
 stop_dev() {
@@ -1384,7 +1705,28 @@ cmd_status() {
     echo "  :${ERPNEXT_PORT}  ERPNext   down (external)"
   fi
 
-  for name in dev dev-web dev-api sap-mcp sap-pyrfc-mcp; do
+  if port_in_use "$DORIS_FE_PORT"; then
+    echo "  :${DORIS_FE_PORT}  Doris FE     listening"
+  else
+    echo "  :${DORIS_FE_PORT}  Doris FE     down"
+  fi
+  if port_in_use "$DORIS_BE_PORT"; then
+    echo "  :${DORIS_BE_PORT}  Doris BE     listening"
+  else
+    echo "  :${DORIS_BE_PORT}  Doris BE     down"
+  fi
+  if port_in_use "$DORIS_WEB_PORT"; then
+    echo "  :${DORIS_WEB_PORT}  Doris Web    listening"
+  else
+    echo "  :${DORIS_WEB_PORT}  Doris Web    down"
+  fi
+  if port_in_use "$DORIS_MCP_PORT"; then
+    echo "  :${DORIS_MCP_PORT}  Doris MCP    listening"
+  else
+    echo "  :${DORIS_MCP_PORT}  Doris MCP    down"
+  fi
+
+  for name in dev dev-web dev-api sap-mcp sap-pyrfc-mcp doris-web doris-mcp; do
     local pid file="${RUN_DIR}/${name}.pid"
     pid="$(read_pid "$file")"
     if [[ -n "$pid" ]]; then
@@ -1410,11 +1752,12 @@ cmd_logs() {
     opencode) tail -f "${RUN_DIR}/opencode-serve.log" ;;
     sap) tail -f "${RUN_DIR}/sap-mcp.log" ;;
     sap-pyrfc) tail -f "${RUN_DIR}/sap-pyrfc-mcp.log" ;;
+    doris) tail -f "${RUN_DIR}/doris-mcp.log" "${RUN_DIR}/doris-web.log" ;;
     all)
-      tail -f "${RUN_DIR}/dev.log" "${RUN_DIR}/opencode-serve.log" "${RUN_DIR}/sap-mcp.log" "${RUN_DIR}/sap-pyrfc-mcp.log" 2>/dev/null
+      tail -f "${RUN_DIR}/dev.log" "${RUN_DIR}/opencode-serve.log" "${RUN_DIR}/sap-mcp.log" "${RUN_DIR}/sap-pyrfc-mcp.log" "${RUN_DIR}/doris-mcp.log" "${RUN_DIR}/doris-web.log" 2>/dev/null
       ;;
     *)
-      echo "Unknown log target: $which (use dev, opencode, sap, sap-pyrfc, or all)"
+      echo "Unknown log target: $which (use dev, opencode, sap, sap-pyrfc, doris, or all)"
       exit 1
       ;;
   esac
@@ -1428,6 +1771,7 @@ stop_target() {
       stop_opencode
       stop_sap_mcp
       stop_sap_pyrfc_mcp
+      stop_doris
       stop_infra
       ;;
     dev)
@@ -1438,6 +1782,7 @@ stop_target() {
     sap) stop_sap_mcp ;;
     sap-pyrfc) stop_sap_pyrfc_mcp ;;
     infra) stop_infra ;;
+    doris) stop_doris ;;
     *)
       echo "Unknown target: $target"
       exit 1
@@ -1461,6 +1806,9 @@ preflight_target() {
         return 1
       fi
       ;;
+    doris)
+      doris_paths_valid
+      ;;
   esac
 }
 
@@ -1480,6 +1828,9 @@ start_target() {
       start_sap_mcp "$force" "$skip_sap_build" 0 || true
       start_sap_pyrfc_mcp "$force" 0 || true
       start_opencode "$force"
+      if should_start_doris; then
+        start_doris_stack "$force" || echo "Warning: Doris stack failed to start; see ./start.sh logs doris" >&2
+      fi
       if [[ "$detach" == 1 ]]; then
         start_dev "$force" 1
       else
@@ -1506,6 +1857,9 @@ start_target() {
     infra)
       start_infra
       ;;
+    doris)
+      start_doris_stack "$force"
+      ;;
     *)
       echo "Unknown target: $target"
       exit 1
@@ -1528,7 +1882,7 @@ parse_args() {
         ;;
       status) COMMAND="status"; shift ;;
       logs) COMMAND="logs"; shift; LOG_TARGET="${1:-dev}"; shift || true ;;
-      dev | sap | sap-pyrfc | opencode | infra | all)
+      dev | sap | sap-pyrfc | opencode | infra | doris | all)
         TARGET="$1"
         shift
         ;;

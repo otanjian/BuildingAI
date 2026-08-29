@@ -81,7 +81,10 @@ export class BowiMcpRuntimeService {
                 .resolve({
                     headers,
                     meta: params?._meta,
-                    requireSubject: name.startsWith("todo_") || name.startsWith("sap_"),
+                    requireSubject:
+                        name.startsWith("todo_") ||
+                        name.startsWith("sap_") ||
+                        name.startsWith("automation_"),
                 })
                 .catch(() => {
                     throw new BowiToolAuthorizationError("Bowi principal resolution failed");
@@ -113,8 +116,16 @@ export class BowiMcpRuntimeService {
             return { code: error.code, message: error.message };
         }
         if (error instanceof HttpError) {
-            if (error.httpStatus === 404) return { code: "TODO_NOT_FOUND", message: "Todo not found" };
-            if (error.httpStatus === 409) return { code: "TODO_STALE_UPDATE", message: error.message };
+            if (error.httpStatus === 404)
+                return {
+                    code: /todo/iu.test(error.message) ? "TODO_NOT_FOUND" : "BOWI_NOT_FOUND",
+                    message: error.message,
+                };
+            if (error.httpStatus === 409)
+                return {
+                    code: /todo/iu.test(error.message) ? "TODO_STALE_UPDATE" : "BOWI_STALE_UPDATE",
+                    message: error.message,
+                };
             if (error.httpStatus === 401 || error.httpStatus === 403) {
                 return { code: "BOWI_FORBIDDEN", message: "Bowi tool access denied" };
             }

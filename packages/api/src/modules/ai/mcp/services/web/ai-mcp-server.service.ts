@@ -14,6 +14,7 @@ import { AiMcpToolService } from "@modules/ai/mcp/services/ai-mcp-tool.service";
 import { Injectable, Logger } from "@nestjs/common";
 
 import { withTimeout } from "@common/utils/with-timeout";
+import { normalizeMcpConnectionError } from "../../utils/mcp-connection-error";
 
 /** Max wait for MCP handshake + listTools during connection checks. */
 const MCP_CHECK_CONNECTION_TIMEOUT_MS = 15_000;
@@ -316,7 +317,7 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
         // 更新连接状态和错误信息
         await this.updateById(id, {
             connectable,
-            connectError: connectable ? "" : errorMessage,
+            connectError: connectable ? "" : normalizeMcpConnectionError(errorMessage),
         });
 
         return {

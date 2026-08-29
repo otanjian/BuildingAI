@@ -75,3 +75,24 @@ export { UserDict } from "./user-dict.entity";
 export { UserSubscription } from "./user-subscription.entity";
 export { UserToken } from "./user-token.entity";
 export { ConsoleMcpApiKey } from "./console-mcp-api-key.entity";
+export { ChannelAccount } from "./channel-account.entity";
+export {
+    FeishuChannelConnection,
+    FEISHU_CONNECTION_MIGRATION_STATUSES,
+    type FeishuConnectionMigrationStatus,
+} from "./feishu-channel-connection.entity";
+export {
+    AutomationJob,
+    AUTOMATION_JOB_STATUSES,
+    type AutomationJobStatus,
+} from "./automation-job.entity";
+export {
+    AutomationRun,
+    AUTOMATION_RUN_STATUSES,
+    type AutomationRunStatus,
+} from "./automation-run.entity";
+export {
+    AutomationDispatch,
+    AUTOMATION_DISPATCH_STATUSES,
+    type AutomationDispatchStatus,
+} from "./automation-dispatch.entity";

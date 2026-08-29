@@ -49,4 +49,13 @@ export class AgentChatRequestDto {
     @IsOptional()
     @IsString()
     parentId?: string;
+
+    @IsOptional()
+    @IsObject()
+    automationToolPolicy?: {
+        allowedTools?: string[];
+        deniedTools?: string[];
+        allowExternalSideEffects?: boolean;
+        approvalTimeoutSeconds?: number;
+    };
 }

@@ -11,7 +11,7 @@ When an OpenCode Web session is rendered inside the BuildingAI OpenCode agent pa
 #### Scenario: OpenCode conversation is embedded
 
 - **WHEN** a user opens an OpenCode agent conversation in BuildingAI
-- **THEN** the right panel has no duplicate OpenCode titlebar/session tabs or sticky session-title row
+- **THEN** the right panel has no duplicate OpenCode titlebar/session tabs, responsive “会话 / 更改” tabs, or sticky session-title row
 - **AND** its top controls and conversation title match the BuildingAI-owned header
 
 #### Scenario: Embedded conversation title is synchronized

@@ -1,6 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { BOWI_CAPABILITIES, type BowiAuthSource, type BowiCapability } from "../types/bowi-mcp.types";
+import {
+    BOWI_CAPABILITIES,
+    type BowiAuthSource,
+    type BowiAutomationScope,
+    type BowiCapability,
+} from "../types/bowi-mcp.types";
 
 const ASSERTION_AUDIENCE = "bowi-mcp";
 const DEFAULT_TTL_SECONDS = 120;
@@ -15,6 +20,7 @@ export interface BowiInvocationClaims {
     issuedAt: number;
     expiresAt: number;
     nonce: string;
+    automationScope?: BowiAutomationScope;
 }
 
 function secret(): string {
@@ -36,6 +42,7 @@ export function createBowiInvocationAssertion(input: {
     now?: number;
     ttlSeconds?: number;
     nonce?: string;
+    automationScope?: BowiAutomationScope;
 }): string {
     const issuedAt = input.now ?? Math.floor(Date.now() / 1000);
     const claims: BowiInvocationClaims = {
@@ -50,6 +57,7 @@ export function createBowiInvocationAssertion(input: {
         issuedAt,
         expiresAt: issuedAt + (input.ttlSeconds ?? DEFAULT_TTL_SECONDS),
         nonce: input.nonce ?? `${issuedAt}-${Math.random().toString(36).slice(2)}`,
+        ...(input.automationScope ? { automationScope: input.automationScope } : {}),
     };
     const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
     return `${payload}.${sign(payload)}`;
@@ -86,6 +94,26 @@ export function verifyBowiInvocationAssertion(assertion: string, now = Math.floo
         claims.expiresAt < now
     ) {
         throw new Error("Invalid or expired Bowi invocation assertion");
+    }
+    if (claims.automationScope) {
+        const scope = claims.automationScope;
+        if (
+            !scope ||
+            typeof scope.channel !== "string" ||
+            !scope.channel.trim() ||
+            typeof scope.accountId !== "string" ||
+            !scope.accountId.trim() ||
+            typeof scope.conversationId !== "string" ||
+            !scope.conversationId.trim() ||
+            !["chat", "user"].includes(scope.targetType) ||
+            typeof scope.targetId !== "string" ||
+            !scope.targetId.trim() ||
+            (scope.tenantId !== undefined && typeof scope.tenantId !== "string") ||
+            (scope.mentionAll !== undefined && typeof scope.mentionAll !== "boolean") ||
+            (scope.failureTargetId !== undefined && typeof scope.failureTargetId !== "string")
+        ) {
+            throw new Error("Invalid automation scope");
+        }
     }
     return claims;
 }

@@ -14,5 +14,5 @@
 
 - [x] 3.1 Suppress the native OpenCode titlebar only when the embed marker is present, preserving direct OpenCode routes.
 - [x] 3.2 Suppress the duplicate sticky session-title row only in embed mode, preserving direct-route title editing.
-- [ ] 3.3 Run focused tests, client/OpenCode type checks, rebuild the OpenCode 1.18.19 binary, and restart the relevant services.
-- [ ] 3.4 Browser-verify matching controls, BuildingAI-owned sidebar/back actions, iframe conversation rendering, and unchanged non-OpenCode behavior.
+- [x] 3.3 Run focused tests, client/OpenCode type checks, rebuild the OpenCode 1.18.19 binary, and restart the relevant services.
+- [x] 3.4 Browser-verify matching controls, BuildingAI-owned sidebar/back actions, iframe conversation rendering, and unchanged non-OpenCode behavior.

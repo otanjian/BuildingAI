@@ -15,6 +15,7 @@ import AgentReportPage from "@/pages/agents/report";
 import PublishChatPage from "@/pages/agents/site-chat";
 import AgentsWorkspacePage from "@/pages/agents/workspace";
 import AppsIndexPage from "@/pages/apps";
+import AutomationsPage from "@/pages/automations";
 import DatasetsIndexPage from "@/pages/datasets";
 import DatasetsLayout from "@/pages/datasets/_layouts";
 import DatasetsDetailPage from "@/pages/datasets/detail";
@@ -218,6 +219,10 @@ export const router = createBrowserRouter([
           {
             path: "/todos",
             element: <PersonalTodosPage />,
+          },
+          {
+            path: "/automations",
+            element: <AutomationsPage />,
           },
           {
             path: "*",

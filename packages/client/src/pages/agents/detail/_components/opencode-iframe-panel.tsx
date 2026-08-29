@@ -99,16 +99,13 @@ export function OpencodeIframePanel({
 
   useEffect(() => {
     const title = embedQuery.data?.title?.trim();
-    if (
-      !shouldRefreshOpencodeTitleHistory(
-        lastSynchronizedTitleRef.current,
-        title,
-        embedQuery.data?.titleSynced === true,
-      )
-    ) {
-      return;
-    }
-    lastSynchronizedTitleRef.current = title;
+    const shouldRefresh = shouldRefreshOpencodeTitleHistory(
+      lastSynchronizedTitleRef.current,
+      title,
+      embedQuery.data?.titleSynced === true,
+    );
+    if (title) lastSynchronizedTitleRef.current = title;
+    if (!shouldRefresh) return;
     void queryClient.invalidateQueries({ queryKey: ["agents", "chat", "conversations"] });
   }, [embedQuery.data?.title, embedQuery.data?.titleSynced, queryClient]);
 
@@ -158,7 +155,7 @@ export function OpencodeIframePanel({
     <>
       {!iframeLoaded ? (
         <div className="text-muted-foreground bg-background absolute inset-0 z-10 flex items-center justify-center gap-2 text-sm">
-          <Loader2 className="size-4 animate-spin" /> 正在打开 OpenCode 会话…
+          <Loader2 className="size-4 animate-spin" /> 正在新建/打开最新会话...
         </div>
       ) : null}
       <iframe

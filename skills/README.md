@@ -1,10 +1,8 @@
 # Skills Management Guide
 
-This project uses a unified skills management system, which syncs skills from the root directory's
-`skills/` folder to the configuration directories of various AI editors via node commands. It is
-intended for the development environment only. By default, our skills are not active. They will
-automatically take effect in your AI editor only after you run the `sync` command. You can find the
-corresponding folders in the root directory with suffixes like `.cursor/skills/xxx`.
+This project keeps source skills in `skills/` and can sync them to an AI editor's configuration
+directory. Sync is incremental and generated editor copies are development artifacts. Skills are
+not active until you run a sync command.
 
 Initialization: Typically for development, you only need to run `pnpm skills sync <editor-name>`,
 for example: `pnpm skills sync cursor`.
@@ -130,6 +128,17 @@ Available editor names:
 - `gemini` - Gemini Editor
 - `kiro` - Kiro Editor
 - `windsurf` - Windsurf Editor
+
+## Validation
+
+Run the read-only lint before syncing:
+
+```bash
+pnpm skills lint
+```
+
+It checks frontmatter, body size, local links, and known stale repository terms. Use
+`pnpm skills sync <skill> <editor> --dry-run` to preview changes.
 
 ## Skills Management Process
 
