@@ -29,6 +29,8 @@ describe("audit pipeline load and failure drills", () => {
         (adapters as any).logger = logger;
         for (let index = 0; index < 500; index += 1) adapters.metric("model.tokens", index, { tenantId: `tenant-${index}`, prompt: `secret-${index}`, email: `user-${index}@example.com`, region: "cn" });
         expect(logger.debug).toHaveBeenCalledTimes(500);
+        const tenantLabels = new Set(logger.debug.mock.calls.map(([payload]) => JSON.parse(payload).labels.tenantId));
+        expect(tenantLabels.size).toBe(101);
         for (const [payload] of logger.debug.mock.calls) {
             const parsed = JSON.parse(payload);
             expect(Object.keys(parsed.labels)).toEqual(["tenantId", "region"]);
