@@ -1,6 +1,6 @@
-# BuildingAI CLI
+# Bowi AI CLI
 
-BuildingAI 项目的命令行工具,提供项目初始化、数据库管理和 PM2 进程管理功能。
+Bowi AI 项目的命令行工具,提供项目初始化、数据库管理和 PM2 进程管理功能。
 
 ## 安装
 
@@ -14,7 +14,7 @@ pnpm install
 
 #### `buildingai setup`
 
-设置 BuildingAI 项目环境,包括:
+设置 Bowi AI 项目环境,包括:
 
 - 检查并创建 `.env` 文件
 - 安装项目依赖

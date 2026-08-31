@@ -414,7 +414,7 @@ describe("OpencodeApiService durable read adapter", () => {
         });
     });
 
-    it("merges BuildingAI metadata while refreshing an existing session", async () => {
+    it("merges Bowi AI metadata while refreshing an existing session", async () => {
         global.fetch = jest.fn().mockResolvedValue(
             response({
                 id: "ses_embed",

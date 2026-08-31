@@ -2,7 +2,7 @@ import { BaseService } from "@buildingai/base";
 import { PROCESSING_STATUS } from "@buildingai/constants/shared/datasets.constants";
 import { type UserPlayground } from "@buildingai/db";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
-import { Datasets, DatasetsDocument, DatasetsSegments } from "@buildingai/db/entities";
+import { Datasets, DatasetsDocument, DatasetsSegments, DatasetsDeletionEvidence } from "@buildingai/db/entities";
 import { Brackets, In, Repository } from "@buildingai/db/typeorm";
 import { PaginationDto } from "@buildingai/dto/pagination.dto";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -10,6 +10,7 @@ import { llmFileParser } from "@buildingai/llm-file-parser";
 import { UploadService } from "@modules/upload/services/upload.service";
 import { UserCapacityService } from "@modules/user/services/user-capacity.service";
 import { Injectable, Logger } from "@nestjs/common";
+import { createHash } from "crypto";
 import { pathExists, readFile } from "fs-extra";
 
 import type {
@@ -25,6 +26,8 @@ import { DatasetsSegmentService } from "./datasets-segment.service";
 import { DocumentSummaryService } from "./document-summary.service";
 import { SegmentationService } from "./segmentation.service";
 import { VectorizationTriggerService } from "./vectorization-trigger.service";
+import { DatasetsIngestionService } from "./datasets-ingestion.service";
+import { assertSafeDocument, scanDocumentBuffer } from "./document-security-scanner";
 
 @Injectable()
 export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
@@ -44,6 +47,9 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
         private readonly documentSummaryService: DocumentSummaryService,
         private readonly datasetMemberService: DatasetMemberService,
         private readonly userCapacityService: UserCapacityService,
+        @InjectRepository(DatasetsDeletionEvidence)
+        private readonly deletionEvidenceRepository: Repository<DatasetsDeletionEvidence>,
+        private readonly ingestionService: DatasetsIngestionService,
     ) {
         super(documentRepository);
     }
@@ -103,6 +109,11 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
             }
 
             const buffer = await readFile(filePath);
+            try {
+                assertSafeDocument(scanDocumentBuffer(buffer, file.originalName ?? "unknown", file.mimeType));
+            } catch (error) {
+                throw HttpErrorFactory.badRequest(error instanceof Error ? error.message : "文档已进入隔离区");
+            }
             const result = await llmFileParser.parseFromBuffer(
                 buffer,
                 file.originalName ?? "unknown",
@@ -117,6 +128,10 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
                 throw HttpErrorFactory.badRequest("暂不支持扫描件 PDF，请上传可复制文本的 PDF");
             }
             throw HttpErrorFactory.badRequest("文档解析后内容为空");
+        }
+
+        if (/ignore\s+(all\s+)?previous\s+instructions|system\s+prompt|developer\s+message|泄露.*提示词|忽略之前的指令/i.test(rawText.slice(0, 256 * 1024))) {
+            throw HttpErrorFactory.badRequest("文档已进入隔离区：检测到提示注入指示词");
         }
 
         return this.createDocumentFromRawText(
@@ -197,7 +212,7 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
         // 获取知识库所属用户ID
         const dataset = await this.datasetsRepository.findOne({
             where: { id: datasetId },
-            select: ["createdBy"],
+            select: ["createdBy", "tenantId", "projectId", "classification", "aclPolicy", "sourceVersion", "indexVersion"],
         });
         if (!dataset?.createdBy) {
             throw HttpErrorFactory.badRequest("知识库不存在或无效");
@@ -223,6 +238,7 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
         }
 
         const characterCount = segments.reduce((sum, s) => sum + s.length, 0);
+        const checksum = createHash("sha256").update(rawText, "utf8").digest("hex");
 
         const insertResult = await this.documentRepository.insert({
             datasetId,
@@ -239,6 +255,14 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
             embeddingModelId: embeddingModelId ?? null,
             enabled: true,
             createdBy: createdBy,
+            tenantId: dataset.tenantId,
+            projectId: dataset.projectId,
+            classification: dataset.classification ?? "internal",
+            aclPolicy: dataset.aclPolicy ?? null,
+            sourceVersion: dataset.sourceVersion ?? 1,
+            parserVersion: "llm-file-parser-v1",
+            chunkingVersion: "segmentation-v1",
+            checksum,
         } as any);
         const documentId = insertResult.identifiers[0]?.id as string;
         if (!documentId) {
@@ -250,6 +274,16 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
             documentId,
             segments.map((s) => ({ content: s.content, index: s.index, length: s.length })),
             embeddingModelId ?? null,
+            {
+                tenantId: dataset.tenantId,
+                projectId: dataset.projectId,
+                classification: dataset.classification ?? "internal",
+                aclPolicy: dataset.aclPolicy ?? null,
+                sourceVersion: dataset.sourceVersion ?? 1,
+                indexVersion: dataset.indexVersion,
+                parserVersion: "llm-file-parser-v1",
+                chunkingVersion: "segmentation-v1",
+            },
         );
 
         await this.updateDatasetCounts(datasetId, 1, segments.length, meta.fileSize);
@@ -384,7 +418,36 @@ export class DatasetsDocumentService extends BaseService<DatasetsDocument> {
         const segmentCount = this.toSafeNumber(doc.chunkCount);
         const fileSize = this.toSafeNumber(doc.fileSize);
         const fileId = doc.fileId;
-        await this.documentRepository.remove(doc);
+        const tombstonedAt = new Date();
+        const deletionJob = await this.ingestionService.enqueue({
+            tenantId: doc.tenantId ?? "00000000-0000-0000-0000-000000000000",
+            projectId: doc.projectId,
+            datasetId,
+            documentId,
+            stage: "delete",
+            idempotencyKey: `delete:${datasetId}:${documentId}:${doc.checksum ?? doc.updatedAt?.toISOString() ?? Date.now()}`,
+        });
+        await this.documentRepository.update(documentId, {
+            enabled: false,
+            revokedAt: tombstonedAt,
+            deletionJobId: String(deletionJob.id),
+            status: PROCESSING_STATUS.COMPLETED,
+        });
+        await this.segmentRepository.update({ documentId }, {
+            enabled: 0,
+            indexStatus: "tombstoned",
+            tombstonedAt,
+        } as any);
+        await this.deletionEvidenceRepository.save(this.deletionEvidenceRepository.create({
+            tenantId: doc.tenantId ?? "00000000-0000-0000-0000-000000000000",
+            datasetId,
+            documentId,
+            jobId: String(deletionJob.id),
+            contentDigest: doc.checksum ?? "unknown",
+            tombstonedAt,
+            physicallyDeletedAt: null,
+            status: "pending",
+        }));
         await this.updateDatasetCounts(datasetId, -1, -segmentCount, -fileSize);
 
         // 删除关联的文件记录

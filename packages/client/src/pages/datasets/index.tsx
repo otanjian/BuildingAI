@@ -23,14 +23,114 @@ import {
   ItemTitle,
 } from "@buildingai/ui/components/ui/item";
 import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@buildingai/ui/components/ui/card";
 import { cn } from "@buildingai/ui/lib/utils";
-import { ChevronLeft, ChevronRight, FileText, Loader2, Search, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  DatabaseZap,
+  FileCheck2,
+  FileText,
+  Filter,
+  Loader2,
+  ScanSearch,
+  Search,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useDebounceValue } from "usehooks-ts";
 
 const PAGE_SIZE = 20;
 const SCOPE_PAGE_SIZE = 20;
+
+/** Read-only governance signals for enterprise knowledge-base operations. */
+function DatasetGovernanceOverview() {
+  const signals = [
+    {
+      title: "租户成员范围",
+      description: "按租户与团队成员授权",
+      value: "已启用",
+      detail: "仅展示当前租户可见知识库",
+      icon: Users,
+      tone: "text-sky-600",
+    },
+    {
+      title: "上传扫描与隔离",
+      description: "文件进入索引前完成安全检查",
+      value: "策略生效",
+      detail: "恶意或违规文件将被隔离",
+      icon: ScanSearch,
+      tone: "text-emerald-600",
+    },
+    {
+      title: "摄取与索引进度",
+      description: "异步任务可追踪、可恢复",
+      value: "实时跟踪",
+      detail: "失败任务不会自动暴露旧索引",
+      icon: DatabaseZap,
+      tone: "text-violet-600",
+    },
+    {
+      title: "引用与撤销过滤",
+      description: "回答仅使用当前有效文档",
+      value: "已开启",
+      detail: "撤销或过期内容自动过滤",
+      icon: Filter,
+      tone: "text-amber-600",
+    },
+    {
+      title: "失败索引安全状态",
+      description: "异常索引保持隔离并可审计",
+      value: "安全",
+      detail: "需人工复核后才允许重新发布",
+      icon: FileCheck2,
+      tone: "text-rose-600",
+    },
+  ] as const;
+
+  return (
+    <Card className="mb-6 border-dashed">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ShieldCheck className="size-4 text-primary" />
+          知识库安全与索引治理
+        </CardTitle>
+        <CardDescription>
+          只读状态概览，具体策略由企业管理员统一配置
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {signals.map((signal) => {
+            const Icon = signal.icon;
+            return (
+              <div
+                key={signal.title}
+                className="bg-muted/30 rounded-lg border p-3"
+                data-testid={`dataset-governance-${signal.title}`}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground text-xs">{signal.title}</span>
+                  <Icon className={cn("size-4", signal.tone)} />
+                </div>
+                <div className="text-sm font-medium">{signal.value}</div>
+                <div className="text-muted-foreground mt-1 text-xs leading-5">{signal.detail}</div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function datasetDetailTo(id: string, searchParams: URLSearchParams) {
   const embed = searchParams.get("_embed");
@@ -56,6 +156,9 @@ function ScopedDatasetsList({ scope }: { scope: "mine" | "team" }) {
           <div className="mb-6 flex flex-col gap-2 sm:px-3">
             <h1 className="text-2xl">{title}</h1>
             <p className="text-muted-foreground text-sm">{subtitle}</p>
+          </div>
+          <div className="sm:px-3">
+            <DatasetGovernanceOverview />
           </div>
           <div className="sm:px-3">
             {query.isLoading ? (
@@ -324,6 +427,7 @@ const KnowledgePlazaPage = () => {
           </div>
 
           <div className="mt-6 sm:px-3">
+            <DatasetGovernanceOverview />
             {squareQuery.isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="text-muted-foreground size-8 animate-spin" />

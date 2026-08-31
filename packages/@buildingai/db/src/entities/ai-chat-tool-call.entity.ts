@@ -14,6 +14,9 @@ import { BaseEntity } from "./base";
 @Index(["conversationId", "createdAt"])
 @Index(["status", "createdAt"])
 export class AiChatToolCall extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 关联的消息ID
      * 工具调用是由哪条 assistant 消息发起的

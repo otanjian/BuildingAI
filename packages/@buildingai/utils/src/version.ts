@@ -97,7 +97,7 @@ export function isValidVersionRange(range: string): boolean {
 }
 
 /**
- * Building AI version utility.
+ * Bowi AI version utility.
  * @property validate - Validate whether a version string is compliant.
  * @property format - Normalize a version string into the expected format.
  * @property compare - Compare two version strings to determine which is newer.

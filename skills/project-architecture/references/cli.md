@@ -1,6 +1,6 @@
 # packages/cli
 
-CLI tooling for BuildingAI operations.
+CLI tooling for Bowi AI operations.
 
 ## Location
 

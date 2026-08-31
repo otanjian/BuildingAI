@@ -2,5 +2,6 @@
     "extends": "@buildingai/typescript-config/base.json",
     "compilerOptions": {
         "strict": false
-    }
+    },
+    "exclude": ["src/**/*.spec.ts", "src/**/__tests__/**"]
 }

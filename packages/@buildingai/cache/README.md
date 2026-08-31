@@ -1,6 +1,6 @@
 # @buildingai/cache
 
-Cache and Redis management package for BuildingAI.
+Cache and Redis management package for Bowi AI.
 
 ## Features
 
@@ -14,7 +14,7 @@ Cache and Redis management package for BuildingAI.
 
 ## Installation
 
-This package is part of the BuildingAI monorepo and uses workspace dependencies.
+This package is part of the Bowi AI monorepo and uses workspace dependencies.
 
 ```bash
 pnpm install

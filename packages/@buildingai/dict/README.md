@@ -16,7 +16,7 @@ built-in caching support.
 
 ## Installation
 
-This package is part of the BuildingAI monorepo and uses workspace dependencies:
+This package is part of the Bowi AI monorepo and uses workspace dependencies:
 
 ```bash
 pnpm add @buildingai/dict

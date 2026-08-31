@@ -13,6 +13,9 @@ import { User } from "./user.entity";
 @Index(["userId", "createdAt"])
 @Index(["isDeleted", "createdAt"])
 export class DatasetsChatRecord extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 关联的知识库ID
      */

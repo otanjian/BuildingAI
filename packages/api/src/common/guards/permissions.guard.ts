@@ -61,6 +61,24 @@ export class PermissionsGuard implements CanActivate {
             return true;
         }
 
+        // Tenant membership administration is intentionally independent from
+        // the platform-wide role table. The verified tenant context guard
+        // marks the configured tenant administrator with tenantRoleCode=admin.
+        // Limit this bypass to tenant-management permissions so it cannot grant
+        // unrelated platform capabilities.
+        const isTenantRoute = /\/tenant(?:[/?]|$)/.test(request.url);
+        const isTenantUserList = /\/users(?:[/?]|$)/.test(request.url) && requiredPermissions.every((permission) => permission === "list");
+        if (
+            user.tenantRoleCode === "admin" &&
+            (isTenantRoute || isTenantUserList || requiredPermissions.every((permission) =>
+                permission.startsWith("members:") ||
+                permission.startsWith("administrator:") ||
+                permission.startsWith("tenant:"),
+            ))
+        ) {
+            return true;
+        }
+
         // 从数据库中动态查询用户权限（并使用缓存提高性能）
         const hasPermission = await this.rolePermissionService.checkUserHasPermissions(
             user.id,

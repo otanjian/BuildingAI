@@ -1,5 +1,5 @@
 /**
- * Headless OpenCode permission asks — BuildingAI must reply or the turn hangs.
+ * Headless OpenCode permission asks — Bowi AI must reply or the turn hangs.
  */
 
 export type OpencodePermissionAsk = {

@@ -25,17 +25,23 @@ import DatasetsIndexPage from "@/pages/console/ai/datasets/list";
 import AiMcpIndexPage from "@/pages/console/ai/mcp";
 import AiProviderIndexPage from "@/pages/console/ai/provider";
 import AiSecretIndexPage from "@/pages/console/ai/secret";
-import ChannelFeishuIndexPage from "@/pages/console/channel/feishu";
-import ChannelFeishuNewPage from "@/pages/console/channel/feishu/new";
-import ChannelFeishuEditPage from "@/pages/console/channel/feishu/edit";
-import ChannelWechatOaIndexPage from "@/pages/console/channel/wechat-oa";
+import ToolGatewayPage from "@/pages/console/ai/tool-gateway";
+import AuditDashboardPage from "@/pages/console/audit";
 import ConsoleAutomationsPage from "@/pages/console/automations";
+import ChannelFeishuIndexPage from "@/pages/console/channel/feishu";
+import ChannelFeishuEditPage from "@/pages/console/channel/feishu/edit";
+import ChannelFeishuNewPage from "@/pages/console/channel/feishu/new";
+import ChannelWechatOaIndexPage from "@/pages/console/channel/wechat-oa";
+import ChannelWecomAibotIndexPage from "@/pages/console/channel/wecom-aibot";
+import ChannelWecomAibotEditPage from "@/pages/console/channel/wecom-aibot/edit";
+import ChannelWecomAibotNewPage from "@/pages/console/channel/wecom-aibot/new";
 import ChatConfigIndexPage from "@/pages/console/chat/config";
 import ChatRecordIndexPage from "@/pages/console/chat/record";
 import DashboardPage from "@/pages/console/dashboard";
 import DecorateAgentIndexPage from "@/pages/console/decorate/agent";
 import DecorateAppsIndexPage from "@/pages/console/decorate/apps";
 import DecorateLayoutIndexPage from "@/pages/console/decorate/layout";
+import EvaluationDashboardPage from "@/pages/console/evaluation";
 import ExtensionIndexPage from "@/pages/console/extension";
 import FinancialAnalysisIndexPage from "@/pages/console/financial/analysis";
 import FinancialBalanceDetailsIndexPage from "@/pages/console/financial/balance-details";
@@ -57,6 +63,8 @@ import SystemPayConfigIndexPage from "@/pages/console/system/pay-config";
 import SystemPm2LogRotateIndexPage from "@/pages/console/system/pm2-log-rotate";
 import SystemStorageConfigIndexPage from "@/pages/console/system/storage-config";
 import SystemWebsiteConfigIndexPage from "@/pages/console/system/website-config";
+import TenantIndexPage from "@/pages/console/tenant";
+import TenantMembersPage from "@/pages/console/tenant/members";
 import UserListIndexPage from "@/pages/console/user/list";
 
 import AppNavbar from "./_components/app-navbar";
@@ -75,7 +83,12 @@ function generateRoutes(menus: MenuItem[]): RouteObject[] {
     .filter((menu) => menu.component)
     .flatMap((menu) => {
       const module = modules[`/src/pages${menu.component}`];
-      const Component = module?.default;
+      // The persisted legacy menu uses `/console/ai/secret/list`, while the
+      // enterprise credential page is the canonical secret entrypoint. Keep
+      // the menu route on the statically imported page so it cannot resolve
+      // to the old template-only bundle.
+      const Component =
+        menu.component === "/console/ai/secret/list" ? AiSecretIndexPage : module?.default;
 
       const routes: RouteObject[] = [];
 
@@ -112,6 +125,11 @@ function ConsoleRoutes() {
       { path: "/extension", element: <ExtensionIndexPage /> },
       { path: "/automations", element: <ConsoleAutomationsPage /> },
       { path: "/secret", element: <AiSecretIndexPage /> },
+      { path: "/tool-gateway", element: <ToolGatewayPage /> },
+      { path: "/tenant", element: <TenantIndexPage /> },
+      { path: "/tenant/:tenantId/members", element: <TenantMembersPage /> },
+      { path: "/audit", element: <AuditDashboardPage /> },
+      { path: "/evaluation", element: <EvaluationDashboardPage /> },
       { path: "/operation", element: <OperationIndexPage /> },
       {
         path: "operation/*",
@@ -221,6 +239,14 @@ function ConsoleRoutes() {
               { index: true, element: <ChannelFeishuIndexPage /> },
               { path: "new", element: <ChannelFeishuNewPage /> },
               { path: ":connectionId", element: <ChannelFeishuEditPage /> },
+            ],
+          },
+          {
+            path: "wecom-aibot",
+            children: [
+              { index: true, element: <ChannelWecomAibotIndexPage /> },
+              { path: "new", element: <ChannelWecomAibotNewPage /> },
+              { path: ":connectionId", element: <ChannelWecomAibotEditPage /> },
             ],
           },
         ],

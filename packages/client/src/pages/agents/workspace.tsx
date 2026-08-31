@@ -67,7 +67,7 @@ const statusConfigMap: Record<AgentWorkspaceStatus, AgentWorkspaceStatusConfig> 
     variant: "outline",
   },
   published: {
-    label: "已公开",
+    label: "可用",
     variant: "secondary",
     className: "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300",
   },
@@ -213,7 +213,7 @@ const AgentsWorkspacePage = () => {
               className={badgeClass(status === "published")}
               onClick={() => setStatus("published")}
             >
-              已公开
+              可用
             </Badge>
             <Badge
               className={badgeClass(status === "unpublished")}

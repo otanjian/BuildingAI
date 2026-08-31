@@ -7,8 +7,10 @@ import { Playground } from "@buildingai/decorators/playground.decorator";
 import { ConsoleController } from "@common/decorators/controller.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
 import { UserService } from "@modules/user/services/user.service";
-import { Body, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Delete, Get, Param, Post, Query, Req } from "@nestjs/common";
+import type { Request } from "express";
 import { isOpencodeDurableTurnsEnabled } from "../../utils/opencode-durable-rollout";
+import { getRequestAuthContext } from "@common/types/request-auth-context";
 
 import { ListConsoleAgentsDto } from "../../dto/list-console-agents.dto";
 import { BatchAgentAssignDto } from "../../dto/batch-agent-assign.dto";
@@ -37,7 +39,9 @@ export class AgentsConsoleController {
     @Get()
     @BuildFileUrl(["**.avatar", "**.chatAvatar"])
     @Permissions({ code: "list", name: "智能体列表", description: "分页查询智能体列表" })
-    async list(@Query() dto: ListConsoleAgentsDto) {
+    async list(@Query() dto: ListConsoleAgentsDto, @Req() request: Request) {
+        const auth = getRequestAuthContext(request);
+        if (auth?.tenantId) dto.tenantId = auth.tenantId;
         const result = await this.agentsService.listForConsole(dto);
 
         // Collect all unique creator IDs

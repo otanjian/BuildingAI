@@ -14,6 +14,7 @@ export type UserMemoryItem = {
     createdAt: string;
     updatedAt: string;
 };
+export type UserMemoryInput = { content: string; category: "preference" | "personal_info" | "habit" | "instruction" };
 
 export function useUserMemoriesQuery(
     options?: QueryOptionsUtil<UserMemoryItem[]> & { limit?: number },
@@ -33,6 +34,33 @@ export function useDeactivateUserMemoryMutation(options?: MutationOptionsUtil<vo
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["ai-memories"] });
         },
+        ...options,
+    });
+}
+
+export function useCreateUserMemoryMutation(options?: MutationOptionsUtil<UserMemoryItem, UserMemoryInput>) {
+    const queryClient = useQueryClient();
+    return useMutation<UserMemoryItem, Error, UserMemoryInput>({
+        mutationFn: (input) => apiHttpClient.post<UserMemoryItem>("/ai-memories", input),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai-memories"] }),
+        ...options,
+    });
+}
+
+export function useUpdateUserMemoryMutation(options?: MutationOptionsUtil<UserMemoryItem, { id: string } & Partial<UserMemoryInput>>) {
+    const queryClient = useQueryClient();
+    return useMutation<UserMemoryItem, Error, { id: string } & Partial<UserMemoryInput>>({
+        mutationFn: ({ id, ...input }) => apiHttpClient.patch<UserMemoryItem>(`/ai-memories/${id}`, input),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai-memories"] }),
+        ...options,
+    });
+}
+
+export function useClearUserMemoriesMutation(options?: MutationOptionsUtil<void, void>) {
+    const queryClient = useQueryClient();
+    return useMutation<void, Error, void>({
+        mutationFn: () => apiHttpClient.delete("/ai-memories/all"),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ai-memories"] }),
         ...options,
     });
 }

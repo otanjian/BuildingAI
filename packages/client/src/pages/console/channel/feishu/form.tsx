@@ -133,7 +133,7 @@ export default function FeishuConnectionFormPage() {
         <div>
           <h1 className="text-2xl font-semibold">{isEdit ? "编辑飞书连接" : "新增飞书连接"}</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            每个连接对应一个飞书 App，可指向一个 BuildingAI 智能体。
+            每个连接对应一个飞书 App，可指向一个 Bowi AI 智能体。
           </p>
         </div>
         <Alert>

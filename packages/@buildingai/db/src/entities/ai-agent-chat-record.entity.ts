@@ -9,6 +9,7 @@ import { User } from "./user.entity";
 @Index(["userId", "createdAt"])
 @Index(["isDeleted", "createdAt"])
 @Index(["agentId", "createdAt"])
+@Index("idx_agent_chat_record_tenant_project", ["tenantId", "projectId"])
 @Index("uq_agent_chat_oc_runtime_session", ["opencodeRuntimeHash", "opencodeSessionId"], {
     unique: true,
     where: `"opencode_session_id" IS NOT NULL AND "opencode_runtime_hash" IS NOT NULL`,
@@ -25,6 +26,12 @@ export class AgentChatRecord extends BaseEntity {
     @Column({ type: "uuid", comment: "用户ID，匿名用户时为空", nullable: true })
     @Index()
     userId?: string;
+
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    projectId: string | null;
 
     @Column({ type: "varchar", length: 128, comment: "匿名用户标识", nullable: true })
     @Index()

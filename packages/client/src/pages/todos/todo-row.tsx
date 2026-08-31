@@ -1,11 +1,15 @@
 import type { PersonalTodo } from "@buildingai/services/web";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Progress } from "@buildingai/ui/components/ui/progress";
-import { CalendarDays, CheckCircle2, UserRound } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, UserRound } from "lucide-react";
+
+import { isTodoOverdue } from "./todo-policy";
 
 function formatDate(value: string | null) {
   if (!value) return "未设置";
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(new Date(`${value}T00:00:00`));
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(
+    new Date(`${value}T00:00:00`),
+  );
 }
 
 function formatDateTime(value: string | null) {
@@ -17,13 +21,26 @@ function formatDateTime(value: string | null) {
 }
 
 export function TodoRow({ todo, actions }: { todo: PersonalTodo; actions?: React.ReactNode }) {
+  const overdue = isTodoOverdue(todo);
+
   return (
-    <article className="group grid gap-5 rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.7fr)_auto] lg:items-center">
+    <article className="group bg-card grid gap-5 rounded-2xl border p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.7fr)_auto] lg:items-center">
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Badge variant={todo.status === "completed" ? "secondary" : "default"}>
             {todo.status === "completed" ? "已完成" : "进行中"}
           </Badge>
+          {overdue ? (
+            <Badge
+              variant="destructive"
+              role="status"
+              aria-label="已逾期"
+              title="计划完成日期已过，当前待办仍未完成"
+            >
+              <AlertTriangle aria-hidden="true" />
+              已逾期
+            </Badge>
+          ) : null}
           <h2 className="truncate text-base font-semibold" title={todo.title}>
             {todo.title}
           </h2>
@@ -59,7 +76,9 @@ export function TodoRow({ todo, actions }: { todo: PersonalTodo; actions?: React
         <Progress value={todo.progress} className="h-2" />
       </div>
 
-      {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
+      ) : null}
     </article>
   );
 }

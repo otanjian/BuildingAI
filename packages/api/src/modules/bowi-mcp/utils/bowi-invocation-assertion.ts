@@ -14,6 +14,7 @@ export interface BowiInvocationClaims {
     audience: typeof ASSERTION_AUDIENCE;
     userId: string;
     agentId: string;
+    tenantId?: string;
     conversationId?: string;
     authSource: BowiAuthSource;
     capabilities: BowiCapability[];
@@ -36,6 +37,7 @@ function sign(payload: string): string {
 export function createBowiInvocationAssertion(input: {
     userId: string;
     agentId: string;
+    tenantId?: string;
     conversationId?: string;
     authSource: BowiAuthSource;
     capabilities?: BowiCapability[];
@@ -49,6 +51,7 @@ export function createBowiInvocationAssertion(input: {
         audience: ASSERTION_AUDIENCE,
         userId: input.userId,
         agentId: input.agentId,
+        ...(input.tenantId ? { tenantId: input.tenantId } : {}),
         ...(input.conversationId ? { conversationId: input.conversationId } : {}),
         authSource: input.authSource,
         capabilities: [...new Set(input.capabilities ?? [])].filter((capability) =>
@@ -81,6 +84,7 @@ export function verifyBowiInvocationAssertion(assertion: string, now = Math.floo
         claims.audience !== ASSERTION_AUDIENCE ||
         typeof claims.userId !== "string" ||
         typeof claims.agentId !== "string" ||
+        (claims.tenantId !== undefined && typeof claims.tenantId !== "string") ||
         !["login", "publish_key", "site_access_token", "anonymous"].includes(
             claims.authSource,
         ) ||

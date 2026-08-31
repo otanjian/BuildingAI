@@ -14,12 +14,7 @@ export type AutomationRunStatus =
     | "cancelled"
     | "unknown"
     | "skipped";
-export type AutomationDeliveryStatus =
-    | "pending"
-    | "delivered"
-    | "failed"
-    | "unknown"
-    | "dismissed";
+export type AutomationDeliveryStatus = "pending" | "delivered" | "failed" | "unknown" | "dismissed";
 export type AutomationDispatchStatus =
     | "pending"
     | "leased"
@@ -42,6 +37,7 @@ export type AutomationTask = {
     name: string;
     updatedAt: string;
     agentId: string;
+    prompt: string;
     scheduleKind: "at" | "every" | "cron";
     schedule: Record<string, unknown>;
     timezone: string;
@@ -55,6 +51,10 @@ export type AutomationTask = {
     lastRunResultPreview?: string | null;
     lastRunErrorPreview?: string | null;
     dispatchStatus?: AutomationDispatchStatus;
+    deleteAfterRun: boolean;
+    missedRunPolicy: "fire_once" | "skip" | "catch_up";
+    overlapPolicy: "skip" | "queue_one" | "allow";
+    timeoutSeconds: number;
 };
 
 export type AutomationRun = {

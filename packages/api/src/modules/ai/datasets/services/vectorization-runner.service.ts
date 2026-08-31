@@ -15,6 +15,7 @@ import type {
     VectorizationResult,
 } from "../interfaces/vectorization.interface";
 import { DatasetsSegmentService } from "./datasets-segment.service";
+import { embeddingChecksum, resolveEmbeddingRoute } from "./embedding-routing";
 
 function getMaxChunksFromModelConfig(
     modelConfig: Record<string, any>[] | undefined,
@@ -123,6 +124,8 @@ export class VectorizationRunnerService {
             };
         }
 
+        const route = resolveEmbeddingRoute(model);
+
         const providerSecret = await this.secretService.getConfigKeyValuePairs(
             model.provider.bindSecretId!,
         );
@@ -150,14 +153,16 @@ export class VectorizationRunnerService {
 
                 const results = batch.map((seg, idx) => {
                     const emb = embeddings[idx];
-                    const success = Array.isArray(emb) && emb.length > 0;
+                    const success = Array.isArray(emb) && emb.length > 0 && (!route.dimension || emb.length === route.dimension);
                     return {
                         segmentId: seg.id,
                         success,
                         embedding: success ? emb : undefined,
                         dimension: success ? emb.length : undefined,
                         modelId: model.model,
-                        error: success ? undefined : "Empty embedding",
+                        modelVersion: route.modelVersion,
+                        error: success ? undefined : (Array.isArray(emb) && route.dimension && emb.length !== route.dimension ? "Embedding dimension mismatch" : "Empty embedding"),
+                        checksum: embeddingChecksum(seg.content),
                     };
                 });
 

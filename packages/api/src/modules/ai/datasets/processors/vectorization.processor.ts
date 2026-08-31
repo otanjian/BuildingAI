@@ -7,6 +7,7 @@ import { Logger } from "@nestjs/common";
 import type { Job } from "bullmq";
 
 import { VectorizationRunnerService } from "../services/vectorization-runner.service";
+import { DatasetsIngestionService } from "../services/datasets-ingestion.service";
 
 @Processor("vectorization")
 export class VectorizationProcessor extends WorkerHost {
@@ -16,6 +17,7 @@ export class VectorizationProcessor extends WorkerHost {
         private readonly vectorizationRunner: VectorizationRunnerService,
         @InjectRepository(DatasetsDocument)
         private readonly documentRepository: Repository<DatasetsDocument>,
+        private readonly ingestionService: DatasetsIngestionService,
     ) {
         super();
     }
@@ -23,6 +25,9 @@ export class VectorizationProcessor extends WorkerHost {
     async process(job: Job): Promise<unknown> {
         this.logger.log(`Processing vectorization job: ${job.name} (${job.id})`);
 
+        if (job.name.endsWith("_document") && job.data?.type === "ingestion") {
+            return this.processIngestion(job);
+        }
         if (job.name !== "vectorize_document") {
             this.logger.warn(`Unknown job name: ${job.name}`);
             return { success: false, reason: "Unknown job type" };
@@ -80,6 +85,30 @@ export class VectorizationProcessor extends WorkerHost {
                 })
                 .catch(() => {});
             throw err;
+        }
+    }
+
+    private async processIngestion(job: Job): Promise<unknown> {
+        const ingestionJobId = String(job.data?.ingestionJobId ?? "");
+        const datasetId = String(job.data?.params?.datasetId ?? "");
+        const documentId = job.data?.params?.documentId ? String(job.data.params.documentId) : null;
+        const stage = job.name.replace(/_document$/, "");
+        if (!ingestionJobId || !datasetId || !stage) throw new Error("Invalid ingestion job");
+        try {
+            await this.ingestionService.checkpoint(ingestionJobId, 10, `${stage}:started`);
+            if (stage === "embed" && documentId) {
+                await this.vectorizationRunner.run(documentId, datasetId, async (_processed, _total, percentage) => {
+                    await this.ingestionService.checkpoint(ingestionJobId, percentage, `${stage}:${percentage}`);
+                });
+            }
+            if (stage === "delete") {
+                await this.ingestionService.finalizeDeletion(ingestionJobId);
+            }
+            await this.ingestionService.complete(ingestionJobId);
+            return { success: true, ingestionJobId, stage, documentId, datasetId };
+        } catch (error) {
+            await this.ingestionService.fail(ingestionJobId, error).catch(() => undefined);
+            throw error;
         }
     }
 

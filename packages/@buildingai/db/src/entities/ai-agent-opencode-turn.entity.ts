@@ -98,7 +98,10 @@ export type OpencodeTurnStatus = (typeof OPENCODE_TURN_STATUSES)[number];
         OR ("live_projection" IS NULL AND "projection_updated_at" IS NULL)`,
 )
 export class AgentOpencodeTurn extends BaseEntity {
-    @Column({ type: "uuid", nullable: false, comment: "BuildingAI conversation ID" })
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: false, comment: "Bowi AI conversation ID" })
     conversationId: string;
 
     @Column({ type: "text", nullable: false, comment: "Canonical client command hash" })

@@ -10,8 +10,15 @@ export type AutomationDispatchStatus = (typeof AUTOMATION_DISPATCH_STATUSES)[num
 @AppEntity({ name: "automation_dispatch", comment: "Automation transactional outbox" })
 @Index("uq_automation_dispatch_key", ["dispatchKey"], { unique: true })
 @Index("idx_automation_dispatch_recovery", ["status", "leaseUntil", "nextAttemptAt"])
+@Index("idx_automation_dispatch_tenant_project", ["tenantId", "projectId"])
 @Check("ck_automation_dispatch_status", `"status" IN ('pending', 'leased', 'sent', 'failed', 'unknown', 'dismissed')`)
 export class AutomationDispatch extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id" })
+    projectId: string | null;
+
     @Column({ type: "uuid", name: "job_id" })
     jobId: string;
 

@@ -2,7 +2,7 @@ import { McpCommunicationType, McpServerType } from "@buildingai/constants";
 
 import { AppEntity } from "../decorators/app-entity.decorator";
 import { NormalizeFileUrl } from "../decorators/file-url.decorator";
-import { Column, JoinColumn, ManyToOne, OneToMany, type Relation } from "../typeorm";
+import { Column, Index, JoinColumn, ManyToOne, OneToMany, type Relation } from "../typeorm";
 import { AiMcpTool } from "./ai-mcp-tool.entity";
 import { AiUserMcpServer } from "./ai-user-mcp-server.entity";
 import { BaseEntity } from "./base";
@@ -16,6 +16,7 @@ export { McpCommunicationType, McpServerType };
  * 用于存储具体MCP服务的配置信息
  */
 @AppEntity({ name: "ai_mcp_servers", comment: "MCP服务配置" })
+@Index("idx_ai_mcp_servers_tenant_project", ["tenantId", "projectId"])
 export class AiMcpServer extends BaseEntity {
     /**
      * 服务名称
@@ -112,6 +113,10 @@ export class AiMcpServer extends BaseEntity {
         comment: "请求头，JSON格式存储",
     })
     headers?: Record<string, string>;
+
+    /** Credential reference; legacy headers remain read-only during migration. */
+    @Column({ type: "uuid", nullable: true, name: "credential_ref" })
+    credentialRef: string | null;
 
     /**
      * 供应商图标
@@ -217,4 +222,10 @@ export class AiMcpServer extends BaseEntity {
         comment: "创建者用户ID",
     })
     creatorId: string;
+
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    projectId: string | null;
 }

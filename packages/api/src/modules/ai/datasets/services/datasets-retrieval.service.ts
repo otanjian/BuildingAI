@@ -19,6 +19,13 @@ import { embed } from "ai";
 
 import { DATASETS_DEFAULT_CONSTANTS } from "../constants/datasets.constants";
 import { DatasetsQueryPreprocessorService } from "./datasets-query-preprocessor.service";
+import { IndexAdapter } from "./index-adapter";
+import {
+    buildCitation,
+    buildRetrievalContext,
+    redactQueryForTelemetry,
+    type RetrievalContext,
+} from "./tenant-aware-retrieval";
 
 type Candidate = {
     chunk: RetrievalChunk;
@@ -42,6 +49,7 @@ export class DatasetsRetrievalService {
         private readonly secretService: SecretService,
         private readonly datasetsConfigService: DatasetsConfigService,
         private readonly queryPreprocessor: DatasetsQueryPreprocessorService,
+        private readonly indexAdapter: IndexAdapter,
     ) {}
 
     async retrieve(
@@ -49,17 +57,43 @@ export class DatasetsRetrievalService {
         query: string,
         topK?: number,
         scoreThreshold?: number,
+        context?: Partial<RetrievalContext>,
     ): Promise<RetrievalResult> {
         const startTime = Date.now();
         const q = String(query ?? "").trim();
-        this.logger.debug(`Retrieve: dataset=${datasetId}, query=${q.slice(0, 80)}`);
+        const retrievalContext = buildRetrievalContext({
+            ...context,
+            datasetIds: context?.datasetIds ?? [datasetId],
+        });
+        this.logger.debug(
+            `Retrieve: tenant=${retrievalContext.tenantId}, dataset=${datasetId}, digest=${redactQueryForTelemetry(q).queryDigest}`,
+        );
         if (!q) return { chunks: [], totalTime: Date.now() - startTime };
 
         const dataset = await this.datasetsRepository.findOne({
             where: { id: datasetId },
-            select: ["id", "embeddingModelId", "retrievalMode", "retrievalConfig"],
+            select: [
+                "id",
+                "tenantId",
+                "projectId",
+                "embeddingModelId",
+                "retrievalMode",
+                "retrievalConfig",
+                "sourceVersion",
+                "indexVersion",
+                "indexStatus",
+            ],
         });
         if (!dataset) throw HttpErrorFactory.notFound("知识库不存在");
+        if (dataset.tenantId !== retrievalContext.tenantId) {
+            throw HttpErrorFactory.notFound("知识库不存在");
+        }
+        if (retrievalContext.projectId && dataset.projectId && dataset.projectId !== retrievalContext.projectId) {
+            throw HttpErrorFactory.notFound("知识库不存在");
+        }
+        if (dataset.indexStatus === "unavailable" || dataset.indexStatus === "incompatible") {
+            return { chunks: [], totalTime: Date.now() - startTime, status: "unavailable" } as RetrievalResult;
+        }
 
         const defaultConfig = await this.datasetsConfigService.getDefaultRetrievalConfig();
         const config = this.mergeConfig(defaultConfig, dataset.retrievalConfig);
@@ -81,10 +115,10 @@ export class DatasetsRetrievalService {
 
         const [semantic, fullText, keyword] = await Promise.all([
             semanticRequired && queryEmbedding
-                ? this.semanticSearch(datasetId, q, queryEmbedding, preK)
+                ? this.semanticSearch(datasetId, queryEmbedding, preK, retrievalContext, dataset.indexVersion ?? undefined, dataset.sourceVersion)
                 : [],
-            fullTextRequired ? this.fullTextSearch(datasetId, q, preK) : [],
-            keywordRequired ? this.keywordSearch(datasetId, q, preK) : [],
+            fullTextRequired ? this.fullTextSearch(datasetId, q, preK, retrievalContext, dataset.sourceVersion) : [],
+            keywordRequired ? this.keywordSearch(datasetId, q, preK, retrievalContext, dataset.sourceVersion) : [],
         ]);
 
         if (mode === "vector") {
@@ -200,26 +234,17 @@ export class DatasetsRetrievalService {
 
     private async semanticSearch(
         datasetId: string,
-        query: string,
         queryEmbedding: number[],
         topK: number,
+        context: RetrievalContext,
+        indexVersion?: string,
+        sourceVersion?: number,
     ): Promise<Candidate[]> {
-        const segments = await this.segmentsRepository.find({
-            where: {
-                datasetId,
-                status: PROCESSING_STATUS.COMPLETED,
-                enabled: 1,
-            },
-            select: ["id", "content", "embedding", "chunkIndex", "contentLength", "documentId"],
-            relations: ["document"],
-            relationLoadStrategy: "query",
-        });
-
         const scored: Candidate[] = [];
+        const segments = await this.indexAdapter.search({ datasetId, tenantId: context.tenantId, projectId: context.projectId, queryEmbedding, topK, indexVersion, sourceVersion, timeoutMs: context.limits.timeoutMs });
         for (const s of segments) {
             if (!Array.isArray(s.embedding) || s.embedding.length === 0) continue;
-            const semanticScore = cosineSimilarity(queryEmbedding, s.embedding);
-            const doc = s.document;
+            const semanticScore = Number.isFinite(s.score) ? s.score : cosineSimilarity(queryEmbedding, s.embedding);
             scored.push({
                 segmentId: s.id,
                 documentId: s.documentId,
@@ -231,14 +256,9 @@ export class DatasetsRetrievalService {
                     score: semanticScore,
                     chunkIndex: s.chunkIndex,
                     contentLength: s.contentLength,
-                    fileName: doc?.fileName,
-                    metadata:
-                        doc != null
-                            ? {
-                                  fileType: doc.fileType,
-                                  fileUrl: doc.fileUrl ?? undefined,
-                              }
-                            : undefined,
+                    fileName: s.fileName ?? undefined,
+                    citation: buildCitation({ tenantId: context.tenantId, projectId: context.projectId, datasetId, documentId: s.documentId, segmentId: s.id, sourceVersion: s.sourceVersion, chunkIndex: s.chunkIndex, fileName: s.fileName ?? undefined }),
+                    metadata: { fileType: s.fileType ?? undefined, fileUrl: s.fileUrl ?? undefined },
                 },
             });
         }
@@ -251,6 +271,8 @@ export class DatasetsRetrievalService {
         datasetId: string,
         query: string,
         topK: number,
+        context: RetrievalContext,
+        sourceVersion?: number,
     ): Promise<Candidate[]> {
         const preprocessed = this.queryPreprocessor.segmentForFullTextSearch(query, 5);
         if (!preprocessed) return [];
@@ -263,6 +285,8 @@ export class DatasetsRetrievalService {
             query: this.queryPreprocessor.escapeQueryForSearch(query),
             topK,
             headlineOpts,
+            context,
+            sourceVersion,
         });
 
         if (rows.length > 0) {
@@ -280,6 +304,7 @@ export class DatasetsRetrievalService {
                         chunkIndex: r.chunk_index ?? undefined,
                         contentLength: r.content_length ?? undefined,
                         fileName: r.file_name ?? undefined,
+                        citation: buildCitation({ tenantId: context.tenantId, projectId: context.projectId, datasetId, documentId: r.document_id, segmentId: r.segment_id, sourceVersion: sourceVersion ?? 1, chunkIndex: r.chunk_index ?? undefined, fileName: r.file_name ?? undefined }),
                         highlight: r.highlight ?? undefined,
                         metadata: {
                             fileType: r.file_type ?? undefined,
@@ -361,6 +386,7 @@ export class DatasetsRetrievalService {
                         contentLength: r.content_length ?? undefined,
                         fileName: r.file_name ?? undefined,
                         highlight: this.highlightContent(content, tokens),
+                        citation: buildCitation({ tenantId: context.tenantId, projectId: context.projectId, datasetId, documentId: r.document_id, segmentId: r.segment_id, sourceVersion: sourceVersion ?? 1, chunkIndex: r.chunk_index ?? undefined, fileName: r.file_name ?? undefined }),
                         metadata: {
                             fileType: r.file_type ?? undefined,
                             fileUrl: r.file_url ?? undefined,
@@ -376,6 +402,8 @@ export class DatasetsRetrievalService {
         query: string;
         topK: number;
         headlineOpts: string;
+        context: RetrievalContext;
+        sourceVersion?: number;
     }): Promise<
         Array<{
             segment_id: string;
@@ -396,8 +424,15 @@ export class DatasetsRetrievalService {
                 .createQueryBuilder("s")
                 .innerJoin("s.document", "d")
                 .where("s.dataset_id = :datasetId", { datasetId: args.datasetId })
+                .andWhere("s.tenant_id = :tenantId", { tenantId: args.context.tenantId })
+                .andWhere("(s.project_id IS NULL OR s.project_id = :projectId)", { projectId: args.context.projectId ?? null })
                 .andWhere("s.status = :status", { status: PROCESSING_STATUS.COMPLETED })
                 .andWhere("s.enabled = 1")
+                .andWhere("s.index_status = 'active'")
+                .andWhere("s.source_version = :sourceVersion", { sourceVersion: args.sourceVersion ?? 1 })
+                .andWhere("d.revoked_at IS NULL")
+                .andWhere("(d.acl_policy IS NULL OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(d.acl_policy->'denyUserIds', '[]'::jsonb)) acl WHERE acl.value = :actorId))", { actorId: args.context.actorId })
+                .andWhere("(d.acl_policy IS NULL OR d.acl_policy->'allowUserIds' IS NULL OR jsonb_array_length(d.acl_policy->'allowUserIds') = 0 OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(d.acl_policy->'allowUserIds') acl WHERE acl.value = :actorId))", { actorId: args.context.actorId })
                 .select([
                     "s.id AS segment_id",
                     "s.document_id AS document_id",
@@ -482,6 +517,8 @@ export class DatasetsRetrievalService {
         datasetId: string,
         query: string,
         topK: number,
+        context: RetrievalContext,
+        sourceVersion?: number,
     ): Promise<Candidate[]> {
         const tokens = this.queryPreprocessor
             .tokenize(query)
@@ -498,8 +535,15 @@ export class DatasetsRetrievalService {
             .createQueryBuilder("s")
             .innerJoin("s.document", "d")
             .where("s.dataset_id = :datasetId", { datasetId })
+            .andWhere("s.tenant_id = :tenantId", { tenantId: context.tenantId })
+            .andWhere("(s.project_id IS NULL OR s.project_id = :projectId)", { projectId: context.projectId ?? null })
             .andWhere("s.status = :status", { status: PROCESSING_STATUS.COMPLETED })
             .andWhere("s.enabled = 1")
+            .andWhere("s.index_status = 'active'")
+            .andWhere("s.source_version = :sourceVersion", { sourceVersion: sourceVersion ?? 1 })
+            .andWhere("d.revoked_at IS NULL")
+            .andWhere("(d.acl_policy IS NULL OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(d.acl_policy->'denyUserIds', '[]'::jsonb)) acl WHERE acl.value = :actorId))")
+            .andWhere("(d.acl_policy IS NULL OR d.acl_policy->'allowUserIds' IS NULL OR jsonb_array_length(d.acl_policy->'allowUserIds') = 0 OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(d.acl_policy->'allowUserIds') acl WHERE acl.value = :actorId))")
             .select([
                 "s.id AS segment_id",
                 "s.document_id AS document_id",
@@ -518,6 +562,7 @@ export class DatasetsRetrievalService {
         for (let i = 0; i < unique.length; i++) {
             qb.setParameter(`p${i}`, `%${unique[i]}%`);
         }
+        qb.setParameter("actorId", context.actorId);
 
         const rows = (await qb.getRawMany()) as Array<{
             segment_id: string;
@@ -546,6 +591,7 @@ export class DatasetsRetrievalService {
                         chunkIndex: r.chunk_index ?? undefined,
                         contentLength: r.content_length ?? undefined,
                         fileName: r.file_name ?? undefined,
+                        citation: buildCitation({ tenantId: context.tenantId, projectId: context.projectId, datasetId, documentId: r.document_id, segmentId: r.segment_id, sourceVersion: sourceVersion ?? 1, chunkIndex: r.chunk_index ?? undefined, fileName: r.file_name ?? undefined }),
                         metadata: {
                             fileType: r.file_type ?? undefined,
                             fileUrl: r.file_url ?? undefined,

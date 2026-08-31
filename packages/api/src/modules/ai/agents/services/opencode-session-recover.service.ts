@@ -22,7 +22,7 @@ export type OpencodeRecoverResult = {
 };
 
 /**
- * Abort hung OpenCode sessions and thin-heal BuildingAI when OC finished ahead.
+ * Abort hung OpenCode sessions and thin-heal Bowi AI when OC finished ahead.
  */
 @Injectable()
 export class OpencodeSessionRecoverService {

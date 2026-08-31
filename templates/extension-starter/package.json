@@ -2,7 +2,7 @@
     "name": "extension-starter",
     "version": "0.0.1",
     "description": "A simple blog extension",
-    "author": "BuildingAI Teams",
+    "author": "Bowi AI Teams",
     "private": true,
     "main": "./manifest.json",
     "module": "./manifest.json",

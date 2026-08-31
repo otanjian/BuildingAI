@@ -10,6 +10,7 @@ import {
 import { PermissionGuard } from "@buildingai/ui/components/auth/permission-guard";
 import { Avatar, AvatarFallback, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@buildingai/ui/components/ui/card";
 import { Button } from "@buildingai/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -48,6 +49,10 @@ import {
   Layers,
   Trash2,
   Users,
+  ShieldCheck,
+  ScanSearch,
+  DatabaseZap,
+  Filter,
 } from "lucide-react";
 import { useEffect } from "react";
 import { useState } from "react";
@@ -285,6 +290,16 @@ const DatasetsIndexPage = () => {
   return (
     <PageContainer>
       <div className="flex flex-1 flex-col gap-4">
+        <Card className="border-dashed">
+          <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="size-4 text-primary" />知识库安全与索引治理</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 text-xs sm:grid-cols-5">
+            <div className="rounded border p-3"><Users className="mb-1 size-4 text-sky-600" /><b>租户成员范围</b><div className="text-muted-foreground">仅当前租户授权数据</div></div>
+            <div className="rounded border p-3"><ScanSearch className="mb-1 size-4 text-emerald-600" /><b>上传扫描与隔离</b><div className="text-muted-foreground">索引前安全检查生效</div></div>
+            <div className="rounded border p-3"><DatabaseZap className="mb-1 size-4 text-violet-600" /><b>摄取与索引进度</b><div className="text-muted-foreground">失败任务可恢复</div></div>
+            <div className="rounded border p-3"><Filter className="mb-1 size-4 text-amber-600" /><b>引用与撤销过滤</b><div className="text-muted-foreground">撤销内容即时排除</div></div>
+            <div className="rounded border p-3"><ShieldCheck className="mb-1 size-4 text-rose-600" /><b>失败索引安全状态</b><div className="text-muted-foreground">人工复核后重新发布</div></div>
+          </CardContent>
+        </Card>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <div className="bg-card rounded-lg border p-4 text-center">
             <div className="text-2xl font-bold">{data?.extend?.total ?? 0}</div>

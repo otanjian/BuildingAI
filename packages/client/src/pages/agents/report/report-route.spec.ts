@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildConversationArtifactApiPath, normalizeReportRelativePath } from "./report-route";
 
-describe("BuildingAI report route", () => {
+describe("Bowi AI report route", () => {
   it("builds an encoded conversation artifact API path", () => {
     expect(
       buildConversationArtifactApiPath({

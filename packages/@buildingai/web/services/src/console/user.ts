@@ -6,6 +6,7 @@ import type {
     QueryOptionsUtil,
     UserInfo,
 } from "@buildingai/web-types";
+import { useTenantContextStore } from "@buildingai/stores";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { consoleHttpClient } from "../base";
@@ -42,6 +43,12 @@ export type User = {
     power: number;
     source: number;
     membershipLevel: MembershipLevel | null;
+    tenantMemberships?: Array<{
+        tenantId: string;
+        status: string;
+        isAdministrator?: boolean;
+        tenant?: { id: string; name: string; code?: string } | null;
+    }>;
     level?: string | null;
     levelEndTime?: string | null;
 };
@@ -84,6 +91,7 @@ export type QueryUserDto = {
     status?: BooleanNumberType;
     startTime?: string;
     endTime?: string;
+    tenantId?: string;
 };
 
 export type CreateUserDto = {
@@ -160,8 +168,10 @@ export function useUsersListQuery(
     params?: QueryUserDto,
     options?: PaginatedQueryOptionsUtil<User>,
 ) {
+    const activeTenantId =
+        useTenantContextStore((state) => state.tenantContext.activeTenantId) ?? "none";
     return useQuery({
-        queryKey: ["users", "list", params],
+        queryKey: ["users", "list", activeTenantId, params],
         queryFn: () => consoleHttpClient.get<PaginatedResponse<User>>("/users", { params }),
         ...options,
     });

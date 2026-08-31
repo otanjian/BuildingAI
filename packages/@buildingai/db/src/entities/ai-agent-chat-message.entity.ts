@@ -16,6 +16,9 @@ import { User } from "./user.entity";
 @AppEntity({ name: "ai_agent_chat_message", comment: "智能体对话消息" })
 @Index(["conversationId", "createdAt"])
 export class AgentChatMessage extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 对话记录ID
      */

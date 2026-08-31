@@ -27,7 +27,7 @@ describe("OpenCode iframe URL", () => {
         );
     });
 
-    it("propagates a credential-free BuildingAI report context", () => {
+    it("propagates a credential-free Bowi AI report context", () => {
         const reportBase = buildBuildingAIReportBase(
             "http://127.0.0.1:4091",
             "agent/id",

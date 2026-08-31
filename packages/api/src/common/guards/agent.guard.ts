@@ -9,6 +9,7 @@ import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
 import { Repository } from "typeorm";
+import { hashInboundToken, matchesInboundToken } from "@buildingai/core/modules";
 
 @Injectable()
 export class AgentGuard implements CanActivate {
@@ -47,21 +48,27 @@ export class AgentGuard implements CanActivate {
         }
 
         request["user"] = result.user;
-        setRequestAuthContext(request, { source: result.authSource, agentId: result.agentId });
+        setRequestAuthContext(request, {
+            source: result.authSource,
+            agentId: result.agentId,
+            tenantId: result.tenantId,
+        });
         return true;
     }
 
     private async resolveUserByPublishBearer(
         token: string,
         agentId?: string,
-    ): Promise<{ user: UserPlayground; agentId: string; authSource: RequestAuthSource } | null> {
+    ): Promise<{ user: UserPlayground; agentId: string; tenantId?: string; authSource: RequestAuthSource } | null> {
+        let tokenHash = "";
+        try { tokenHash = hashInboundToken(token); } catch { return null; }
         const query = this.agentRepository.createQueryBuilder("agent").where(
             `(
-                    (agent.publish_config ->> 'apiKey' = :token AND agent.publish_config ->> 'enableApiKey' = 'true')
+                    ((agent.publish_config ->> 'apiKeyHash' = :tokenHash OR agent.publish_config ->> 'apiKey' = :token) AND agent.publish_config ->> 'enableApiKey' = 'true')
                     OR
-                    (agent.publish_config ->> 'accessToken' = :token AND agent.publish_config ->> 'enableSite' = 'true')
+                    ((agent.publish_config ->> 'accessTokenHash' = :tokenHash OR agent.publish_config ->> 'accessToken' = :token) AND agent.publish_config ->> 'enableSite' = 'true')
                 )`,
-            { token },
+            { token, tokenHash },
         );
 
         if (agentId) {
@@ -76,8 +83,11 @@ export class AgentGuard implements CanActivate {
 
         return {
             agentId: agent.id,
+            tenantId: agent.tenantId ?? undefined,
             authSource:
-                agent.publishConfig?.apiKey === token ? "publish_key" : "site_access_token",
+                agent.publishConfig?.apiKey === token || matchesInboundToken(token, agent.publishConfig?.apiKeyHash)
+                    ? "publish_key"
+                    : "site_access_token",
             user: {
                 id: user.id,
                 username: user.username,

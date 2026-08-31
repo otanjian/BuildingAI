@@ -55,7 +55,7 @@ describe("FeishuAutomationCommandHandler natural-language flow", () => {
         expect(confirmations.consume).toHaveBeenCalledTimes(1);
     });
 
-    it("uses the matched BuildingAI user as the automation creator", async () => {
+    it("uses the matched Bowi AI user as the automation creator", async () => {
         const { handler, provider } = makeHandler();
 
         await expect(

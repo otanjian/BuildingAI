@@ -21,6 +21,10 @@ const STATUS_VALUES = [
 ] as const;
 
 export class ListConsoleAgentsDto extends PaginationDto {
+    /** Internal verified scope propagated by TenantContextGuard; never accepted from request body. */
+    @IsOptional()
+    @IsUUID("4")
+    tenantId?: string;
     @IsOptional()
     @IsString()
     @MaxLength(100)

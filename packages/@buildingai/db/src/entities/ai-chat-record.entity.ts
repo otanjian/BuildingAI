@@ -11,6 +11,7 @@ import { User } from "./user.entity";
 @AppEntity({ name: "ai_chat_record", comment: "AI对话记录" })
 @Index(["userId", "createdAt"])
 @Index(["isDeleted", "createdAt"])
+@Index("idx_ai_chat_record_tenant_project", ["tenantId", "projectId"])
 export class AiChatRecord extends BaseEntity {
     /**
      * 对话标题
@@ -32,6 +33,12 @@ export class AiChatRecord extends BaseEntity {
     })
     @Index()
     userId: string;
+
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    projectId: string | null;
 
     /**
      * AI模型ID

@@ -588,7 +588,7 @@ export class OpencodeChatProvider {
                     });
 
                     // Persist user message as soon as the remote turn is accepted so
-                    // mid-stream reopen can load at least the user turn from BuildingAI.
+                    // mid-stream reopen can load at least the user turn from Bowi AI.
                     if (
                         saveConversation &&
                         localConversationId &&

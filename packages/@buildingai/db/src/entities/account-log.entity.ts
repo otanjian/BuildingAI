@@ -11,6 +11,14 @@ export type AccountLogSourceInfo = {
 };
 @AppEntity({ name: "account_log", comment: "用户账户记录" })
 export class AccountLog extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    @Index()
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    @Index()
+    projectId: string | null;
+
     @Column({
         type: "varchar",
         length: 64,

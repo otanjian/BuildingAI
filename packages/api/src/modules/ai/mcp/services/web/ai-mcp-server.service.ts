@@ -12,6 +12,7 @@ import {
 } from "@modules/ai/mcp/dto/web/ai-mcp-server.dto";
 import { AiMcpToolService } from "@modules/ai/mcp/services/ai-mcp-tool.service";
 import { Injectable, Logger } from "@nestjs/common";
+import { CredentialRuntimeResolver } from "@buildingai/core/modules";
 
 import { withTimeout } from "@common/utils/with-timeout";
 import { normalizeMcpConnectionError } from "../../utils/mcp-connection-error";
@@ -34,6 +35,7 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
         @InjectRepository(AiUserMcpServer)
         private readonly aiUserMcpServerRepository: Repository<AiUserMcpServer>,
         private readonly aiMcpToolService: AiMcpToolService,
+        private readonly credentialResolver: CredentialRuntimeResolver,
     ) {
         super(aiMcpServerRepository);
     }
@@ -58,8 +60,10 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
             throw HttpErrorFactory.badRequest(`名为 ${createDto.name} 的MCP服务已存在`);
         }
 
+        const { headers, ...rest } = createDto;
         const dto = {
-            ...createDto,
+            ...rest,
+            headers: rest.credentialRef ? undefined : headers,
             creatorId,
             type: McpServerType.USER,
         };
@@ -106,7 +110,8 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
         }
 
         // 更新MCP服务
-        return await this.updateById(mcpServer.id, updateDto);
+        const { headers, ...rest } = updateDto;
+        return await this.updateById(mcpServer.id, rest.credentialRef ? { ...rest, headers: null } : { ...rest, ...(headers === undefined ? {} : { headers }) });
     }
 
     /**
@@ -258,6 +263,9 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
         let errorMessage = "";
 
         try {
+            const headers = mcpServer.credentialRef
+                ? { Authorization: `Bearer ${await this.credentialResolver.resolve(mcpServer.credentialRef, { tenantId: (mcpServer as any).tenantId, projectId: (mcpServer as any).projectId, environment: "production", resource: "mcp", action: "connect" })}` }
+                : mcpServer.headers;
             const connected = await withTimeout(
                 (async () => {
                     const client = await createMcpClient({
@@ -267,7 +275,7 @@ export class WebAiMcpServerWebService extends BaseService<AiMcpServer> {
                                     ? "sse"
                                     : "http",
                             url: mcpServer.url,
-                            ...(mcpServer.headers && { headers: mcpServer.headers }),
+                            ...(headers && { headers }),
                         },
                         name: mcpServer.name,
                     });

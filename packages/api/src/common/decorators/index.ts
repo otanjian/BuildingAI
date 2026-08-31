@@ -5,6 +5,7 @@ export * from "./controller.decorator";
 
 // 权限和角色装饰器
 export * from "./permissions.decorator";
+export * from "./tenant-required.decorator";
 
 // 会员专属功能装饰器
 export * from "./member-only.decorator";

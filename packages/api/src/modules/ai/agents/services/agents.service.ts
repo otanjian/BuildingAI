@@ -7,6 +7,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Agent } from "@buildingai/db/entities/ai-agent.entity";
 import { AgentAssignment } from "@buildingai/db/entities/agent-assignment.entity";
 import { AiMcpServer, McpServerType } from "@buildingai/db/entities/ai-mcp-server.entity";
+import { Credential, CredentialVersion } from "@buildingai/db/entities";
 import { Datasets } from "@buildingai/db/entities/datasets.entity";
 import { SquarePublishStatus } from "@buildingai/db/entities/square-publish-status.enum";
 import { Tag } from "@buildingai/db/entities/tag.entity";
@@ -30,9 +31,17 @@ import {
     projectSquareCard,
 } from "../utils/agent-public-projection";
 import { SensitiveWordConfigService } from "./sensitive-word-config.service";
+import { TenantScopeService } from "@modules/tenant/services/tenant-scope.service";
+import { CredentialCryptoService, hashInboundToken } from "@buildingai/core/modules";
+import { AgentVersionService } from "./agent-version.service";
 
 type AgentPublishConfigWithCopy = NonNullable<Agent["publishConfig"]> & {
     allowCopy?: boolean;
+};
+
+export type PublishConfigMutationResult = Agent & {
+    /** One-time bearer token returned when a public link is enabled or regenerated. */
+    publishLinkToken?: string;
 };
 
 @Injectable()
@@ -51,10 +60,17 @@ export class AgentsService extends BaseService<Agent> {
         private readonly datasetsRepository: Repository<Datasets>,
         @InjectRepository(AgentAssignment)
         private readonly agentAssignmentRepository: Repository<AgentAssignment>,
+        @InjectRepository(Credential)
+        private readonly credentialRepository: Repository<Credential>,
+        @InjectRepository(CredentialVersion)
+        private readonly credentialVersionRepository: Repository<CredentialVersion>,
         private readonly cozeAgentSyncService: CozeAgentSyncService,
         private readonly difyAgentSyncService: DifyAgentSyncService,
         private readonly agentConfigService: AgentConfigService,
         private readonly sensitiveWordConfigService: SensitiveWordConfigService,
+        private readonly tenantScopeService: TenantScopeService,
+        private readonly credentialCrypto: CredentialCryptoService,
+        private readonly agentVersionService: AgentVersionService,
     ) {
         super(agentRepository);
     }
@@ -143,6 +159,8 @@ export class AgentsService extends BaseService<Agent> {
             },
             memoryConfig: { maxUserMemories: 20, maxAgentMemories: 20 },
             createBy: user.id,
+            tenantId: (user as UserPlayground & { tenantId?: string }).tenantId ?? null,
+            projectId: (user as UserPlayground & { projectId?: string }).projectId ?? null,
         });
 
         await this.syncAgentTags(agent, dto.tagIds);
@@ -183,7 +201,15 @@ export class AgentsService extends BaseService<Agent> {
             relations: ["tags"],
         });
         if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
-        if (agent.createBy !== user.id) throw HttpErrorFactory.forbidden("无权限查看该智能体");
+        if (agent.tenantId && (user as UserPlayground & { tenantId?: string }).tenantId) {
+            this.tenantScopeService.assertTenant(
+                agent.tenantId,
+                user as UserPlayground & { tenantId?: string },
+            );
+        } else if (agent.createBy !== user.id && !user.isRoot) {
+            throw HttpErrorFactory.notFound("智能体不存在");
+        }
+
         return agent;
     }
 
@@ -193,7 +219,24 @@ export class AgentsService extends BaseService<Agent> {
             relations: ["tags"],
         });
         if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
-        if (agent.createBy !== user.id) throw HttpErrorFactory.forbidden("无权限操作该智能体");
+        if (agent.tenantId && (user as UserPlayground & { tenantId?: string }).tenantId) {
+            this.tenantScopeService.assertTenant(
+                agent.tenantId,
+                user as UserPlayground & { tenantId?: string },
+            );
+        } else if (agent.createBy !== user.id && !user.isRoot) {
+            throw HttpErrorFactory.notFound("智能体不存在");
+        }
+
+        const scopedUser = user as UserPlayground & { tenantId?: string; projectId?: string };
+        if (await this.agentVersionService.hasActiveProductionRelease(agent.id, scopedUser)) {
+            await this.agentVersionService.createDraftFromLegacyUpdate(agent, dto as unknown as Record<string, unknown>, {
+                tenantId: scopedUser.tenantId,
+                projectId: scopedUser.projectId,
+                actorId: user.id,
+            });
+            throw HttpErrorFactory.conflict("生产版本不可原地修改，变更已保存为新的草稿版本");
+        }
 
         const nextName = dto.name?.trim();
         if (nextName && nextName !== agent.name) {
@@ -237,6 +280,18 @@ export class AgentsService extends BaseService<Agent> {
             voiceConfig: dto.voiceConfig,
             annotationConfig: dto.annotationConfig,
         } satisfies Partial<Agent>;
+
+        if (dto.datasetIds && dto.datasetIds.length > 0) {
+            const scopedDatasets = await this.datasetsRepository.find({
+                where: { id: In(dto.datasetIds) },
+                select: ["id", "tenantId", "projectId"],
+            });
+            const tenantId = (agent as Agent & { tenantId?: string | null }).tenantId;
+            const projectId = (agent as Agent & { projectId?: string | null }).projectId;
+            if (scopedDatasets.length !== dto.datasetIds.length || scopedDatasets.some((d) => (tenantId && d.tenantId !== tenantId) || (projectId && d.projectId && d.projectId !== projectId))) {
+                throw HttpErrorFactory.badRequest("智能体只能绑定同租户/项目的知识库");
+            }
+        }
 
         Object.assign(agent, next);
         if (agent.createMode === "coze" && dto.thirdPartyIntegration !== undefined) {
@@ -299,17 +354,33 @@ export class AgentsService extends BaseService<Agent> {
         user: UserPlayground,
         agentId: string,
         dto: UpdatePublishConfigDto,
-    ): Promise<Agent> {
+    ): Promise<PublishConfigMutationResult> {
         const agent = await this.agentRepository.findOne({ where: { id: agentId } });
         if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
         if (agent.createBy !== user.id) throw HttpErrorFactory.forbidden("无权限操作该智能体");
 
+        const scopedUser = user as UserPlayground & { tenantId?: string; projectId?: string };
+        if (await this.agentVersionService.hasActiveProductionRelease(agent.id, scopedUser)) {
+            await this.agentVersionService.createDraftFromLegacyUpdate(agent, dto as unknown as Record<string, unknown>, {
+                tenantId: scopedUser.tenantId,
+                projectId: scopedUser.projectId,
+                actorId: user.id,
+            });
+            throw HttpErrorFactory.conflict("生产版本不可原地修改，发布配置变更已保存为草稿");
+        }
+
         const config = (agent.publishConfig ?? {}) as AgentPublishConfigWithCopy;
+        let publishLinkToken: string | undefined;
 
         if (dto.enableSite !== undefined) {
             config.enableSite = dto.enableSite;
-            if (dto.enableSite && !config.accessToken) {
-                config.accessToken = randomBytes(32).toString("hex");
+            if (dto.enableSite && !config.accessTokenHash) {
+                // Migrate a legacy plaintext token once, otherwise issue a new bearer.
+                // A hash-only config is already enabled and must not rotate on every save.
+                publishLinkToken = config.accessToken ?? randomBytes(32).toString("hex");
+                config.accessTokenHash = hashInboundToken(publishLinkToken);
+                config.accessTokenCredentialRef = await this.createPublishCredential(agent, publishLinkToken, user.id, "agent-site-access-token");
+                delete config.accessToken;
             }
         }
 
@@ -318,12 +389,35 @@ export class AgentsService extends BaseService<Agent> {
         }
 
         if (dto.regenerateAccessToken === true) {
-            config.accessToken = randomBytes(32).toString("hex");
+            publishLinkToken = randomBytes(32).toString("hex");
+            config.accessTokenHash = hashInboundToken(publishLinkToken);
+            config.accessTokenCredentialRef = await this.createPublishCredential(agent, publishLinkToken, user.id, "agent-site-access-token");
+            delete config.accessToken;
             config.enableSite = true;
         }
 
         agent.publishConfig = config;
-        return this.agentRepository.save(agent);
+        const saved = await this.agentRepository.save(agent);
+        return publishLinkToken ? { ...saved, publishLinkToken } : saved;
+    }
+
+    private async createPublishCredential(agent: Agent, secret: string, actorId: string, purpose: string): Promise<string> {
+        // Publish tokens are stored as hashes for inbound checks; the encrypted record is retained
+        // only for controlled rotation/recovery. The bearer value is returned once by the mutation
+        // response so the UI can construct a link, but is never persisted in Agent JSON.
+        if (!agent.tenantId) throw HttpErrorFactory.badRequest("Credential storage is not configured for this tenant");
+        const name = `${agent.name}-${purpose}`.slice(0, 120);
+        const existing = await this.credentialRepository.findOne({ where: { tenantId: agent.tenantId, projectId: agent.projectId ?? null, name } });
+        const row = existing || await this.credentialRepository.save(this.credentialRepository.create({ tenantId: agent.tenantId, projectId: agent.projectId ?? null, name, provider: "buildingai-agent-publish", purpose, environment: "production", scopes: [{ resource: "agent", actions: ["embed"] }], status: "active", currentVersionId: null, expiresAt: null, lastUsedAt: null, createdBy: actorId, revokedBy: null, revokedAt: null }));
+        const latest = row.currentVersionId
+            ? await this.credentialVersionRepository.findOne({ where: { id: row.currentVersionId, credentialId: row.id } })
+            : await this.credentialVersionRepository.findOne({ where: { credentialId: row.id }, order: { version: "DESC" } });
+        const nextVersion = (latest?.version || 0) + 1;
+        const envelope = this.credentialCrypto.encrypt(secret);
+        const version = await this.credentialVersionRepository.save(this.credentialVersionRepository.create({ credentialId: row.id, version: nextVersion, algorithm: envelope.algorithm, keyVersion: envelope.keyVersion, nonce: envelope.nonce, authTag: envelope.authTag, ciphertext: envelope.ciphertext, fingerprint: this.credentialCrypto.fingerprint(secret), expiresAt: null, overlapUntil: latest ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null, revokedAt: null, createdBy: actorId }));
+        row.currentVersionId = version.id;
+        await this.credentialRepository.save(row);
+        return row.id;
     }
 
     async publishToSquare(
@@ -517,6 +611,11 @@ export class AgentsService extends BaseService<Agent> {
             .orderBy("pending_review_sort", "ASC")
             .addOrderBy("a.createdAt", "DESC")
             .setParameter("pendingStatus", SquarePublishStatus.PENDING);
+
+        // Console listing is platform-scoped for root operators; tenant members must use
+        // the same scope helper as every other resource service.
+        const tenantScopeId = (dto as ListConsoleAgentsDto & { tenantId?: string }).tenantId;
+        if (tenantScopeId) this.tenantScopeService.apply(qb, "a", { tenantId: tenantScopeId });
 
         if (tagId) {
             qb.innerJoin("ai_agent_tags", "at", "at.agent_id = a.id AND at.tag_id = :tagId", {

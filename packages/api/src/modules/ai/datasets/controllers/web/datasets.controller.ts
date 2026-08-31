@@ -160,8 +160,19 @@ export class DatasetsWebController {
 
     @Post(":datasetId/retrieve")
     @DatasetPermission({ permission: "canViewAll", datasetIdParam: "datasetId" })
-    async retrieve(@Param("datasetId") datasetId: string, @Body() dto: RetrieveDto) {
-        return this.retrievalService.retrieve(datasetId, dto.query, dto.topK, dto.scoreThreshold);
+    async retrieve(
+        @Param("datasetId") datasetId: string,
+        @Body() dto: RetrieveDto,
+        @Playground() user: UserPlayground,
+    ) {
+        return this.retrievalService.retrieve(datasetId, dto.query, dto.topK, dto.scoreThreshold, {
+            tenantId: user.tenantId,
+            projectId: user.projectId,
+            actorId: user.id,
+            datasetIds: [datasetId],
+            classifications: dto.classifications,
+            verified: true,
+        });
     }
 
     @Post(":datasetId/publish-to-square")

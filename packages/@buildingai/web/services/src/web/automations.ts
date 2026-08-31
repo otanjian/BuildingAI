@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiHttpClient } from "../base";
 import type { AutomationRun, AutomationTask } from "../console/automations";
+import { removeAutomationTaskFromList } from "./automation-cache";
+
+export { removeAutomationTaskFromList } from "./automation-cache";
 
 export type {
     AutomationDeliveryStatus,
@@ -14,6 +17,18 @@ export type {
 } from "../console/automations";
 
 const QUERY_KEY = ["automations"] as const;
+
+export type AutomationTaskUpdate = {
+    id: string;
+    name?: string;
+    prompt?: string;
+    schedule?: AutomationTask["schedule"];
+    deleteAfterRun?: boolean;
+    missedRunPolicy?: AutomationTask["missedRunPolicy"];
+    overlapPolicy?: AutomationTask["overlapPolicy"];
+    timeoutSeconds?: number;
+    expectedUpdatedAt?: string;
+};
 
 export function useAutomationTasksQuery(options?: QueryOptionsUtil<AutomationTask[]>) {
     return useQuery<AutomationTask[]>({
@@ -48,6 +63,24 @@ export function useAutomationTaskMutation(
     });
 }
 
+export function useUpdateAutomationTaskMutation(
+    options?: MutationOptionsUtil<AutomationTask, AutomationTaskUpdate>,
+) {
+    const queryClient = useQueryClient();
+    return useMutation<AutomationTask, Error, AutomationTaskUpdate>({
+        ...options,
+        mutationFn: ({ id, expectedUpdatedAt, ...input }) =>
+            apiHttpClient.patch<AutomationTask>(`/automations/${id}`, {
+                ...input,
+                ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+            }),
+        onSuccess: (...args) => {
+            void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+            options?.onSuccess?.(...args);
+        },
+    });
+}
+
 export function useDeleteAutomationTaskMutation(
     options?: MutationOptionsUtil<AutomationTask, { id: string; expectedUpdatedAt?: string }>,
 ) {
@@ -59,6 +92,10 @@ export function useDeleteAutomationTaskMutation(
                 data: expectedUpdatedAt ? { expectedUpdatedAt } : undefined,
             }),
         onSuccess: (...args) => {
+            const [, variables] = args;
+            queryClient.setQueryData<AutomationTask[]>(QUERY_KEY, (tasks) =>
+                tasks ? removeAutomationTaskFromList(tasks, variables.id) : tasks,
+            );
             void queryClient.invalidateQueries({ queryKey: QUERY_KEY });
             options?.onSuccess?.(...args);
         },

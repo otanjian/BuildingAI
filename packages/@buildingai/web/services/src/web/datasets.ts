@@ -88,12 +88,25 @@ export type RetrievalChunk = {
     chunkIndex?: number;
     contentLength?: number;
     fileName?: string;
-    highlight?: string;
+  highlight?: string;
+  citation?: {
+    tenantId: string;
+    projectId?: string;
+    datasetId: string;
+    documentId: string;
+    segmentId: string;
+    sourceVersion: number;
+    chunkIndex?: number;
+    fileName?: string;
+    span?: { start: number; end: number };
+  };
 };
 
 export type RetrievalResult = {
-    chunks: RetrievalChunk[];
-    totalTime: number;
+  chunks: RetrievalChunk[];
+  totalTime: number;
+  status?: "ok" | "unavailable" | "no-result";
+  telemetry?: { queryDigest: string; indexVersion?: string; candidateCount?: number };
 };
 
 export async function listMyCreatedDatasets(

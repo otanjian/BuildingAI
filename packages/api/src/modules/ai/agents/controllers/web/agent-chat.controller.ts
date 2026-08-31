@@ -211,6 +211,8 @@ export class AgentChatWebController {
                 agentId,
                 userId: playground.id,
                 username: playground.username,
+                tenantId: playground.tenantId,
+                projectId: playground.projectId,
                 authSource,
                 anonymousIdentifier,
                 mcpUserId: feishuIdentity?.userId,

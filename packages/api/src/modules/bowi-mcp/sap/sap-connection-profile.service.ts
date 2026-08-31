@@ -1,5 +1,5 @@
 import { UserDictService } from "@buildingai/dict";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable, Optional } from "@nestjs/common";
 import { createHash } from "node:crypto";
 
 import { BowiToolExecutionError } from "../services/bowi-mcp-registry.service";
@@ -56,7 +56,10 @@ export class SapProfileError extends BowiToolExecutionError {
 
 @Injectable()
 export class SapConnectionProfileService {
-    constructor(private readonly userDictService: UserDictService) {}
+    constructor(
+        private readonly userDictService: UserDictService,
+        @Optional() @Inject("CREDENTIAL_RUNTIME_RESOLVER") private readonly credentialResolver?: { resolve(id: string, scope: { tenantId: string; environment?: string; resource?: string; action?: string }): Promise<string> },
+    ) {}
 
     async resolvePyrfc(principal: BowiPrincipal): Promise<SapPyrfcProfile> {
         const subject = principal.subjectUserId;
@@ -65,6 +68,21 @@ export class SapConnectionProfileService {
         }
         const personal = await this.userDictService.getGroupValues(subject, "personalParams");
         const values = this.flatten(personal);
+        const credentialRef = values.get("credentialref") || values.get("sapcredentialref");
+        if (credentialRef && principal.tenantId && this.credentialResolver) {
+            const managed = await this.credentialResolver.resolve(credentialRef, {
+                tenantId: principal.tenantId,
+                environment: "production",
+                resource: "sap",
+                action: "connect",
+            });
+            try {
+                const managedValues = JSON.parse(managed) as Record<string, unknown>;
+                for (const [key, value] of this.flatten(managedValues)) values.set(key, value);
+            } catch {
+                values.set("password", managed);
+            }
+        }
         const composite = this.compositeValues(personal);
         const serviceEnabled = process.env.BOWI_SAP_SERVICE_PROFILE_ENABLED === "true";
         const value = (key: keyof typeof aliases, envKey?: string) =>

@@ -84,13 +84,17 @@ export default defineConfig({
         find: "@buildingai/stores",
         replacement: path.resolve(__dirname, "../@buildingai/web/stores/src"),
       },
+      {
+        find: "@buildingai/services",
+        replacement: path.resolve(__dirname, "../@buildingai/web/services/src"),
+      },
     ],
     dedupe: ["react", "react-dom", "@tanstack/react-query"],
   },
   server: {
     // Use 127.0.0.1 so Vite and start.sh health checks agree (localhost may be IPv6-only on macOS).
     host: host || "127.0.0.1",
-    // The dev server is exposed through frpc under the public BuildingAI domain.
+    // The dev server is exposed through frpc under the public Bowi AI domain.
     // Allow that Host header so proxied requests are not rejected with HTTP 403.
     allowedHosts: ["mac.bosofts.com"],
     open: true,

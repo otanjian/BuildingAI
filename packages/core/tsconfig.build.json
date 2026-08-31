@@ -18,6 +18,7 @@
         "global.d.ts"
     ],
     "exclude": [
+        "src/**/*.spec.ts",
         "src/**/__tests__/**"
     ]
 }

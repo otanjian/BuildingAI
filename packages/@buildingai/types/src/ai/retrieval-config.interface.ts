@@ -61,6 +61,17 @@ export interface RetrievalChunk {
     fileName?: string;
     /** 高亮内容（全文检索时返回，已高亮命中关键词） */
     highlight?: string;
+    citation?: {
+        tenantId: string;
+        projectId?: string;
+        datasetId: string;
+        documentId: string;
+        segmentId: string;
+        sourceVersion: number;
+        chunkIndex?: number;
+        fileName?: string;
+        span?: { start: number; end: number };
+    };
 }
 
 /**
@@ -69,6 +80,8 @@ export interface RetrievalChunk {
 export interface RetrievalResult {
     chunks: RetrievalChunk[];
     totalTime: number;
+    status?: "ok" | "unavailable" | "no-result";
+    telemetry?: { queryDigest: string; indexVersion?: string; candidateCount?: number };
 }
 
 /**

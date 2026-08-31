@@ -10,6 +10,7 @@ import { HttpErrorFactory } from "@buildingai/errors";
 import { buildWhere } from "@buildingai/utils";
 import { isEnabled } from "@buildingai/utils";
 import { Injectable, Logger } from "@nestjs/common";
+import { CredentialRuntimeResolver } from "@buildingai/core/modules";
 
 import { withTimeout } from "@common/utils/with-timeout";
 
@@ -41,6 +42,7 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
         private readonly aiUserMcpServerRepository: Repository<AiUserMcpServer>,
         private readonly aiMcpToolService: AiMcpToolService,
         private readonly dictService: DictService,
+        private readonly credentialResolver: CredentialRuntimeResolver,
     ) {
         super(aiMcpServerRepository);
     }
@@ -60,9 +62,10 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
             throw HttpErrorFactory.badRequest(`名为 ${createDto.name} 的MCP服务已存在`);
         }
 
-        const { isQuickMenu, ...rest } = createDto;
+        const { isQuickMenu, headers, ...rest } = createDto;
         const result = await this.create({
             ...rest,
+            headers: rest.credentialRef ? null : headers,
             type: McpServerType.SYSTEM,
             creatorId: createDto.userId,
         });
@@ -102,8 +105,9 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
             }
         }
 
-        const { isQuickMenu, ...rest } = updateDto;
-        const result = await this.updateById(id, rest);
+        const { isQuickMenu, headers, ...rest } = updateDto;
+        const safeUpdate = rest.credentialRef ? { ...rest, headers: null } : { ...rest, ...(headers === undefined ? {} : { headers }) };
+        const result = await this.updateById(id, safeUpdate);
         if (isQuickMenu !== undefined && isQuickMenu) {
             await this.dictService.set(AI_MCP_IS_QUICK_MENU, id);
         }
@@ -277,6 +281,9 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
         let errorMessage = "";
 
         try {
+            const headers = mcpServer.credentialRef
+                ? { Authorization: `Bearer ${await this.credentialResolver.resolve(mcpServer.credentialRef, { tenantId: (mcpServer as any).tenantId, projectId: (mcpServer as any).projectId, environment: "production", resource: "mcp", action: "connect" })}` }
+                : mcpServer.headers;
             const connected = await withTimeout(
                 (async () => {
                     const client = await createMcpClient({
@@ -286,7 +293,7 @@ export class AiMcpServerService extends BaseService<AiMcpServer> {
                                     ? "sse"
                                     : "http",
                             url: mcpServer.url,
-                            ...(mcpServer.headers && { headers: mcpServer.headers }),
+                            ...(headers && { headers }),
                         },
                         name: mcpServer.name,
                     });

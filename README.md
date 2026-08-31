@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://www.buildingai.cc/" target="_blank"><img src="./assets/banner.png" width="100%" alt="BuildingAI Banner" /></a>
+  <a href="https://www.buildingai.cc/" target="_blank"><img src="./assets/banner.png" width="100%" alt="Bowi AI Banner" /></a>
 </p>
 
 <p align="center">
@@ -20,22 +20,22 @@
   <a href="https://nuxt.com/"><img src="https://img.shields.io/badge/NuxtJS-4.x-00b95f" alt="NuxtJS" /></a>
 </p>
 
-BuildingAI is an enterprise-grade open-source intelligent agent platform designed for AI developers,
-AI entrepreneurs, and forward-thinking organizations. Through a visual configuration interface (Do
-It Yourself), you can build native enterprise AI applications without code. The platform offers
-native capabilities such as intelligent agents, MCP, RAG pipelines, knowledge bases, large-model
+Bowi AI is an enterprise-grade open-source intelligent agent platform designed for AI developers, AI
+entrepreneurs, and forward-thinking organizations. Through a visual configuration interface (Do It
+Yourself), you can build native enterprise AI applications without code. The platform offers native
+capabilities such as intelligent agents, MCP, RAG pipelines, knowledge bases, large-model
 aggregation, and context engineering, along with user registration, membership subscriptions,
 compute billing, and other business operations.
 
 ## Quick Start
 
-> Before installing `BuildingAI`, make sure your device meets the minimum requirements:
+> Before installing `Bowi AI`, make sure your device meets the minimum requirements:
 >
 > - **CPU**: ≥ 2 cores
 > - **Memory**: ≥ 4 GB RAM
 > - **Storage**: ≥ 5 GB free space
 
-Deploying BuildingAI with [Docker](https://www.docker.com/) is the simplest and most stable option.
+Deploying Bowi AI with [Docker](https://www.docker.com/) is the simplest and most stable option.
 Ensure that [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
 are already installed on your device.
 

@@ -2,11 +2,14 @@ import { type FindOptionsWhere, ILike, Raw } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { ConsoleController } from "@common/decorators/controller.decorator";
 import { Permissions } from "@common/decorators/permissions.decorator";
-import { Get, Param, Query } from "@nestjs/common";
+import { Get, Param, Query, Post } from "@nestjs/common";
+import { Playground } from "@buildingai/decorators/playground.decorator";
+import { type UserPlayground } from "@buildingai/db";
 
 import { ListDocumentsDto } from "../../dto/document.dto";
 import { DatasetsService } from "../../services/datasets.service";
 import { DatasetsDocumentService } from "../../services/datasets-document.service";
+import { DatasetsIngestionService } from "../../services/datasets-ingestion.service";
 
 const LIST_ORDER: Record<string, Record<string, "ASC" | "DESC">> = {
     name: { fileName: "ASC" },
@@ -19,6 +22,7 @@ export class DatasetsDocumentsConsoleController {
     constructor(
         private readonly datasetsService: DatasetsService,
         private readonly documentService: DatasetsDocumentService,
+        private readonly ingestionService: DatasetsIngestionService,
     ) {}
 
     @Get(":datasetId/documents")
@@ -42,5 +46,24 @@ export class DatasetsDocumentsConsoleController {
             : { datasetId };
         const order = LIST_ORDER[sortBy] ?? LIST_ORDER.uploadTime;
         return this.documentService.paginate(query, { where, order });
+    }
+
+    @Get(":datasetId/ingestion-jobs")
+    @Permissions({ code: "list", name: "摄取任务", description: "查询知识库摄取任务" })
+    async listIngestionJobs(@Param("datasetId") datasetId: string, @Playground() user: UserPlayground) {
+        const tenantId = (user as UserPlayground & { tenantId?: string }).tenantId;
+        return tenantId ? this.ingestionService.listForDataset(tenantId, datasetId) : [];
+    }
+
+    @Post(":datasetId/ingestion-jobs/:jobId/:operation")
+    @Permissions({ code: "manage", name: "摄取任务管理", description: "暂停、恢复、取消或重放摄取任务" })
+    async controlIngestionJob(
+        @Param("jobId") jobId: string,
+        @Param("operation") operation: "pause" | "resume" | "cancel" | "replay",
+    ) {
+        if (!["pause", "resume", "cancel", "replay"].includes(operation)) {
+            throw HttpErrorFactory.badRequest("不支持的摄取任务操作");
+        }
+        return this.ingestionService.control(jobId, operation);
     }
 }

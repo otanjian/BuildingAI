@@ -108,6 +108,8 @@ export class DatasetsSegmentService {
             embedding?: number[];
             dimension?: number;
             modelId?: string;
+            modelVersion?: string;
+            checksum?: string;
             error?: string;
         }>,
     ): Promise<void> {
@@ -116,13 +118,26 @@ export class DatasetsSegmentService {
         await this.dataSource.transaction(async (manager) => {
             for (const r of results) {
                 if (r.success && r.embedding != null) {
+                    const dimension = r.dimension ?? r.embedding.length;
+                    if (!Number.isInteger(dimension) || dimension < 1 || dimension > 16384) {
+                        await manager.update(DatasetsSegments, r.segmentId, { status: PROCESSING_STATUS.FAILED, error: "Invalid embedding dimension" });
+                        continue;
+                    }
                     await manager.update(DatasetsSegments, r.segmentId, {
                         embedding: r.embedding,
-                        vectorDimension: r.dimension ?? null,
+                        vectorDimension: dimension,
                         embeddingModelId: r.modelId ?? null,
                         status: PROCESSING_STATUS.COMPLETED,
+                        indexStatus: "active",
                         error: null,
                     });
+                    const segment = await manager.findOne(DatasetsSegments, { where: { id: r.segmentId }, select: ["id", "tenantId", "datasetId", "documentId"] });
+                    if (segment && r.checksum) {
+                        await manager.query(
+                            `INSERT INTO datasets_embeddings (tenant_id, dataset_id, document_id, segment_id, model_version, dimension, checksum, vector, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active') ON CONFLICT (segment_id, checksum, model_version) DO UPDATE SET vector = EXCLUDED.vector, dimension = EXCLUDED.dimension, status = 'active', updated_at = now()`,
+                            [segment.tenantId, segment.datasetId, segment.documentId, segment.id, r.modelVersion ?? r.modelId ?? "unknown", dimension, r.checksum, r.embedding],
+                        );
+                    }
                 } else {
                     await manager.update(DatasetsSegments, r.segmentId, {
                         status: PROCESSING_STATUS.FAILED,
@@ -203,6 +218,16 @@ export class DatasetsSegmentService {
         documentId: string,
         segments: Array<{ content: string; index: number; length: number }>,
         embeddingModelId: string | null,
+        snapshot?: {
+            tenantId?: string | null;
+            projectId?: string | null;
+            classification?: string | null;
+            aclPolicy?: { allowUserIds?: string[]; denyUserIds?: string[] } | null;
+            sourceVersion?: number;
+            parserVersion?: string;
+            chunkingVersion?: string;
+            indexVersion?: string | null;
+        },
     ): Promise<DatasetsSegments[]> {
         const entities = segments.map((s) =>
             this.segmentRepository.create({
@@ -215,6 +240,15 @@ export class DatasetsSegmentService {
                 status: PROCESSING_STATUS.PENDING,
                 embeddingModelId: embeddingModelId ?? undefined,
                 enabled: 1,
+                tenantId: snapshot?.tenantId ?? null,
+                projectId: snapshot?.projectId ?? null,
+                classification: snapshot?.classification ?? "internal",
+                aclPolicy: snapshot?.aclPolicy ?? null,
+                sourceVersion: snapshot?.sourceVersion ?? 1,
+                parserVersion: snapshot?.parserVersion ?? null,
+                chunkingVersion: snapshot?.chunkingVersion ?? null,
+                indexVersion: snapshot?.indexVersion ?? null,
+                indexStatus: "pending",
             }),
         );
         return this.segmentRepository.save(entities);

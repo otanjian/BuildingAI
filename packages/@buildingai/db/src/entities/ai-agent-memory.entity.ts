@@ -11,6 +11,9 @@ import { User } from "./user.entity";
 @AppEntity({ name: "ai_agent_memory", comment: "智能体专属记忆" })
 @Index(["userId", "agentId", "isActive", "createdAt"])
 export class AgentMemory extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     @Column({ type: "uuid", comment: "用户ID" })
     @Index()
     userId: string;

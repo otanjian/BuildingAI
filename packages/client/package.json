@@ -58,6 +58,7 @@
     },
     "devDependencies": {
         "@buildingai/eslint-config": "workspace:*",
+        "@buildingai/typescript-config": "workspace:*",
         "@buildingai/types": "workspace:*",
         "@eslint/js": "^9.39.2",
         "@tauri-apps/cli": "^2.10.0",

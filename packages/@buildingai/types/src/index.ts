@@ -36,6 +36,7 @@ export * from "./analyse/dashboard.interface";
 // Export AI related types
 export type {
     Agent,
+    AgentDelegationConfig,
     AgentCore,
     AgentDashboardResult,
     AgentPublishConfig,

@@ -20,6 +20,7 @@ import { PaginationDto } from "@buildingai/dto/pagination.dto";
 import { HttpErrorFactory } from "@buildingai/errors";
 import { DatasetsConfigService } from "@modules/config/services/datasets-config.service";
 import { Injectable, Logger } from "@nestjs/common";
+import { TenantScopeService } from "@modules/tenant/services/tenant-scope.service";
 
 import { CreateEmptyDatasetDto } from "../dto/create-empty-dataset.dto";
 import type { ListSquareDatasetsDto } from "../dto/list-square-datasets.dto";
@@ -57,6 +58,7 @@ export class DatasetsService extends BaseService<Datasets> {
         private readonly datasetMemberService: DatasetMemberService,
         private readonly datasetsConfigService: DatasetsConfigService,
         private readonly vectorizationTrigger: VectorizationTriggerService,
+        private readonly tenantScopeService: TenantScopeService,
     ) {
         super(datasetsRepository);
     }
@@ -87,6 +89,8 @@ export class DatasetsService extends BaseService<Datasets> {
             description,
             ...(coverUrl !== undefined && { coverUrl }),
             createdBy: user.id,
+            tenantId: (user as UserPlayground & { tenantId?: string }).tenantId ?? null,
+            projectId: (user as UserPlayground & { projectId?: string }).projectId ?? null,
             embeddingModelId: embeddingModelId.trim(),
             retrievalMode: retrievalConfig.retrievalMode ?? RETRIEVAL_MODE.HYBRID,
             retrievalConfig,
@@ -275,6 +279,9 @@ export class DatasetsService extends BaseService<Datasets> {
             .orderBy("pending_review_sort", "ASC")
             .addOrderBy("d.updatedAt", "DESC")
             .setParameter("pendingStatus", SquarePublishStatus.PENDING);
+
+        const tenantId = (paginationDto as PaginationDto & { tenantId?: string }).tenantId;
+        if (tenantId) this.tenantScopeService.apply(qb, "d", { tenantId });
 
         if (tagId) {
             qb = qb.innerJoin(

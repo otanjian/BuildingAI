@@ -20,6 +20,7 @@ export interface BowiPrincipal {
     subjectUserId?: string;
     authSource: BowiAuthSource | "opencode_session";
     agentId?: string;
+    tenantId?: string;
     conversationId?: string;
     sessionId?: string;
     callId?: string;

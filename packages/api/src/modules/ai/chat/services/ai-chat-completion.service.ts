@@ -1,6 +1,5 @@
 import {
     closeMcpClients,
-    createClientsFromServerConfigs,
     getProvider,
     getReasoningOptions,
     type McpClient,
@@ -54,6 +53,7 @@ import { validate as isUUID } from "uuid";
 
 import { FollowUpSuggestionsHandler } from "../../agents/handlers/follow-up-suggestions";
 import { AiMcpServerService } from "../../mcp/services/ai-mcp-server.service";
+import { ToolGatewayMcpBoundary } from "@modules/tool-gateway/services/tool-gateway-mcp-boundary.service";
 import { MemoryService } from "../../memory/services/memory.service";
 import { MemoryExtractionService } from "../../memory/services/memory-extraction.service";
 import { AiModelService } from "../../model/services/ai-model.service";
@@ -96,6 +96,7 @@ export class ChatCompletionService {
         private readonly chatConfigService: ChatConfigService,
         private readonly userService: UserService,
         private readonly followUpSuggestionsHandler: FollowUpSuggestionsHandler,
+        private readonly toolGatewayMcpBoundary: ToolGatewayMcpBoundary,
     ) {}
 
     private getErrorMsg(error: unknown): string {
@@ -539,7 +540,7 @@ export class ChatCompletionService {
                 return { clients: [], tools: {} };
             }
 
-            const clients = await createClientsFromServerConfigs(serverConfigs);
+            const clients = await this.toolGatewayMcpBoundary.createClients(serverConfigs);
             const tools = await mergeMcpTools(clients);
             return { clients, tools };
         } catch (error) {

@@ -40,6 +40,7 @@ import {
 } from "./settings-items";
 import { AboutSetting } from "./settings-items/about-setting";
 import PersonalizedSetting from "./settings-items/personalized-setting";
+import LongTermMemorySetting from "./settings-items/long-term-memory-setting";
 
 const SETTINGS_COMPONENTS: Record<SettingsPage, React.ComponentType> = {
   profile: ProfileSetting,
@@ -50,6 +51,7 @@ const SETTINGS_COMPONENTS: Record<SettingsPage, React.ComponentType> = {
   tools: ToolsSetting,
   subscribe: SubscribeSetting,
   personalized: PersonalizedSetting,
+  longTermMemory: LongTermMemorySetting,
   about: AboutSetting,
 };
 

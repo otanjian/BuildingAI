@@ -7,7 +7,7 @@ TBD - created by archiving change opencode-prompt-image-parts. Update Purpose af
 When an OpenCode agent receives a user message that contains image file parts, the system SHALL include those images in the OpenCode `prompt_async` request parts (in addition to any text), using OpenCode file part fields (`type: "file"`, `mime`, `url`, and filename when available).
 
 #### Scenario: Image plus caption
-- **WHEN** a user sends an OpenCode chat message with text and an `image/*` file part whose URL is a stored BuildingAI upload URL
+- **WHEN** a user sends an OpenCode chat message with text and an `image/*` file part whose URL is a stored Bowi AI upload URL
 - **THEN** the OpenCode prompt contains a text part with that caption and a file part with the image MIME type and URL
 
 #### Scenario: Image without text
@@ -28,4 +28,3 @@ If a user message includes an image file part that cannot be mapped to a URL Ope
 #### Scenario: Localhost upload URL
 - **WHEN** an image file part uses a `localhost` or `127.0.0.1` upload URL
 - **THEN** the system rewrites or materializes an OpenCode-reachable URL before prompting, or fails explicitly instead of omitting the file part
-

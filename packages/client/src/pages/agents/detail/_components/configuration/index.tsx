@@ -8,6 +8,7 @@ import {
   useUnpublishAgentFromSquareMutation,
 } from "@buildingai/services/web";
 import type {
+  AgentDelegationConfig,
   AnnotationConfig,
   ModelRouting,
   SensitiveWordConfig,
@@ -81,6 +82,7 @@ type AutoQuestionsState = {
 type ToolConfigState = {
   requireApproval?: boolean;
   toolTimeout?: number;
+  agentDelegation?: AgentDelegationConfig;
 } | null;
 
 type ConfigState = {
@@ -791,6 +793,7 @@ export default function Configuration() {
                           onChange={updateMultiple}
                         />
                         <McpTools
+                          agentId={agentId}
                           value={config.mcpServerIds}
                           onChange={(v) => updateConfig("mcpServerIds", v)}
                           toolConfig={config.toolConfig}

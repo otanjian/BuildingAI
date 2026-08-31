@@ -1,6 +1,6 @@
 # EHCS-AI Extension
 
-ERP data health autonomous system (EHCS-AI) for BuildingAI.
+ERP data health autonomous system (EHCS-AI) for Bowi AI.
 
 ## Entry URL
 
@@ -13,17 +13,19 @@ ERP data health autonomous system (EHCS-AI) for BuildingAI.
 1. Ensure `extensions/extensions.json` has `applications.ehcs-ai.enabled: true`
 2. Sync into the database and sidebar menu:
 
-   ```bash
-   pnpm extension:sync
-   ```
+    ```bash
+    pnpm extension:sync
+    ```
 
-3. **Console → Extensions** (`/console/extension`): enable/disable, open manage URL, upgrade, or remove
-4. **Layout → Menu** (decorate): sidebar item is added under **应用** for enabled application extensions
+3. **Console → Extensions** (`/console/extension`): enable/disable, open manage URL, upgrade, or
+   remove
+4. **Layout → Menu** (decorate): sidebar item is added under **应用** for enabled application
+   extensions
 5. Re-run DB seed if you need the default menu from `web-menu.json` on a fresh install
 
 ## Prerequisites
 
-1. BuildingAI API + client running (`./start.sh` or `pnpm dev`)
+1. Bowi AI API + client running (`./start.sh` or `pnpm dev`)
 2. PostgreSQL configured in `.env`
 3. Extension enabled in `extensions/extensions.json` (`ehcs-ai`) and synced (`extension:sync`)
 4. Platform admin: at least one **active LLM model** and **MCP server** configured
@@ -31,17 +33,22 @@ ERP data health autonomous system (EHCS-AI) for BuildingAI.
 
 ### Seed EHCS platform agent
 
-On first extension install, `EhcsPlatformAgentSeeder` creates **EHCS数据健康自治** (role, rules, opening per PRD) and links it in app settings.
+On first extension install, `EhcsPlatformAgentSeeder` creates **EHCS数据健康自治** (role, rules,
+opening per PRD) and links it in app settings.
 
-For an existing install, open **EHCS → 设置** and click **创建 EHCS 智能体** (creates under your login, per PRD).
+For an existing install, open **EHCS → 设置** and click **创建 EHCS 智能体** (creates under your
+login, per PRD).
 
-Requires at least one active **LLM model** and one **enabled MCP server** in the console (prefers names containing `erpnext` / `erp`).
+Requires at least one active **LLM model** and one **enabled MCP server** in the console (prefers
+names containing `erpnext` / `erp`).
 
-> If the agent was seeded earlier but not visible: it was owned by another user. Use **创建 EHCS 智能体** to re-assign or create it for your account.
+> If the agent was seeded earlier but not visible: it was owned by another user. Use
+> **创建 EHCS 智能体** to re-assign or create it for your account.
 
 ## Development
 
-`/apps/ehcs-ai` and proxied `/extension/ehcs-ai` on port **4091** serve the extension from **`extensions/ehcs-ai/.output/public`** (production build), not `src/web` directly.
+`/apps/ehcs-ai` and proxied `/extension/ehcs-ai` on port **4091** serve the extension from
+**`extensions/ehcs-ai/.output/public`** (production build), not `src/web` directly.
 
 After **web UI changes**, rebuild (or use watch):
 
@@ -60,7 +67,8 @@ pnpm --filter ehcs-ai dev:web   # http://localhost:5174/extension/ehcs-ai
 # in another terminal: ./start.sh restart dev
 ```
 
-Open `http://localhost:4091/apps/ehcs-ai` — Vite proxies `/extension/ehcs-ai` to :5174 when that server is running.
+Open `http://localhost:4091/apps/ehcs-ai` — Vite proxies `/extension/ehcs-ai` to :5174 when that
+server is running.
 
 Full extension API + web dev:
 
@@ -77,14 +85,21 @@ pnpm --filter ehcs-ai build:publish
 
 ## Architecture notes
 
-- Business data in schema `ehcs_ai` (rules, anomalies, check runs); table reference: `docs/DB/DB-EHCS-AI.md`
+- Business data in schema `ehcs_ai` (rules, anomalies, check runs); table reference:
+  `docs/DB/DB-EHCS-AI.md`
 - AI checks stream via platform `POST /api/ai-agents/:agentId/chat/stream`
-- **Full check:** user sends「开始检查」in the right agent dock → `GET /rules` (enabled) → `POST /check-runs` → per-rule agent stream → `ingest`
+- **Full check:** user sends「开始检查」in the right agent dock → `GET /rules` (enabled) →
+  `POST /check-runs` → per-rule agent stream → `ingest`
 - One `check_run` per batch; **one conversation per rule** during batch
-- UI: top nav + full-width dashboard; **🤖 FAB** opens right embedded agent panel (not floating iframe)
-- Opens from `/apps/ehcs-ai` (iframe → `/extension/ehcs-ai`); platform shell chat is disabled on ehcs routes
-- Product spec: `docs/PRD/PRD-EHCS-AI.md` (V1.1.1); UI prototype `docs/UI-EHCS-AI.html` is reference-only
+- UI: top nav + full-width dashboard; **🤖 FAB** opens right embedded agent panel (not floating
+  iframe)
+- Opens from `/apps/ehcs-ai` (iframe → `/extension/ehcs-ai`); platform shell chat is disabled on
+  ehcs routes
+- Product spec: `docs/PRD/PRD-EHCS-AI.md` (V1.1.1); UI prototype `docs/UI-EHCS-AI.html` is
+  reference-only
 
 ## Agent profile
 
-Role prompt, opening, and suggested questions live in `src/api/db/seed-data/ehcs-platform-agent.config.ts`. Re-apply via **设置 → 创建/更新 EHCS 智能体** after prompt changes.
+Role prompt, opening, and suggested questions live in
+`src/api/db/seed-data/ehcs-platform-agent.config.ts`. Re-apply via **设置 → 创建/更新 EHCS 智能体**
+after prompt changes.

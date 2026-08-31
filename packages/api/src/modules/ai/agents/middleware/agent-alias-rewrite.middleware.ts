@@ -1,3 +1,4 @@
+import { hashInboundToken, matchesInboundToken } from "@buildingai/core/modules";
 import { type UserPlayground } from "@buildingai/db";
 import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { Agent, User } from "@buildingai/db/entities";
@@ -8,6 +9,8 @@ import { Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
 import { Repository } from "typeorm";
 
+import { AgentVersionService } from "../services/agent-version.service";
+
 @Injectable()
 export class AgentAliasRewriteMiddleware implements NestMiddleware {
     constructor(
@@ -15,6 +18,7 @@ export class AgentAliasRewriteMiddleware implements NestMiddleware {
         private readonly agentRepository: Repository<Agent>,
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
+        private readonly agentVersionService: AgentVersionService,
     ) {}
 
     async use(req: Request, _res: Response, next: NextFunction) {
@@ -33,21 +37,43 @@ export class AgentAliasRewriteMiddleware implements NestMiddleware {
             throw HttpErrorFactory.unauthorized("API key or site access token is required");
         }
 
+        let tokenHash = "";
+        try {
+            tokenHash = hashInboundToken(token);
+        } catch {
+            // Production without the hash key fails closed by matching nothing.
+        }
+
         const agent = await this.agentRepository
             .createQueryBuilder("agent")
             .where(
                 `(
-                    (agent.publish_config ->> 'apiKey' = :token AND agent.publish_config ->> 'enableApiKey' = 'true')
+                    ((agent.publish_config ->> 'apiKeyHash' IS NOT NULL AND agent.publish_config ->> 'apiKeyHash' = :tokenHash)
+                      OR (agent.publish_config ->> 'apiKey' = :token)) AND agent.publish_config ->> 'enableApiKey' = 'true'
                     OR
-                    (agent.publish_config ->> 'accessToken' = :token AND agent.publish_config ->> 'enableSite' = 'true')
+                    ((agent.publish_config ->> 'accessTokenHash' IS NOT NULL AND agent.publish_config ->> 'accessTokenHash' = :tokenHash)
+                      OR (agent.publish_config ->> 'accessToken' = :token)) AND agent.publish_config ->> 'enableSite' = 'true'
                 )`,
-                { token },
+                { token, tokenHash },
             )
             .getOne();
 
         if (!agent) {
             throw HttpErrorFactory.unauthorized(
                 "Invalid credential, or API key / site embedding access is not enabled",
+            );
+        }
+
+        // Marketplace approval is the availability gate for the current published runtime.
+        // Credential validation above remains the authentication boundary.
+        if (
+            !(await this.agentVersionService.hasApprovedMarketplacePublish(agent.id, {
+                tenantId: agent.tenantId,
+                projectId: agent.projectId,
+            }))
+        ) {
+            throw HttpErrorFactory.forbidden(
+                "Agent is not published and approved in the marketplace",
             );
         }
 
@@ -66,8 +92,13 @@ export class AgentAliasRewriteMiddleware implements NestMiddleware {
 
         req["user"] = playground;
         setRequestAuthContext(req, {
-            source: agent.publishConfig?.apiKey === token ? "publish_key" : "site_access_token",
+            source:
+                agent.publishConfig?.apiKey === token ||
+                matchesInboundToken(token, agent.publishConfig?.apiKeyHash)
+                    ? "publish_key"
+                    : "site_access_token",
             agentId: agent.id,
+            tenantId: agent.tenantId ?? undefined,
         });
 
         const webPrefix = process.env.VITE_APP_WEB_API_PREFIX?.replace(/^\/+/, "") ?? "api/web";

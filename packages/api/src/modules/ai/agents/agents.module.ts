@@ -1,6 +1,7 @@
 import { SecretService, SecretTemplateService } from "@buildingai/core/modules";
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { Agent } from "@buildingai/db/entities/ai-agent.entity";
+import { Credential, CredentialVersion, AiAgentDependencyLock, AiAgentRelease, AiAgentReleaseApproval, AiAgentVersion } from "@buildingai/db/entities";
 import { AgentAnnotation } from "@buildingai/db/entities/ai-agent-annotation.entity";
 import { AgentAssignment } from "@buildingai/db/entities/agent-assignment.entity";
 import { AgentChatMessage } from "@buildingai/db/entities/ai-agent-chat-message.entity";
@@ -26,6 +27,8 @@ import { AiModelService } from "@modules/ai/model/services/ai-model.service";
 import { AiProviderService } from "@modules/ai/provider/services/ai-provider.service";
 import { ConfigModule } from "@modules/config/config.module";
 import { UserModule } from "@modules/user/user.module";
+import { TenantModule } from "@modules/tenant/tenant.module";
+import { ToolGatewayModule } from "@modules/tool-gateway/tool-gateway.module";
 import { forwardRef, MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/common";
 
 import { AiMemoryModule } from "../memory/ai-memory.module";
@@ -35,6 +38,7 @@ import { OpencodeCredentialInternalController } from "./controllers/internal/ope
 import { AgentAnnotationWebController } from "./controllers/web/agent-annotation.controller";
 import { AgentChatWebController } from "./controllers/web/agent-chat.controller";
 import { AgentPublishWebController } from "./controllers/web/agent-publish.controller";
+import { AgentVersionWebController } from "./controllers/web/agent-version.controller";
 import { AgentsWebController } from "./controllers/web/agents.controller";
 import { OpencodeTurnWebController } from "./controllers/web/opencode-turn.controller";
 import { AgentBillingHandler } from "./handlers/agent-billing";
@@ -64,6 +68,7 @@ import { AgentsService } from "./services/agents.service";
 import { OpencodeArtifactBaselineService } from "./services/opencode-artifact-baseline.service";
 import { OpencodeArtifactService } from "./services/opencode-artifact.service";
 import { OpencodeCredentialService } from "./services/opencode-credential.service";
+import { CredentialCryptoService } from "@buildingai/core/modules";
 import { OpencodeLegacyBindingMigrationService } from "./services/opencode-legacy-binding-migration";
 import { OpencodeIframeBillingReconcilerService } from "./services/opencode-iframe-billing-reconciler.service";
 import { OpencodeTurnAcceptanceService } from "./services/opencode-turn-acceptance.service";
@@ -88,6 +93,8 @@ import { OpencodeSessionRecoverService } from "./services/opencode-session-recov
 import { OpencodeTurnRunnerService } from "./services/opencode-turn-runner.service";
 import { OpencodeWorkspaceService } from "./services/opencode-workspace.service";
 import { SensitiveWordConfigService } from "./services/sensitive-word-config.service";
+import { AgentVersionService } from "./services/agent-version.service";
+import { AgentInvocationService } from "./services/agent-invocation.service";
 @Module({
     imports: [
         TypeOrmModule.forFeature([
@@ -109,17 +116,26 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
             Secret,
             SecretTemplate,
             File,
+            Credential,
+            CredentialVersion,
+            AiAgentVersion,
+            AiAgentRelease,
+            AiAgentReleaseApproval,
+            AiAgentDependencyLock,
         ]),
         forwardRef(() => AiDatasetsModule),
         AiMemoryModule,
         ConfigModule,
         UserModule,
+        TenantModule,
+        ToolGatewayModule,
     ],
     controllers: [
         AgentsConsoleController,
         AgentsWebController,
         AgentChatWebController,
         AgentPublishWebController,
+        AgentVersionWebController,
         AgentAnnotationWebController,
         OpencodeTurnWebController,
         OpencodeCredentialInternalController,
@@ -129,11 +145,15 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
         AgentAliasRewriteMiddleware,
         // Agent CRUD
         AgentsService,
+        AgentVersionService,
         SensitiveWordConfigService,
         AgentAnnotationService,
         AgentDashboardService,
         // Chat completion
         AgentChatCompletionService,
+        { provide: "AGENT_CHAT_COMPLETION_SERVICE", useExisting: AgentChatCompletionService },
+        AgentInvocationService,
+        { provide: "AGENT_INVOCATION_SERVICE", useExisting: AgentInvocationService },
         AgentChatRecordService,
         AgentChatMessageService,
         AgentChatMessageFeedbackService,
@@ -181,6 +201,7 @@ import { SensitiveWordConfigService } from "./services/sensitive-word-config.ser
         OpencodeTurnRunnerService,
         OpencodeWorkspaceService,
         OpencodeCredentialService,
+        CredentialCryptoService,
         // Shared services (same pattern as AiChatModule)
         AiModelService,
         AiProviderService,

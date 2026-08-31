@@ -8,6 +8,7 @@ import {
   TicketPercent,
   UserCircle,
   UserStar,
+  Brain,
   Wallet,
 } from "lucide-react";
 
@@ -20,7 +21,8 @@ export type SettingsPage =
   | "tools"
   | "subscribe"
   | "about"
-  | "personalized";
+  | "personalized"
+  | "longTermMemory";
 
 export type SettingsNavItem = {
   id: SettingsPage;
@@ -63,6 +65,7 @@ export const SETTINGS_NAV: SettingsNavGroup[] = [
     label: "settings.nav.ai.label",
     items: [
       { id: "personalized", name: "settings.nav.ai.personalized", icon: UserStar },
+      { id: "longTermMemory", name: "settings.nav.ai.longTermMemory", icon: Brain },
       { id: "tools", name: "settings.nav.ai.tools", icon: Hammer },
     ],
   },

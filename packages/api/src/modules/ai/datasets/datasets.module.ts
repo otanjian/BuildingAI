@@ -10,6 +10,9 @@ import {
     DatasetsChatRecord,
     DatasetsDocument,
     DatasetsSegments,
+    DatasetsIngestionJob,
+    DatasetsDeletionEvidence,
+    DatasetsEmbedding,
     Tag,
     User,
 } from "@buildingai/db/entities";
@@ -44,6 +47,9 @@ import { DocumentSummaryService } from "./services/document-summary.service";
 import { SegmentationService } from "./services/segmentation.service";
 import { VectorizationRunnerService } from "./services/vectorization-runner.service";
 import { VectorizationTriggerService } from "./services/vectorization-trigger.service";
+import { DatasetsIngestionService } from "./services/datasets-ingestion.service";
+import { IndexAdapter } from "./services/index-adapter";
+import { TenantModule } from "@modules/tenant/tenant.module";
 
 /**
  * 知识库模块（向量化数据集）
@@ -58,6 +64,9 @@ import { VectorizationTriggerService } from "./services/vectorization-trigger.se
             DatasetMemberApplication,
             DatasetsDocument,
             DatasetsSegments,
+            DatasetsIngestionJob,
+            DatasetsDeletionEvidence,
+            DatasetsEmbedding,
             DatasetsChatRecord,
             DatasetsChatMessage,
             Tag,
@@ -70,6 +79,7 @@ import { VectorizationTriggerService } from "./services/vectorization-trigger.se
         UploadModule,
         AiModelModule,
         forwardRef(() => UserModule),
+        TenantModule,
     ],
     controllers: [
         DatasetsConsoleController,
@@ -95,6 +105,8 @@ import { VectorizationTriggerService } from "./services/vectorization-trigger.se
         SegmentationService,
         DatasetsQueryPreprocessorService,
         VectorizationTriggerService,
+        DatasetsIngestionService,
+        IndexAdapter,
         VectorizationRunnerService,
         VectorizationProcessor,
         DatasetPermissionGuard,

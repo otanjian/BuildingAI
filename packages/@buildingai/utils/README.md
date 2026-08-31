@@ -1,6 +1,6 @@
 # @buildingai/utils
 
-BuildingAI 项目的通用工具库。
+Bowi AI 项目的通用工具库。
 
 ## HTTP 客户端
 

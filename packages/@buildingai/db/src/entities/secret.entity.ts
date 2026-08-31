@@ -1,7 +1,7 @@
 import { BooleanNumber, type BooleanNumberType } from "@buildingai/constants";
 
 import { AppEntity } from "../decorators/app-entity.decorator";
-import { Column, JoinColumn, ManyToOne, type Relation } from "../typeorm";
+import { Column, Index, JoinColumn, ManyToOne, type Relation } from "../typeorm";
 import { BaseEntity } from "./base";
 import { SecretTemplate } from "./secret-template.entity";
 
@@ -21,6 +21,7 @@ export interface KeyFieldValue {
  * 密钥配置实体
  */
 @AppEntity({ name: "secret_config", comment: "密钥配置" })
+@Index("idx_secret_config_tenant_project", ["tenantId", "projectId"])
 export class Secret extends BaseEntity {
     /**
      * 密钥名称
@@ -76,6 +77,12 @@ export class Secret extends BaseEntity {
      */
     @Column({ default: 0, comment: "排序权重，数值越大越靠前" })
     sortOrder: number;
+
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    projectId: string | null;
 
     /**
      * 关联的密钥模板

@@ -1,8 +1,12 @@
 import {
+    createOpencodeServiceToken,
+    buildOpencodeServiceHeaders,
+    consumeOpencodeServiceToken,
     DEFAULT_OPENCODE_INTERNAL_KEY,
     extractOpencodePassword,
     isMaskedOpencodeCredential,
     resolveOpencodeCredentialOverrides,
+    verifyOpencodeServiceToken,
 } from "./opencode-credential-injection";
 
 describe("OpenCode credential injection", () => {
@@ -50,5 +54,27 @@ describe("OpenCode credential injection", () => {
 
     it("keeps the local bridge key configurable", () => {
         expect(DEFAULT_OPENCODE_INTERNAL_KEY).toBeTruthy();
+    });
+
+    it("signs and verifies a short-lived audience-bound service token", () => {
+        const token = createOpencodeServiceToken("test-worker", 1_700_000_000);
+        expect(verifyOpencodeServiceToken(token, 1_700_000_030)).toMatchObject({
+            aud: "buildingai-opencode-credential",
+            sub: "test-worker",
+        });
+        expect(() => verifyOpencodeServiceToken(token, 1_700_000_061)).toThrow(/Expired/);
+    });
+
+    it("emits only a short-lived service token header", () => {
+        const headers = buildOpencodeServiceHeaders("test-worker", 1_700_000_000);
+        expect(headers).toHaveProperty("x-buildingai-opencode-token");
+        expect(headers).not.toHaveProperty("x-buildingai-opencode-key");
+        expect(verifyOpencodeServiceToken(headers["x-buildingai-opencode-token"], 1_700_000_001).sub).toBe("test-worker");
+    });
+
+    it("rejects replay of a consumed service token", () => {
+        const token = createOpencodeServiceToken("replay-worker", 1_800_000_000);
+        expect(consumeOpencodeServiceToken(token, 1_800_000_001).sub).toBe("replay-worker");
+        expect(() => consumeOpencodeServiceToken(token, 1_800_000_002)).toThrow(/replay/);
     });
 });

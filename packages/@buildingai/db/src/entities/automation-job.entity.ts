@@ -10,6 +10,7 @@ export type AutomationJobStatus = (typeof AUTOMATION_JOB_STATUSES)[number];
 @Index("idx_automation_job_due", ["status", "nextRunAt"])
 @Index("idx_automation_job_scope", ["creatorId", "channel", "conversationId", "status"])
 @Index("idx_automation_job_account", ["channelAccountId", "status"])
+@Index("idx_automation_job_tenant_project", ["tenantId", "projectId"])
 @Index("uq_automation_job_create_idempotency", ["creatorId", "createIdempotencyKey"], {
     unique: true,
     where: '"create_idempotency_key" IS NOT NULL',
@@ -51,6 +52,9 @@ export class AutomationJob extends SoftDeleteBaseEntity {
 
     @Column({ type: "varchar", length: 255, nullable: true, name: "tenant_id" })
     tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id" })
+    projectId: string | null;
 
     @Column({ type: "varchar", length: 255, name: "conversation_id" })
     conversationId: string;

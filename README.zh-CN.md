@@ -20,21 +20,21 @@
   <a href="https://nuxt.com/"><img src="https://img.shields.io/badge/NuxtJS-4.x-00b95f" alt="NuxtJS" /></a>
 </p>
 
-BuildingAI 是一款面向AI开发者、AI创业者和先进组织打造的企业级开源智能体搭建平台。通过可视化配置界面（Do
+Bowi AI 是一款面向AI开发者、AI创业者和先进组织打造的企业级开源智能体搭建平台。通过可视化配置界面（Do
 It
 Yourself）零代码搭建具备智能体、MCP、RAG管道、知识库、大模型聚合、上下文工程等原生AI能力，以及用户注册、会员订阅、算力计费等商业闭环能力的原生企业智能体应用。
 
 ## 快速入门
 
-> 安装 `BuildingAI` 之前，请确保你的设备满足一下最低配置要求：
+> 安装 `Bowi AI` 之前，请确保你的设备满足一下最低配置要求：
 >
 > - **CPU**：≥2核
 > - **内存**：≥4GB RAM
 > - **存储**：≥5GB 空闲空间
 
-使用 [Docker](https://www.docker.com/)
-部署 BuildingAI 是最简单、稳定的部署方案。安装之前，请确保你的设备已经安装了
-[Docker](https://www.docker.com/) 和 [Docker Compose](https://docs.docker.com/compose/)
+使用 [Docker](https://www.docker.com/) 部署 Bowi
+AI 是最简单、稳定的部署方案。安装之前，请确保你的设备已经安装了 [Docker](https://www.docker.com/) 和
+[Docker Compose](https://docs.docker.com/compose/)
 
 ```bash
 # 进入项目目录（替换为你的项目目录名）

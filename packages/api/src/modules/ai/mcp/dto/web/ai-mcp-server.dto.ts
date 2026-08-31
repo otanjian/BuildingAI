@@ -101,6 +101,11 @@ export class CreateWebAiMcpServerDto extends PartialType(AddUserMcpServerDto) {
     @IsOptional()
     @IsObject({ message: "请求头必须是对象" })
     headers?: Record<string, string>;
+
+    /** Enterprise credential reference. Raw headers are compatibility-only. */
+    @IsOptional()
+    @IsUUID()
+    credentialRef?: string;
 }
 
 /**

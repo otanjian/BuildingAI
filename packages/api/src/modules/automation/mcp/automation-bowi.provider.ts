@@ -11,7 +11,11 @@ import {
 } from "../../bowi-mcp/services/bowi-mcp-registry.service";
 import { Injectable } from "@nestjs/common";
 
-import type { AutomationCommandContext, AutomationDeliveryTarget, AutomationSchedule } from "../domain/automation.types";
+import type {
+    AutomationCommandContext,
+    AutomationDeliveryTarget,
+    AutomationSchedule,
+} from "../domain/automation.types";
 import { AutomationService, type UpdateAutomationInput } from "../application/automation.service";
 
 const string = (description: string, options: Record<string, unknown> = {}) => ({
@@ -56,28 +60,58 @@ export class AutomationBowiProvider implements BowiMcpProvider {
                 "Create a durable scheduled agent task for the verified channel scope. Creator, agent, target, and policy come from the principal; never invent them.",
                 {
                     name: { ...string("Task name"), minLength: 1, maxLength: 200 },
-                    prompt: { ...string("Prompt sent to the agent"), minLength: 1, maxLength: 12000 },
+                    prompt: {
+                        ...string("Prompt sent to the agent"),
+                        minLength: 1,
+                        maxLength: 12000,
+                    },
                     schedule,
-                    idempotencyKey: { ...string("Stable create idempotency key"), minLength: 1, maxLength: 128 },
+                    idempotencyKey: {
+                        ...string("Stable create idempotency key"),
+                        minLength: 1,
+                        maxLength: 128,
+                    },
                     deleteAfterRun: { type: "boolean", default: false },
-                    missedRunPolicy: { type: "string", enum: ["fire_once", "skip", "catch_up"], default: "fire_once" },
-                    overlapPolicy: { type: "string", enum: ["skip", "queue_one", "allow"], default: "skip" },
+                    missedRunPolicy: {
+                        type: "string",
+                        enum: ["fire_once", "skip", "catch_up"],
+                        default: "fire_once",
+                    },
+                    overlapPolicy: {
+                        type: "string",
+                        enum: ["skip", "queue_one", "allow"],
+                        default: "skip",
+                    },
                     timeoutSeconds: { type: "integer", minimum: 1, maximum: 86400, default: 900 },
                 },
                 ["name", "prompt", "schedule", "idempotencyKey"],
                 (args, principal) => this.create(args, principal),
-                { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+                {
+                    readOnlyHint: false,
+                    destructiveHint: false,
+                    idempotentHint: true,
+                    openWorldHint: false,
+                },
             ),
             this.tool(
                 "automation_search",
                 "List durable automations visible to the verified creator. When a channel scope is present, limit results to that conversation.",
                 {
                     keyword: string("Optional name or prompt filter", { maxLength: 100 }),
-                    status: { type: "string", enum: ["active", "paused", "cancelled", "completed", "failed", "all"], default: "all" },
+                    status: {
+                        type: "string",
+                        enum: ["active", "paused", "cancelled", "completed", "failed", "all"],
+                        default: "all",
+                    },
                 },
                 [],
                 (args, principal) => this.search(args, principal),
-                { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+                {
+                    readOnlyHint: true,
+                    destructiveHint: false,
+                    idempotentHint: true,
+                    openWorldHint: false,
+                },
             ),
             this.tool(
                 "automation_get",
@@ -85,7 +119,12 @@ export class AutomationBowiProvider implements BowiMcpProvider {
                 { taskId: string("Task id", { minLength: 1 }) },
                 ["taskId"],
                 (args, principal) => this.get(args, principal),
-                { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+                {
+                    readOnlyHint: true,
+                    destructiveHint: false,
+                    idempotentHint: true,
+                    openWorldHint: false,
+                },
             ),
             this.tool(
                 "automation_update",
@@ -95,11 +134,22 @@ export class AutomationBowiProvider implements BowiMcpProvider {
                     name: { ...string("New task name"), minLength: 1, maxLength: 200 },
                     prompt: { ...string("New agent prompt"), minLength: 1, maxLength: 12000 },
                     schedule,
-                    expectedUpdatedAt: string("Latest task updatedAt for optimistic concurrency", { format: "date-time" }),
+                    deleteAfterRun: { type: "boolean" },
+                    missedRunPolicy: { type: "string", enum: ["fire_once", "skip", "catch_up"] },
+                    overlapPolicy: { type: "string", enum: ["skip", "queue_one", "allow"] },
+                    timeoutSeconds: { type: "integer", minimum: 1, maximum: 86400 },
+                    expectedUpdatedAt: string("Latest task updatedAt for optimistic concurrency", {
+                        format: "date-time",
+                    }),
                 },
                 ["taskId"],
                 (args, principal) => this.update(args, principal),
-                { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+                {
+                    readOnlyHint: false,
+                    destructiveHint: false,
+                    idempotentHint: false,
+                    openWorldHint: false,
+                },
             ),
             ...(["pause", "resume"] as const).map((operation) =>
                 this.tool(
@@ -107,11 +157,19 @@ export class AutomationBowiProvider implements BowiMcpProvider {
                     `${operation === "pause" ? "Pause" : "Resume"} a creator-owned durable automation.`,
                     {
                         taskId: string("Task id", { minLength: 1 }),
-                        expectedUpdatedAt: string("Latest task updatedAt for optimistic concurrency", { format: "date-time" }),
+                        expectedUpdatedAt: string(
+                            "Latest task updatedAt for optimistic concurrency",
+                            { format: "date-time" },
+                        ),
                     },
                     ["taskId"],
                     (args, principal) => this.transition(operation, args, principal),
-                    { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+                    {
+                        readOnlyHint: false,
+                        destructiveHint: false,
+                        idempotentHint: true,
+                        openWorldHint: false,
+                    },
                 ),
             ),
             this.tool(
@@ -119,29 +177,46 @@ export class AutomationBowiProvider implements BowiMcpProvider {
                 "Queue one auditable manual run without changing the task's recurring next occurrence.",
                 {
                     taskId: string("Task id", { minLength: 1 }),
-                    idempotencyKey: { ...string("Stable manual-run idempotency key"), minLength: 1, maxLength: 128 },
+                    idempotencyKey: {
+                        ...string("Stable manual-run idempotency key"),
+                        minLength: 1,
+                        maxLength: 128,
+                    },
                 },
                 ["taskId", "idempotencyKey"],
                 (args, principal) => this.run(args, principal),
-                { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+                {
+                    readOnlyHint: false,
+                    destructiveHint: false,
+                    idempotentHint: true,
+                    openWorldHint: false,
+                },
             ),
             this.tool(
                 "automation_delete",
                 "Cancel a creator-owned task while retaining run and delivery audit history.",
                 {
                     taskId: string("Task id", { minLength: 1 }),
-                    expectedUpdatedAt: string("Latest task updatedAt for optimistic concurrency", { format: "date-time" }),
+                    expectedUpdatedAt: string("Latest task updatedAt for optimistic concurrency", {
+                        format: "date-time",
+                    }),
                 },
                 ["taskId"],
                 (args, principal) => this.transition("cancel", args, principal),
-                { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+                {
+                    readOnlyHint: false,
+                    destructiveHint: true,
+                    idempotentHint: true,
+                    openWorldHint: false,
+                },
             ),
         ];
         this.ajv.addFormat("date-time", {
             type: "string",
             validate: (value: string) => value.includes("T") && Number.isFinite(Date.parse(value)),
         });
-        for (const tool of this.tools) this.validators.set(tool.name, this.ajv.compile(tool.inputSchema));
+        for (const tool of this.tools)
+            this.validators.set(tool.name, this.ajv.compile(tool.inputSchema));
     }
 
     async executeForChannel(
@@ -229,10 +304,16 @@ export class AutomationBowiProvider implements BowiMcpProvider {
     private context(principal: BowiPrincipal, requireScope = false): AutomationCommandContext {
         const scope = principal.automationScope;
         if (!principal.subjectUserId) {
-            throw new BowiToolExecutionError("AUTOMATION_SUBJECT_REQUIRED", "A verified personal principal is required");
+            throw new BowiToolExecutionError(
+                "AUTOMATION_SUBJECT_REQUIRED",
+                "A verified personal principal is required",
+            );
         }
         if (requireScope && !scope) {
-            throw new BowiToolExecutionError("AUTOMATION_SCOPE_REQUIRED", "A signed channel scope is required for this automation operation");
+            throw new BowiToolExecutionError(
+                "AUTOMATION_SCOPE_REQUIRED",
+                "A signed channel scope is required for this automation operation",
+            );
         }
         if (!scope) {
             return {
@@ -241,7 +322,8 @@ export class AutomationBowiProvider implements BowiMcpProvider {
                 channel: "",
                 accountId: "",
                 conversationId: "",
-                eventId: principal.callId || `bowi:${principal.sessionId || principal.subjectUserId}`,
+                eventId:
+                    principal.callId || `bowi:${principal.sessionId || principal.subjectUserId}`,
             };
         }
         return {
@@ -257,7 +339,10 @@ export class AutomationBowiProvider implements BowiMcpProvider {
 
     private creatorId(principal: BowiPrincipal): string {
         if (!principal.subjectUserId) {
-            throw new BowiToolExecutionError("AUTOMATION_SUBJECT_REQUIRED", "A verified personal principal is required");
+            throw new BowiToolExecutionError(
+                "AUTOMATION_SUBJECT_REQUIRED",
+                "A verified personal principal is required",
+            );
         }
         return principal.subjectUserId;
     }
@@ -287,7 +372,8 @@ export class AutomationBowiProvider implements BowiMcpProvider {
         const keyword = typeof args.keyword === "string" ? args.keyword.trim().toLowerCase() : "";
         const status = typeof args.status === "string" ? args.status : "all";
         return jobs.filter((job) => {
-            const matchesKeyword = !keyword || `${job.name} ${job.prompt}`.toLowerCase().includes(keyword);
+            const matchesKeyword =
+                !keyword || `${job.name} ${job.prompt}`.toLowerCase().includes(keyword);
             return matchesKeyword && (status === "all" || job.status === status);
         });
     }
@@ -304,8 +390,27 @@ export class AutomationBowiProvider implements BowiMcpProvider {
         const input: UpdateAutomationInput = {
             ...(args.name !== undefined ? { name: String(args.name) } : {}),
             ...(args.prompt !== undefined ? { prompt: String(args.prompt) } : {}),
-            ...(args.schedule !== undefined ? { schedule: args.schedule as AutomationSchedule } : {}),
-            ...(args.expectedUpdatedAt !== undefined ? { expectedUpdatedAt: String(args.expectedUpdatedAt) } : {}),
+            ...(args.schedule !== undefined
+                ? { schedule: args.schedule as AutomationSchedule }
+                : {}),
+            ...(args.deleteAfterRun !== undefined
+                ? { deleteAfterRun: Boolean(args.deleteAfterRun) }
+                : {}),
+            ...(args.missedRunPolicy !== undefined
+                ? {
+                      missedRunPolicy:
+                          args.missedRunPolicy as UpdateAutomationInput["missedRunPolicy"],
+                  }
+                : {}),
+            ...(args.overlapPolicy !== undefined
+                ? { overlapPolicy: args.overlapPolicy as UpdateAutomationInput["overlapPolicy"] }
+                : {}),
+            ...(args.timeoutSeconds !== undefined
+                ? { timeoutSeconds: Number(args.timeoutSeconds) }
+                : {}),
+            ...(args.expectedUpdatedAt !== undefined
+                ? { expectedUpdatedAt: String(args.expectedUpdatedAt) }
+                : {}),
         };
         return principal.automationScope
             ? this.automationService.update(this.context(principal), id, input)
@@ -318,10 +423,21 @@ export class AutomationBowiProvider implements BowiMcpProvider {
         principal: BowiPrincipal,
     ) {
         const id = String(args.taskId);
-        const expected = args.expectedUpdatedAt === undefined ? undefined : String(args.expectedUpdatedAt);
+        const expected =
+            args.expectedUpdatedAt === undefined ? undefined : String(args.expectedUpdatedAt);
         const result = principal.automationScope
-            ? await this.automationService.transitionForScope(this.context(principal), id, operation, expected)
-            : await this.automationService.transitionForCreator(this.creatorId(principal), id, operation, expected);
+            ? await this.automationService.transitionForScope(
+                  this.context(principal),
+                  id,
+                  operation,
+                  expected,
+              )
+            : await this.automationService.transitionForCreator(
+                  this.creatorId(principal),
+                  id,
+                  operation,
+                  expected,
+              );
         return result;
     }
 
@@ -338,6 +454,7 @@ export class AutomationBowiProvider implements BowiMcpProvider {
         return {
             id: job.id,
             name: job.name,
+            prompt: job.prompt,
             updatedAt: job.updatedAt,
             agentId: job.agentId,
             scheduleKind: job.scheduleKind,
@@ -347,6 +464,10 @@ export class AutomationBowiProvider implements BowiMcpProvider {
             status: job.status,
             nextRunAt: job.nextRunAt,
             lastRunAt: job.lastRunAt,
+            deleteAfterRun: job.deleteAfterRun,
+            missedRunPolicy: job.missedRunPolicy,
+            overlapPolicy: job.overlapPolicy,
+            timeoutSeconds: job.timeoutSeconds,
         };
     }
 }

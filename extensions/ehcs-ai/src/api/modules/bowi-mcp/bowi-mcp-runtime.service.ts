@@ -18,7 +18,7 @@ type JsonRpcError = {
 };
 
 const SERVER_INSTRUCTIONS =
-    "Unified BuildingAI enterprise MCP. Every tool call MUST include appId. SQL and check runs are scoped to that app's schema only.";
+    "Unified Bowi AI enterprise MCP. Every tool call MUST include appId. SQL and check runs are scoped to that app's schema only.";
 
 @Injectable()
 export class BowiMcpRuntimeService {

@@ -138,6 +138,12 @@ export class HttpClient {
 
         mergedConfig.headers = mergedConfig.headers ?? {};
         (mergedConfig.headers as Record<string, string>)["x-request-id"] = requestId;
+        if (typeof window !== "undefined") {
+            const selectedTenant = window.localStorage.getItem("buildingai.active-tenant-id");
+            const selectedProject = window.localStorage.getItem("buildingai.active-project-id");
+            if (selectedTenant) (mergedConfig.headers as Record<string, string>)["x-tenant-id"] = selectedTenant;
+            if (selectedProject) (mergedConfig.headers as Record<string, string>)["x-project-id"] = selectedProject;
+        }
 
         try {
             const res = await this.axios.request(mergedConfig);

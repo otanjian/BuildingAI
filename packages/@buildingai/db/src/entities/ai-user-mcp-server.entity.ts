@@ -11,6 +11,9 @@ import { User } from "./user.entity";
  */
 @AppEntity({ name: "ai_user_mcp_server", comment: "用户&MCP" })
 export class AiUserMcpServer extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 用户ID
      */

@@ -23,4 +23,8 @@ export interface LoginUserPlayground {
 export interface UserPlayground extends LoginUserPlayground {
     permissions: string[];
     role: Role | null;
+    tenantId?: string;
+    projectId?: string;
+    tenantRoleCode?: string;
+    tenantPolicyVersion?: number;
 }

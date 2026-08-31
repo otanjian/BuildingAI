@@ -1,7 +1,8 @@
 const clientDevPort = Number(process.env.CLIENT_DEV_PORT || 4091);
 const buildingaiApiUrl = process.env.BUILDINGAI_API_URL || "http://127.0.0.1:4090";
 const buildingaiOpencodeInternalKey =
-  process.env.BUILDINGAI_OPENCODE_INTERNAL_KEY || "buildingai-local-opencode";
+  process.env.BUILDINGAI_OPENCODE_INTERNAL_KEY ||
+  (process.env.NODE_ENV === "production" ? "" : "buildingai-local-opencode");
 
 module.exports = {
   apps: [

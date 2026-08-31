@@ -7,7 +7,7 @@ export type OpencodeSessionMessage = {
 
 /**
  * Build a temporary assistant preview from the latest unfinished OpenCode
- * session message. Replaced by the persisted BuildingAI message once the
+ * session message. Replaced by the persisted Bowi AI message once the
  * detached turn finishes.
  */
 export function buildOpencodeLivePreview(

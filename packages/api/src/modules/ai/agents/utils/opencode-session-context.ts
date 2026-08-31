@@ -45,13 +45,13 @@ export function buildOpencodeSessionContext(input: SessionContextInput): string 
     if (!userId && !username && params.length === 0) return undefined;
 
     const lines = [
-        "## BuildingAI session context",
-        "The following context was provided by the authenticated BuildingAI session. Use it when relevant; do not expose masked values.",
+        "## Bowi AI session context",
+        "The following context was provided by the authenticated Bowi AI session. Use it when relevant; do not expose masked values.",
     ];
     if (userId) lines.push(`- login user id: ${userId}`);
     if (username) lines.push(`- login username: ${username}`);
     if (params.length > 0) {
-        lines.push("## BuildingAI personal parameters");
+        lines.push("## Bowi AI personal parameters");
         for (const [rawKey, value] of params) {
             const key = rawKey.trim();
             lines.push(`- ${key}: ${sanitizeOpencodePersonalParamValue(key, value)}`);

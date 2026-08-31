@@ -3,6 +3,8 @@ export * from "./agent-chat-record";
 export * from "./agent-config";
 export * from "./agent-decorate";
 export * from "./agent-message";
+export * from "./agent-memory";
+export * from "./agent-version";
 export * from "./agents";
 export * from "./ai-provider";
 export * from "./apps-decorate";

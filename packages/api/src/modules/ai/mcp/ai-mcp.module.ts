@@ -1,5 +1,6 @@
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { AiMcpServer, AiMcpTool, AiUserMcpServer, Dict } from "@buildingai/db/entities";
+import { SecretModule } from "@buildingai/core/modules";
 import { Module } from "@nestjs/common";
 
 import { AiMcpServerConsoleController } from "./controllers/console/ai-mcp-server.controller";
@@ -13,7 +14,7 @@ import { UserMcpServerWebService } from "./services/web/user-mcp-server.service"
  * AI对话记录后台管理模块
  */
 @Module({
-    imports: [TypeOrmModule.forFeature([Dict, AiMcpServer, AiMcpTool, AiUserMcpServer])],
+    imports: [SecretModule, TypeOrmModule.forFeature([Dict, AiMcpServer, AiMcpTool, AiUserMcpServer])],
     controllers: [AiMcpServerConsoleController, WebAiMcpServerWebController],
     providers: [
         AiMcpServerService,

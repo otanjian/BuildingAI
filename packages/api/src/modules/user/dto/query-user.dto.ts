@@ -1,6 +1,6 @@
 import { PaginationDto } from "@buildingai/dto/pagination.dto";
 import { Transform } from "class-transformer";
-import { IsNumber, IsOptional, IsString } from "class-validator";
+import { IsNumber, IsOptional, IsString, IsUUID } from "class-validator";
 
 /**
  * 查询用户DTO
@@ -44,6 +44,11 @@ export class QueryUserDto extends PaginationDto {
     @IsOptional()
     @IsString({ message: "创建结束时间必须是字符串" })
     endTime?: string;
+
+    /** 平台管理员可按租户筛选用户。 */
+    @IsOptional()
+    @IsUUID()
+    tenantId?: string;
 
     // 分页参数已由 PaginationDto 提供
 }

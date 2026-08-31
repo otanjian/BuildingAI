@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { resolveOpencodeEmbedColorScheme } from "./opencode-embed-theme";
 
 describe("resolveOpencodeEmbedColorScheme", () => {
-  it("preserves an explicitly selected BuildingAI theme", () => {
+  it("preserves an explicitly selected Bowi AI theme", () => {
     expect(resolveOpencodeEmbedColorScheme("dark", false)).toBe("dark");
     expect(resolveOpencodeEmbedColorScheme("light", true)).toBe("light");
   });

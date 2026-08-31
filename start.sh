@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BuildingAI local dev orchestrator: API :4090, web :4091, OpenCode :4096,
+# Bowi AI local dev orchestrator: API :4090, web :4091, OpenCode :4096,
 # SAP ADT MCP :8100, SAP PyRFC MCP :8200, optional Docker infra
 set -euo pipefail
 
@@ -70,7 +70,7 @@ Commands:
 
 Targets (optional, for start/restart/stop):
   all           Dev + OpenCode + SAP MCPs + infra when enabled (default)
-  dev           BuildingAI API + web + OpenCode (pnpm dev:core — no extension Vite)
+  dev           Bowi AI API + web + OpenCode (pnpm dev:core — no extension Vite)
   opencode      OpenCode serve only (:4096)
   sap           SAP ABAP ADT MCP only (:8100)
   sap-pyrfc     SAP PyRFC MCP only (:8200)
@@ -101,7 +101,8 @@ Environment (root .env or shell):
   OPENCODE_WORKSPACE_DIR                OpenCode source workspace (default: ../opencode)
   OPENCODE_RUNTIME_ATTESTATION          Optional attestation path (default: <binary>.buildingai-attestation)
   BUILDINGAI_API_URL                    Internal API base used by OpenCode credential injection (default: API :4090)
-  BUILDINGAI_OPENCODE_INTERNAL_KEY      Private API/OpenCode bridge key (override in shared deployments)
+  BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY Key for audience-bound 60-second OpenCode service tokens
+  BUILDINGAI_OPENCODE_INTERNAL_KEY      Development-only compatibility key (never accepted in production)
   BOWI_MCP_INVOCATION_SECRET            HMAC secret for short-lived first-party Bowi assertions (falls back to JWT_SECRET)
   MCP_PORT=8100                         SAP ADT MCP HTTP port
   SAP_PYRFC_MCP_PORT=8200               SAP PyRFC MCP HTTP port
@@ -151,7 +152,7 @@ load_root_env() {
   local env_file="${ROOT_DIR}/.env"
   local key value
   if [[ -f "$env_file" ]]; then
-    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA START_DORIS DORIS_WORKSPACE_DIR DORIS_COMPOSE_FILE DORIS_MCP_SCRIPT DORIS_PYTHON DORIS_WEB_PORT DORIS_FE_PORT DORIS_BE_PORT DORIS_MCP_PORT OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR OPENCODE_RUNTIME_ATTESTATION BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
+    for key in START_OPENCODE START_SAP_MCP START_SAP_PYRFC_MCP START_DOCKER_INFRA START_DORIS DORIS_WORKSPACE_DIR DORIS_COMPOSE_FILE DORIS_MCP_SCRIPT DORIS_PYTHON DORIS_WEB_PORT DORIS_FE_PORT DORIS_BE_PORT DORIS_MCP_PORT OPENCODE_PORT OPENCODE_BIN OPENCODE_WORKSPACE_DIR OPENCODE_RUNTIME_ATTESTATION BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY BUILDINGAI_CREDENTIAL_KMS_KEY BUILDINGAI_TOKEN_HASH_KEY BOWI_MCP_INVOCATION_SECRET BOWI_MCP_OPENCODE_CAPABILITIES BOWI_SAP_ADT_MCP_URL BOWI_SAP_PYRFC_MCP_URL BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED BOWI_SAP_SERVICE_PROFILE_ENABLED BOWI_SAP_MCP_TIMEOUT_MS BOWI_SAP_CONNECTION_IDLE_TTL_MS SAP_RFC_ALLOWLIST CLIENT_DEV_PORT MCP_PORT MCP_HOST MCP_PATH SAP_PYRFC_MCP_PORT SERVER_PORT APP_DOMAIN DB_HOST DB_PORT REDIS_HOST REDIS_PORT; do
       if value="$(read_env_var "$key" "$env_file")"; then
         export "${key}=${value}"
       fi
@@ -181,8 +182,13 @@ load_root_env() {
   REDIS_HOST="${REDIS_HOST:-localhost}"
   REDIS_PORT="${REDIS_PORT:-6379}"
   BUILDINGAI_API_URL="${BUILDINGAI_API_URL:-$(api_url)}"
-  BUILDINGAI_OPENCODE_INTERNAL_KEY="${BUILDINGAI_OPENCODE_INTERNAL_KEY:-buildingai-local-opencode}"
-  export BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY
+  BUILDINGAI_OPENCODE_INTERNAL_KEY="${BUILDINGAI_OPENCODE_INTERNAL_KEY:-}"
+  BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY="${BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY:-}"
+  if [[ "${NODE_ENV:-development}" == "production" && -z "${BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY}" ]]; then
+    echo "BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY must be set in production" >&2
+    return 1
+  fi
+  export BUILDINGAI_API_URL BUILDINGAI_OPENCODE_INTERNAL_KEY BUILDINGAI_OPENCODE_SERVICE_TOKEN_KEY
   refresh_dev_ports
 }
 
@@ -371,7 +377,7 @@ opencode_binary_contains_contract() {
 opencode_write_runtime_attestation() {
   local bin="$1" attestation binary_sha source_sha
   if ! opencode_binary_contains_contract "$bin"; then
-    echo "OpenCode build is missing the embedded BuildingAI Web UI contract: ${OPENCODE_WEB_UI_CONTRACT}" >&2
+    echo "OpenCode build is missing the embedded Bowi AI Web UI contract: ${OPENCODE_WEB_UI_CONTRACT}" >&2
     return 1
   fi
 
@@ -395,7 +401,7 @@ opencode_binary_integrity_valid() {
   fi
 
   if ! opencode_binary_contains_contract "$bin"; then
-    echo "OpenCode binary is missing the embedded BuildingAI Web UI contract." >&2
+    echo "OpenCode binary is missing the embedded Bowi AI Web UI contract." >&2
     return 1
   fi
 
@@ -1326,7 +1332,7 @@ start_opencode() {
       reported_version="$(opencode_reported_version || true)"
       if ! opencode_version_is_master "$reported_version"; then
         echo "Error: OpenCode started with non-master version: ${reported_version:-unknown}." >&2
-        echo "  BuildingAI requires a master-channel runtime on port ${OPENCODE_PORT}." >&2
+        echo "  Bowi AI requires a master-channel runtime on port ${OPENCODE_PORT}." >&2
         return 1
       fi
     fi
@@ -1467,7 +1473,7 @@ EOF
 print_info() {
   cat <<EOF
 
-BuildingAI dev server
+Bowi AI dev server
   Web:  http://127.0.0.1:${CLIENT_DEV_PORT}/
   API:  $(api_url)/
   Install wizard (first run): $(api_url)/install
@@ -1605,6 +1611,7 @@ start_dev() {
     echo "  Dev stack: already healthy (PM2 API + web)."
     return 0
   fi
+  cleanup_stale_dev_listeners
   ensure_ports_available "$force" "${DEV_PORTS[@]}"
   kill_cursor_listeners "${CLIENT_DEV_PORT:-4091}"
   check_deps
@@ -1638,6 +1645,30 @@ dev_pm2_stack_healthy() {
   api_ready && web_proxy_ready
 }
 
+cleanup_stale_dev_listeners() {
+  local port pid command probe
+  for port in "${DEV_PORTS[@]}"; do
+    if [[ "$port" == "${SERVER_PORT}" ]]; then
+      probe=api_ready
+    else
+      probe=web_proxy_ready
+    fi
+    "$probe" && continue
+    while IFS= read -r pid; do
+      [[ "$pid" =~ ^[1-9][0-9]*$ ]] || continue
+      command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+      # Clean up only known BuildingAI dev commands left outside PM2 (for
+      # example, a previous foreground run). Unrelated listeners remain
+      # protected by ensure_ports_available and its normal force/prompt flow.
+      if [[ "$command" == *"${ROOT_DIR}/packages/api/dist/main"* ]] \
+        || [[ "$command" == *"${ROOT_DIR}/packages/client"*vite* ]]; then
+        echo "Cleaning stale BuildingAI dev process ${pid} on port ${port}..."
+        kill "$pid" 2>/dev/null || true
+      fi
+    done < <(port_pids "$port")
+  done
+}
+
 stop_dev() {
   stop_pid_file "dev"
   stop_pid_file "dev-web"
@@ -1660,7 +1691,7 @@ cmd_status() {
   load_root_env
   ensure_run_dir
 
-  echo "=== BuildingAI local stack ==="
+  echo "=== Bowi AI local stack ==="
   refresh_dev_ports
   for port in "${DEV_PORTS[@]}"; do
     if port_in_use "$port"; then

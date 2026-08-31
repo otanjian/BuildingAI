@@ -33,6 +33,9 @@ export type PersonalTodoStatus = (typeof PERSONAL_TODO_STATUSES)[number];
     )`,
 )
 export class PersonalTodo extends SoftDeleteBaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     @Column({ type: "text", nullable: false, comment: "Todo title" })
     title: string;
 

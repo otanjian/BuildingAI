@@ -55,7 +55,7 @@ export class PersonalTodoBowiProvider implements BowiMcpProvider {
             ),
             this.tool(
                 "todo_search_assignees",
-                "Search active BuildingAI users eligible to be assigned a todo.",
+                "Search active Bowi AI users eligible to be assigned a todo.",
                 {
                     keyword: string("Name or username search"),
                     limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },

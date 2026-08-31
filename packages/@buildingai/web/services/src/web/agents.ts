@@ -1,6 +1,7 @@
 import { useAuthStore } from "@buildingai/stores";
 import type {
     Agent,
+    AgentDelegationConfig,
     AgentDashboardResult,
     CreateAgentParams,
     ListAgentsResult,
@@ -21,6 +22,7 @@ import { listTags, type Tag } from "./tag";
 
 export type {
     Agent,
+    AgentDelegationConfig,
     AgentCore,
     AgentDashboardResult,
     CreateAgentParams,
@@ -143,16 +145,20 @@ export type UpdatePublishConfigParams = {
     regenerateApiKey?: boolean;
 };
 
+export type PublishConfigMutationResult = Agent & {
+    publishLinkToken?: string;
+};
+
 export async function updatePublishConfig(
     agentId: string,
     params: UpdatePublishConfigParams,
-): Promise<Agent> {
-    return apiHttpClient.patch<Agent>(`/ai-agents/${agentId}/publish/config`, params);
+): Promise<PublishConfigMutationResult> {
+    return apiHttpClient.patch<PublishConfigMutationResult>(`/ai-agents/${agentId}/publish/config`, params);
 }
 
 export function useUpdatePublishConfigMutation(
     agentId: string,
-): UseMutationResult<Agent, unknown, UpdatePublishConfigParams, unknown> {
+): UseMutationResult<PublishConfigMutationResult, unknown, UpdatePublishConfigParams, unknown> {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (payload) => updatePublishConfig(agentId, payload),

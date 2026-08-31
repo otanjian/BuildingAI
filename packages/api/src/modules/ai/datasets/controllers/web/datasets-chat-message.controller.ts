@@ -57,6 +57,8 @@ export class DatasetsChatMessageWebController extends BaseController {
                 parentId: isRegenerate ? undefined : dto.parentId,
                 regenerateParentId: isRegenerate ? dto.parentId : undefined,
                 feature: dto.feature,
+                tenantId: playground.tenantId,
+                projectId: playground.projectId,
             },
             res,
         );

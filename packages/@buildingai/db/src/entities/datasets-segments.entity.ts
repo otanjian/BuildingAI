@@ -1,5 +1,5 @@
 import { AppEntity } from "../decorators/app-entity.decorator";
-import { Column, JoinColumn, ManyToOne, type Relation } from "../typeorm";
+import { Column, Index, JoinColumn, ManyToOne, type Relation } from "../typeorm";
 import { BaseEntity } from "./base";
 import { Datasets } from "./datasets.entity";
 import { DatasetsDocument } from "./datasets-document.entity";
@@ -9,6 +9,8 @@ import { DatasetsDocument } from "./datasets-document.entity";
  * 用于存储文档分段后的内容和向量信息
  */
 @AppEntity({ name: "datasets_segments", comment: "知识库分段" })
+@Index("idx_dataset_segments_retrieval_scope", ["tenantId", "projectId", "datasetId", "status", "enabled"])
+@Index("idx_dataset_segments_index_version", ["datasetId", "indexVersion", "indexStatus"])
 export class DatasetsSegments extends BaseEntity {
     /**
      * 关联的文档ID
@@ -21,6 +23,39 @@ export class DatasetsSegments extends BaseEntity {
      */
     @Column({ type: "uuid", comment: "关联的知识库ID", name: "dataset_id" })
     datasetId: string;
+
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    projectId: string | null;
+
+    @Column({ type: "varchar", length: 64, nullable: true, default: "internal", comment: "数据分类" })
+    classification: string | null;
+
+    @Column({ type: "jsonb", nullable: true, name: "acl_policy", comment: "分段 ACL 快照" })
+    aclPolicy: { allowUserIds?: string[]; denyUserIds?: string[] } | null;
+
+    @Column({ type: "integer", default: 1, name: "source_version", comment: "来源版本" })
+    sourceVersion: number;
+
+    @Column({ type: "varchar", length: 64, nullable: true, name: "parser_version", comment: "解析器版本" })
+    parserVersion: string | null;
+
+    @Column({ type: "varchar", length: 64, nullable: true, name: "chunking_version", comment: "切分版本" })
+    chunkingVersion: string | null;
+
+    @Column({ type: "varchar", length: 128, nullable: true, comment: "分段校验和" })
+    checksum: string | null;
+
+    @Column({ type: "varchar", length: 100, nullable: true, name: "index_version", comment: "索引版本" })
+    indexVersion: string | null;
+
+    @Column({ type: "varchar", length: 32, default: "pending", name: "index_status", comment: "索引状态" })
+    indexStatus: "pending" | "active" | "tombstoned" | "failed";
+
+    @Column({ type: "timestamptz", nullable: true, name: "tombstoned_at", comment: "向量墓碑时间" })
+    tombstonedAt: Date | null;
 
     /**
      * 文本内容

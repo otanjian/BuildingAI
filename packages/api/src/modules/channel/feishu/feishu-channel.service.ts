@@ -22,6 +22,10 @@ import type { DeliveryReceipt } from "../../automation/domain/automation.types";
 import type { FeishuAutomationCommandHandler } from "../../automation/application/automation-command.handler";
 import { AutomationIntentParser } from "../../automation/application/automation-intent.parser";
 import { createBowiInvocationAssertion } from "../../bowi-mcp/utils/bowi-invocation-assertion";
+import {
+    PublishedAgentChatClient,
+    resolvePublishedAgentApiOrigin,
+} from "../shared/published-agent-chat.client";
 
 import type { UpdateFeishuChannelDto } from "./dto/update-feishu-channel.dto";
 import type {
@@ -36,7 +40,6 @@ import {
     extractFeishuText,
     maskSecret,
     normalizeAgentAccessToken,
-    parseAgentStreamEvent,
     parseStoredFeishuConfig,
     normalizeFeishuAppId,
     normalizeFeishuConnectionName,
@@ -58,6 +61,7 @@ const EVENT_TTL_SECONDS = 10 * 60;
 const CONVERSATION_TTL_SECONDS = 60 * 60 * 24 * 30;
 const LEASE_TTL_SECONDS = 30;
 const LEASE_RENEW_INTERVAL_MS = 10_000;
+const FEISHU_CREDENTIAL_TEST_TIMEOUT_MS = 10_000;
 
 type ActiveConnection = {
     client: Lark.WSClient;
@@ -72,27 +76,6 @@ type ConnectionRecord = FeishuChannelConnection & {
 const STREAM_UPDATE_INTERVAL_MS = 100;
 const STREAM_ELEMENT_ID = "stream_md";
 const FEISHU_IDENTITY_CACHE_TTL_MS = 10 * 60 * 1000;
-
-function resolveAgentApiDomain(): string {
-    const explicitApiDomain = process.env.BUILDINGAI_API_URL?.trim();
-    if (explicitApiDomain) return explicitApiDomain.replace(/\/$/, "");
-
-    const configured = process.env.VITE_PRODUCTION_APP_BASE_URL?.trim();
-    if (configured) {
-        const url = new URL(configured);
-        if (url.hostname === "mac.bosofts.com") url.hostname = "api.mac.bosofts.com";
-        return url.toString().replace(/\/$/, "");
-    }
-
-    const appDomain = process.env.APP_DOMAIN?.trim();
-    if (!appDomain) throw new Error("APP_DOMAIN is not configured");
-    const url = new URL(appDomain);
-    // APP_DOMAIN normally points at the web origin. In the local/proxy setup,
-    // the API is exposed on the api subdomain; use it unless explicitly
-    // overridden by BUILDINGAI_API_URL.
-    if (url.hostname === "mac.bosofts.com") url.hostname = "api.mac.bosofts.com";
-    return url.toString().replace(/\/$/, "");
-}
 
 function splitFeishuText(content: string, maxLength: number): string[] {
     const normalized = content.trim() || "Agent returned an empty response.";
@@ -207,6 +190,7 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         { expiresAt: number; identity?: FeishuResolvedIdentity }
     >();
     private automationCommandHandler?: FeishuAutomationCommandHandler;
+    private readonly publishedAgentChatClient = new PublishedAgentChatClient();
 
     constructor(
         private readonly dictService: DictService,
@@ -220,6 +204,7 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         @Optional()
         @InjectRepository(User)
         private readonly userRepository?: Repository<User>,
+        @Optional() @Inject("CREDENTIAL_RUNTIME_RESOLVER") private readonly credentialResolver?: { resolve(id: string, scope: { tenantId: string; projectId?: string | null; environment?: string; resource?: string; action?: string }): Promise<string> },
     ) {}
 
     registerAutomationCommandHandler(handler: FeishuAutomationCommandHandler): void {
@@ -249,7 +234,7 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
               )[0]
             : undefined;
         const config = record
-            ? this.toRuntimeConfig(record as ConnectionRecord)
+            ? await this.toRuntimeConfig(record as ConnectionRecord)
             : await this.readConfig(agentId);
         if (!config?.enabled)
             return {
@@ -329,23 +314,17 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         if (this.connectionRepository) {
             await this.migrateLegacyConnections();
             const records = await this.connectionRepository.find({ relations: ["agent"] });
-            configs = records
+            const configPromises = records
                 .filter(
                     (record) =>
                         record.enabled &&
                         (record.migrationStatus === "active" ||
                             record.migrationStatus === "legacy"),
                 )
-                .filter((record) =>
-                    Boolean(
-                        record.agentId &&
-                        record.appId &&
-                        record.appSecretEncrypted &&
-                        record.agentAccessTokenEncrypted,
-                    ),
-                )
+                .filter((record) => Boolean(record.agentId && record.appId && (record.credentialRef || (record.appSecretEncrypted && record.agentAccessTokenEncrypted))))
                 .filter((record) => record.agent?.createMode === "direct")
                 .map((record) => this.toRuntimeConfig(record as ConnectionRecord));
+            configs = await Promise.all(configPromises);
             if (records.length === 0) configs = await this.loadConfigs();
         } else {
             configs = await this.loadConfigs();
@@ -622,7 +601,7 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         }
         if (existing.enabled) {
             await this.stopConnection(connectionId);
-            await this.startConnection(this.toRuntimeConfig(existing));
+            await this.startConnection(await this.toRuntimeConfig(existing));
         }
         return this.toConnectionStatus({ ...existing, agent } as ConnectionRecord);
     }
@@ -635,15 +614,27 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
                 ...dto,
                 agentId: existing.agentId || undefined,
                 appId: dto.appId?.trim() || existing.appId,
-                appSecret: dto.appSecret?.trim() || this.decryptSecret(existing.appSecretEncrypted),
+                appSecret: dto.appSecret?.trim() || (existing.credentialRef
+                    ? (await this.resolveCredentialBundle(existing)).appSecret
+                    : this.decryptSecret(existing.appSecretEncrypted!)),
                 agentAccessToken:
                     dto.agentAccessToken?.trim() ||
-                    (existing.agentAccessTokenEncrypted
-                        ? this.decryptSecret(existing.agentAccessTokenEncrypted)
-                        : ""),
+                    (existing.credentialRef
+                        ? (await this.resolveCredentialBundle(existing)).agentAccessToken
+                        : (existing.agentAccessTokenEncrypted
+                            ? this.decryptSecret(existing.agentAccessTokenEncrypted)
+                            : "")),
             };
         }
-        return this.test({ ...values, agentId: values.agentId || "" });
+        const agent = await this.agentRepository.findOne({ where: { id: values.agentId } });
+        if (!agent) throw HttpErrorFactory.notFound("Agent not found");
+        this.assertSupportedAgent(agent);
+        return this.testResolvedCredentials({
+            agentId: values.agentId || "",
+            appId: values.appId,
+            appSecret: values.appSecret,
+            agentAccessToken: values.agentAccessToken,
+        });
     }
 
     async toggleConnection(connectionId: string, enabled: boolean): Promise<FeishuChannelStatus> {
@@ -660,7 +651,7 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         this.assertSupportedAgent(agent);
         existing.enabled = enabled;
         await this.connectionRepository.save(existing);
-        if (enabled) await this.startConnection(this.toRuntimeConfig(existing));
+        if (enabled) await this.startConnection(await this.toRuntimeConfig(existing));
         else await this.stopConnection(connectionId);
         return this.toConnectionStatus({ ...existing, agent } as ConnectionRecord);
     }
@@ -683,6 +674,25 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         existing?: ConnectionRecord,
     ): Partial<FeishuChannelConnection> {
         const appId = normalizeFeishuAppId(dto.appId || existing?.appId || "");
+        const credentialRef = dto.credentialRef ?? existing?.credentialRef;
+        if (credentialRef) {
+            if (!appId) throw HttpErrorFactory.badRequest("Feishu app ID is required");
+            const name = dto.name?.trim() || existing?.name || `Feishu connection · ${maskSecret(appId)}`;
+            return {
+                name,
+                normalizedName: normalizeFeishuConnectionName(name),
+                agentId: dto.agentId || existing?.agentId,
+                appId,
+                normalizedAppId: appId,
+                appSecretEncrypted: null,
+                agentAccessTokenEncrypted: null,
+                credentialRef,
+                enabled,
+                onlyMentioned: dto.onlyMentioned ?? existing?.onlyMentioned ?? true,
+                migrationStatus: existing?.migrationStatus || "active",
+                legacySourceKey: existing?.legacySourceKey || null,
+            };
+        }
         const appSecret =
             dto.appSecret?.trim() ||
             (existing ? this.decryptSecret(existing.appSecretEncrypted) : "");
@@ -708,6 +718,7 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
             agentAccessTokenEncrypted: agentAccessToken
                 ? encryptFeishuCredential(agentAccessToken)
                 : null,
+            credentialRef: null,
             enabled,
             onlyMentioned: dto.onlyMentioned ?? existing?.onlyMentioned ?? true,
             migrationStatus: existing?.migrationStatus || "active",
@@ -715,29 +726,45 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         };
     }
 
-    private toRuntimeConfig(record: ConnectionRecord): FeishuChannelConfig {
-        if (
-            !record.agentId ||
-            !record.appId ||
-            !record.appSecretEncrypted ||
-            !record.agentAccessTokenEncrypted
-        ) {
+    private async toRuntimeConfig(record: ConnectionRecord): Promise<FeishuChannelConfig> {
+        if (!record.agentId || !record.appId || (!record.credentialRef && (!record.appSecretEncrypted || !record.agentAccessTokenEncrypted))) {
             throw HttpErrorFactory.badRequest("Feishu connection credentials are incomplete");
         }
+        const managed = record.credentialRef ? await this.resolveCredentialBundle(record) : undefined;
         return {
             connectionId: record.id,
             name: record.name || undefined,
             agentId: record.agentId,
             appId: record.appId,
-            appSecret: this.decryptSecret(record.appSecretEncrypted),
-            agentAccessToken: record.agentAccessTokenEncrypted
-                ? this.decryptSecret(record.agentAccessTokenEncrypted)
-                : "",
+            appSecret: managed?.appSecret || (record.appSecretEncrypted ? this.decryptSecret(record.appSecretEncrypted) : ""),
+            agentAccessToken: managed?.agentAccessToken || (record.agentAccessTokenEncrypted ? this.decryptSecret(record.agentAccessTokenEncrypted) : ""),
             enabled: record.enabled,
             onlyMentioned: record.onlyMentioned,
             migrationStatus: record.migrationStatus,
             legacySourceKey: record.legacySourceKey,
         };
+    }
+
+    private async resolveCredentialBundle(record: ConnectionRecord): Promise<{ appSecret: string; agentAccessToken: string }> {
+        if (!this.credentialResolver || !record.credentialRef || !record.agentId) {
+            throw HttpErrorFactory.badRequest("Feishu credential reference is unavailable");
+        }
+        const agent = await this.agentRepository.findOne({ where: { id: record.agentId } });
+        if (!agent?.tenantId) throw HttpErrorFactory.badRequest("Feishu connection tenant is unavailable");
+        const value = await this.credentialResolver.resolve(record.credentialRef, {
+            tenantId: agent.tenantId,
+            projectId: agent.projectId,
+            environment: "production",
+            resource: "channel",
+            action: "connect",
+        });
+        try {
+            const bundle = JSON.parse(value) as Partial<{ appSecret: string; agentAccessToken: string }>;
+            if (!bundle.appSecret || !bundle.agentAccessToken) throw new Error("incomplete");
+            return { appSecret: bundle.appSecret, agentAccessToken: bundle.agentAccessToken };
+        } catch {
+            throw HttpErrorFactory.badRequest("Feishu credential reference must contain channel credentials");
+        }
     }
 
     private toConnectionStatus(record: ConnectionRecord): FeishuChannelStatus {
@@ -964,27 +991,63 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         const appId = dto.appId?.trim() || existing?.appId;
         const appSecret = dto.appSecret?.trim() || existing?.appSecret;
         const agentAccessToken = dto.agentAccessToken?.trim() || existing?.agentAccessToken || "";
+        return this.testResolvedCredentials({
+            agentId: dto.agentId,
+            appId,
+            appSecret,
+            agentAccessToken,
+        });
+    }
+
+    private async testResolvedCredentials(
+        dto: Pick<UpdateFeishuChannelDto, "agentId" | "appId" | "appSecret" | "agentAccessToken">,
+    ): Promise<{ success: true }> {
         try {
             validateFeishuConfig({
                 agentId: dto.agentId,
-                appId: appId || "",
-                appSecret: appSecret || "",
-                agentAccessToken,
+                appId: dto.appId?.trim() || "",
+                appSecret: dto.appSecret?.trim() || "",
+                agentAccessToken: dto.agentAccessToken?.trim() || "",
                 enabled: false,
                 onlyMentioned: true,
             });
         } catch (error) {
             throw HttpErrorFactory.badRequest((error as Error).message);
         }
-        const response = await fetch(
-            "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
-            {
-                method: "POST",
-                headers: { "content-type": "application/json; charset=utf-8" },
-                body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
-            },
-        );
-        const body = (await response.json()) as { code?: number; msg?: string };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), FEISHU_CREDENTIAL_TEST_TIMEOUT_MS);
+        let response: Response;
+        try {
+            response = await fetch(
+                "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+                {
+                    method: "POST",
+                    headers: { "content-type": "application/json; charset=utf-8" },
+                    body: JSON.stringify({
+                        app_id: dto.appId?.trim(),
+                        app_secret: dto.appSecret?.trim(),
+                    }),
+                    signal: controller.signal,
+                },
+            );
+        } catch (error) {
+            clearTimeout(timeout);
+            if (controller.signal.aborted || (error as { name?: string })?.name === "AbortError") {
+                throw HttpErrorFactory.badRequest("Feishu credential test timed out");
+            }
+            throw HttpErrorFactory.badRequest("Feishu credential test failed: network request failed");
+        }
+        let body: { code?: number; msg?: string };
+        try {
+            body = (await response.json()) as { code?: number; msg?: string };
+        } catch (error) {
+            if (controller.signal.aborted || (error as { name?: string })?.name === "AbortError") {
+                throw HttpErrorFactory.badRequest("Feishu credential test timed out");
+            }
+            throw HttpErrorFactory.badRequest("Feishu credential test failed: invalid response");
+        } finally {
+            clearTimeout(timeout);
+        }
         if (!response.ok || body.code !== 0) {
             throw HttpErrorFactory.badRequest(
                 `Feishu credential test failed: ${body.msg || response.statusText}`,
@@ -1223,30 +1286,30 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         if (this.deletedConnections.has(runtimeId)) return;
         const eventKey = `feishu:event:${runtimeId}:${eventId}`;
         if (!(await this.claimEvent(eventKey))) return;
-        const agent = await this.agentRepository.findOne({ where: { id: config.agentId } });
-        if (!agent || agent.createMode !== "direct") {
-            await this.sendTextReply(
-                apiClient,
-                message.message_id,
-                "此智能体类型暂不支持飞书通道，请选择标准智能体。",
-            ).catch(() => undefined);
-            return;
-        }
-        const resolvedIdentity = await this.resolveFeishuIdentity(apiClient, event);
-        if (this.automationCommandHandler) {
-            const handled = resolvedIdentity
-                ? await this.automationCommandHandler.handle(
-                      config,
-                      event,
-                      text,
-                      eventId,
-                      resolvedIdentity,
-                  )
-                : await this.automationCommandHandler.handle(config, event, text, eventId);
-            if (handled) return;
-        }
         let streamingReply: StreamingReply | undefined;
         try {
+            const agent = await this.agentRepository.findOne({ where: { id: config.agentId } });
+            if (!agent || agent.createMode !== "direct") {
+                await this.sendTextReply(
+                    apiClient,
+                    message.message_id,
+                    "此智能体类型暂不支持飞书通道，请选择标准智能体。",
+                );
+                return;
+            }
+            const resolvedIdentity = await this.resolveFeishuIdentity(apiClient, event);
+            if (this.automationCommandHandler) {
+                const handled = resolvedIdentity
+                    ? await this.automationCommandHandler.handle(
+                          config,
+                          event,
+                          text,
+                          eventId,
+                          resolvedIdentity,
+                      )
+                    : await this.automationCommandHandler.handle(config, event, text, eventId);
+                if (handled) return;
+            }
             const conversationKey = `feishu:conversation:${runtimeId}:${message.chat_id}`;
             const previousConversationId = await this.redisService.get<string>(conversationKey);
             try {
@@ -1314,9 +1377,13 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
                     .catch(() => false);
                 if (finished) return;
             }
-            await this.sendTextReply(apiClient, message.message_id, "处理失败，请稍后重试。").catch(
-                () => undefined,
-            );
+            try {
+                await this.sendTextReply(apiClient, message.message_id, "处理失败，请稍后重试。");
+            } catch {
+                // Keep the claim only after a reply has actually been delivered. A transient
+                // upstream or Feishu API failure must not permanently discard a redelivered event.
+                await this.redisService.del(eventKey).catch(() => undefined);
+            }
         }
     }
 
@@ -1485,77 +1552,18 @@ export class FeishuChannelService implements OnModuleInit, OnApplicationBootstra
         onText: (content: string) => void,
         identity?: FeishuResolvedIdentity,
     ): Promise<{ answer: string; conversationId?: string }> {
-        const domain = resolveAgentApiDomain();
         const identityAssertion = this.buildFeishuIdentityAssertion(config, chatId, identity);
-        const response = await fetch(`${domain}/v1/chat-messages`, {
-            method: "POST",
-            headers: {
-                authorization: `Bearer ${config.agentAccessToken}`,
-                "content-type": "application/json",
-                "x-anonymous-identifier": buildFeishuAnonymousIdentifier(
-                    this.runtimeKey(config),
-                    chatId,
-                ),
-                ...(identityAssertion ? { "x-buildingai-feishu-identity": identityAssertion } : {}),
-            },
-            body: JSON.stringify({
-                message: {
-                    role: "user",
-                    parts: [{ type: "text", text: message }],
-                },
-                responseMode: "streaming",
-                ...(conversationId ? { conversationId } : {}),
-            }),
+        return this.publishedAgentChatClient.stream({
+            apiOrigin: resolvePublishedAgentApiOrigin(),
+            agentAccessToken: config.agentAccessToken,
+            anonymousIdentifier: buildFeishuAnonymousIdentifier(this.runtimeKey(config), chatId),
+            message,
+            conversationId,
+            onText,
+            additionalHeaders: identityAssertion
+                ? { "x-buildingai-feishu-identity": identityAssertion }
+                : undefined,
         });
-        if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            let messageText = "";
-            try {
-                const parsed = JSON.parse(body) as { message?: string; error?: string };
-                messageText = parsed.message || parsed.error || "";
-            } catch {
-                // The status text below is sufficient for non-JSON upstream errors.
-            }
-            throw new Error(
-                messageText ||
-                    `Agent request returned an empty response (${response.status} ${response.statusText || "Unknown status"})`,
-            );
-        }
-
-        let answer = "";
-        let nextConversationId: string | undefined;
-        const processLine = (line: string): void => {
-            const event = parseAgentStreamEvent(line);
-            if (!event) return;
-            if (event.type === "text-delta" && typeof event.delta === "string") {
-                answer += event.delta;
-                onText(answer);
-            }
-            if (event.type === "data-conversation-id" && typeof event.data === "string") {
-                nextConversationId = event.data;
-            }
-        };
-
-        if (response.body?.getReader) {
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
-            while (true) {
-                const chunk = await reader.read();
-                if (chunk.done) break;
-                buffer += decoder.decode(chunk.value, { stream: true });
-                const lines = buffer.split(/\r?\n/);
-                buffer = lines.pop() || "";
-                lines.forEach(processLine);
-            }
-            buffer += decoder.decode();
-            if (buffer) processLine(buffer);
-        } else {
-            const body = await response.text();
-            body.split(/\r?\n/).forEach(processLine);
-        }
-
-        return { answer, conversationId: nextConversationId };
     }
 
     private buildFeishuIdentityAssertion(

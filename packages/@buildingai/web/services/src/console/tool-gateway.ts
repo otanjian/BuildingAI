@@ -1,0 +1,25 @@
+import type { MutationOptionsUtil, QueryOptionsUtil } from "@buildingai/web-types";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { consoleHttpClient } from "../base";
+
+export type ToolGatewayTool = { id: string; name: string; version: string; description?: string | null; risk: string; capabilities: string[]; status: string; approvalMode: string; idempotencyRequired?: boolean; policyVersion?: number; networkPolicy?: Record<string, unknown> };
+export type ToolExecution = { id: string; toolName: string; outcome: string; denialReason?: string | null; redactedInput: Record<string, unknown>; redactedOutput: Record<string, unknown>; createdAt: string; idempotencyKey?: string | null };
+export type ToolGatewayMetrics = { generatedAt: string; sampleSize: number; byOutcome: Record<string, number>; blockedEgress: number; toolFailures: number; approvalBacklog: number; oldestPendingApprovalAt?: string | null; emergencyDisabled: boolean };
+const listTools = () => consoleHttpClient.get<ToolGatewayTool[]>("tool-gateway");
+const listApprovals = () => consoleHttpClient.get<any[]>("tool-gateway/approvals");
+const listExecutions = () => consoleHttpClient.get<ToolExecution[]>("tool-gateway/executions");
+const getMetrics = () => consoleHttpClient.get<ToolGatewayMetrics>("tool-gateway/metrics");
+const execute = (data: { tool: string; input: Record<string, unknown>; idempotencyKey?: string; approvalId?: string }) => consoleHttpClient.post<any>("tool-gateway/execute", data);
+const requestApproval = (data: { tool: string; input: Record<string, unknown> }) => consoleHttpClient.post<any>("tool-gateway/approvals", data);
+const decideApproval = ({ id, status }: { id: string; status: "approved" | "rejected" }) => consoleHttpClient.post<any>(`tool-gateway/approvals/${id}/decision`, { status });
+const toggle = ({ id, disabled }: { id: string; disabled: boolean }) => consoleHttpClient.patch<ToolGatewayTool>(`tool-gateway/${id}/disable`, { disabled });
+const emergency = (disabled: boolean) => consoleHttpClient.post<any>("tool-gateway/emergency", { disabled });
+export const useToolGatewayQuery = (options?: QueryOptionsUtil<ToolGatewayTool[]>) => useQuery({ queryKey: ["tool-gateway"], queryFn: listTools, ...options });
+export const useToolGatewayApprovalsQuery = (options?: QueryOptionsUtil<any[]>) => useQuery({ queryKey: ["tool-gateway", "approvals"], queryFn: listApprovals, ...options });
+export const useToolGatewayExecutionsQuery = (options?: QueryOptionsUtil<ToolExecution[]>) => useQuery({ queryKey: ["tool-gateway", "executions"], queryFn: listExecutions, ...options });
+export const useToolGatewayMetricsQuery = (options?: QueryOptionsUtil<ToolGatewayMetrics>) => useQuery({ queryKey: ["tool-gateway", "metrics"], queryFn: getMetrics, ...options });
+export const useExecuteToolMutation = (options?: MutationOptionsUtil<any, Parameters<typeof execute>[0]>) => useMutation({ mutationFn: execute, ...options });
+export const useRequestToolApprovalMutation = (options?: MutationOptionsUtil<any, Parameters<typeof requestApproval>[0]>) => useMutation({ mutationFn: requestApproval, ...options });
+export const useDecideToolApprovalMutation = (options?: MutationOptionsUtil<any, Parameters<typeof decideApproval>[0]>) => useMutation({ mutationFn: decideApproval, ...options });
+export const useToggleToolMutation = (options?: MutationOptionsUtil<ToolGatewayTool, Parameters<typeof toggle>[0]>) => useMutation({ mutationFn: toggle, ...options });
+export const useEmergencyToolGatewayMutation = (options?: MutationOptionsUtil<any, boolean>) => useMutation({ mutationFn: emergency, ...options });

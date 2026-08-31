@@ -2,7 +2,7 @@
     "name": "@buildingai/api",
     "version": "0.0.0",
     "description": "",
-    "author": "BuildingAI Teams",
+    "author": "Bowi AI Teams",
     "private": true,
     "license": "UNLICENSED",
     "main": "dist/main.js",
@@ -63,6 +63,7 @@
         "@types/fs-extra": "^11.0.4",
         "@types/js-yaml": "^4.0.9",
         "@types/pdf-parse": "^1.1.5",
+        "@wecom/aibot-node-sdk": "1.0.7",
         "adm-zip": "catalog:api",
         "ajv": "^8.17.1",
         "bcryptjs": "^3.0.2",
@@ -122,9 +123,12 @@
     "overrides": {
         "ms": "2.1.0"
     },
-    "jest": {
-        "moduleNameMapper": {
-            "^@buildingai/utils/sensitive-word-config$": "<rootDir>/../../@buildingai/utils/src/sensitive-word-config.ts"
+  "jest": {
+    "moduleNameMapper": {
+      "^@buildingai/utils/sensitive-word-config$": "<rootDir>/../../@buildingai/utils/src/sensitive-word-config.ts",
+      "^@common/(.*)$": "<rootDir>/common/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^callsites$": "<rootDir>/test/callsites-mock.ts"
         },
         "moduleFileExtensions": [
             "js",

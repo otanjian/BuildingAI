@@ -33,7 +33,7 @@ mcp = FastMCP(
     host=_HOST,
     port=_PORT,
     streamable_http_path=_PATH,
-    # One process shares the ConnectionRegistry across BuildingAI chat turns.
+    # One process shares the ConnectionRegistry across Bowi AI chat turns.
     stateless_http=False,
     json_response=True,
 )

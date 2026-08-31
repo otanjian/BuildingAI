@@ -7,6 +7,10 @@ export class UpdateFeishuChannelDto {
 
     @IsUUID("4")
     @IsOptional()
+    credentialRef?: string;
+
+    @IsUUID("4")
+    @IsOptional()
     agentId?: string;
 
     @IsString()

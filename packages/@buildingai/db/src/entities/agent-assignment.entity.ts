@@ -13,6 +13,9 @@ import { User } from "./user.entity";
 @AppEntity({ name: "ai_agent_assignments", comment: "智能体分配管理" })
 @Index(["agentId", "userId"], { unique: true })
 export class AgentAssignment extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 智能体ID
      */

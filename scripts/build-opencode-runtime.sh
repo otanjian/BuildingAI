@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and attest the BuildingAI-managed OpenCode runtime with its Web UI embedded.
+# Build and attest the Bowi AI-managed OpenCode runtime with its Web UI embedded.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

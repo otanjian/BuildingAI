@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, useState } from "react";
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useDebounceValue } from "usehooks-ts";
 
@@ -81,7 +82,7 @@ const STATUS_OPTIONS: { value: QueryConsoleAgentsDto["status"]; label: string }[
   { value: "rejected", label: "审核失败" },
   { value: "none", label: "私有" },
   { value: "approved", label: "审核通过" },
-  { value: "published", label: "已公开" },
+  { value: "published", label: "可用" },
   { value: "unpublished", label: "已下架" },
 ];
 
@@ -89,7 +90,7 @@ const statusLabelMap: Record<string, string> = {
   pending: "待审核",
   rejected: "审核失败",
   none: "私有",
-  published: "已公开",
+  published: "可用",
   unpublished: "已下架",
 };
 
@@ -298,7 +299,7 @@ const AgentIndexPage = () => {
           </div>
           <div className="bg-card rounded-lg border p-4 text-center">
             <div className="text-2xl font-bold">{data?.extend?.published ?? 0}</div>
-            <div className="text-muted-foreground text-xs">已公开</div>
+            <div className="text-muted-foreground text-xs">可用</div>
           </div>
           <div className="bg-card rounded-lg border p-4 text-center">
             <div className="text-2xl font-bold">{data?.extend?.private ?? 0}</div>
@@ -387,7 +388,12 @@ const AgentIndexPage = () => {
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">
-                          <div className="truncate font-medium">{row.name}</div>
+                          <Link
+                            to={`/agents/${row.id}/configuration`}
+                            className="truncate font-medium hover:underline"
+                          >
+                            {row.name}
+                          </Link>
                         </div>
                       </div>
                     </TableCell>

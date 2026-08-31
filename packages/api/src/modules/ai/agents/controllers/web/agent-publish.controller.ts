@@ -14,7 +14,7 @@ import { Body, Get, Param, Patch } from "@nestjs/common";
 import { UpdatePublishConfigDto } from "../../dto/web/publish/update-publish-config.dto";
 import { AgentBillingHandler } from "../../handlers/agent-billing";
 import { AgentChatRecordService } from "../../services/agent-chat-record.service";
-import { AgentsService } from "../../services/agents.service";
+import { AgentsService, type PublishConfigMutationResult } from "../../services/agents.service";
 import {
     deriveUploadTypesFromModelFeatures,
     type UploadMediaType,
@@ -41,7 +41,7 @@ export class AgentPublishWebController {
         @Param("id") agentId: string,
         @Playground() playground: UserPlayground,
         @Body() dto: UpdatePublishConfigDto,
-    ) {
+    ): Promise<PublishConfigMutationResult> {
         return this.agentsService.updatePublishConfig(playground, agentId, dto);
     }
 

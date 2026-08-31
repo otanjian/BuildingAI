@@ -4,7 +4,7 @@ schema: spec-driven
 context: |
   ## Project
 
-  BuildingAI monorepo — AI platform with NestJS API, React client, pnpm workspace, and runtime extensions under `extensions/`.
+  Bowi AI monorepo — AI platform with NestJS API, React client, pnpm workspace, and runtime extensions under `extensions/`.
 
   ## Tech stack
 

@@ -9,6 +9,9 @@ import { BaseEntity } from "./base";
 @AppEntity({ name: "ai_chat_message", comment: "AI对话消息记录" })
 @Index(["conversationId", "createdAt"])
 export class AiChatMessage extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     @Column({
         type: "uuid",
         comment: "所属对话ID",

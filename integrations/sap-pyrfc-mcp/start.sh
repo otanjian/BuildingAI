@@ -93,7 +93,7 @@ echo "  runtime: ${SAP_PYRFC_EXECUTION_MODE:-native} $(sap_pyrfc_runtime_arch), 
 echo "  URL:    http://${MCP_HOST}:${MCP_PORT}${MCP_PATH}"
 echo "  limits: MAX_CONNECTIONS=${MAX_CONNECTIONS} IDLE_TTL_MS=${IDLE_TTL_MS}"
 echo "  flow:   sap_connect → connection_id → call_rfc/read_table/…"
-echo "Register in BuildingAI: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
+echo "Register in Bowi AI: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
 
 if [[ "$(sap_pyrfc_platform)" == Darwin && "$(sap_pyrfc_runtime_arch)" == x86_64 ]]; then
   exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \

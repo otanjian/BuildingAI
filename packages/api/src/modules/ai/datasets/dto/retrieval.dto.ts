@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsArray, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class RetrieveDto {
     @IsString({ message: "query 必须是字符串" })
@@ -18,4 +18,9 @@ export class RetrieveDto {
     @Min(0)
     @Max(1)
     scoreThreshold?: number;
+
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    classifications?: string[];
 }

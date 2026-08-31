@@ -1,4 +1,5 @@
-import { useAuthStore } from "@buildingai/stores";
+import { useTenantsQuery } from "@buildingai/services/console";
+import { useAuthStore, useTenantContextStore } from "@buildingai/stores";
 import { ReloadWindow } from "@buildingai/ui/components/reload-windows";
 import {
   Breadcrumb,
@@ -14,8 +15,11 @@ import { SidebarTrigger, useSidebar } from "@buildingai/ui/components/ui/sidebar
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import type { MenuItem } from "@buildingai/web-types";
 import { RotateCcw } from "lucide-react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
+
+import { clearTenantScopedQueryCache, resolveTenantSelection } from "@/utils/tenant-context";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface BreadcrumbTrailItem {
   name: string;
@@ -56,6 +60,29 @@ const AppNavbar = () => {
   const { state } = useSidebar();
   const location = useLocation();
   const { userInfo } = useAuthStore((state) => state.auth);
+  const queryClient = useQueryClient();
+  const tenantsQuery = useTenantsQuery();
+  const tenants = tenantsQuery.data ?? [];
+  const activeTenantId = useTenantContextStore((state) => state.tenantContext.activeTenantId);
+  const defaultTenantId = useTenantContextStore((state) => state.tenantContext.defaultTenantId);
+  const { setActiveTenantId } = useTenantContextStore((state) => state.tenantContextActions);
+
+  const selectedTenantId = useMemo(
+    () => resolveTenantSelection(tenants, activeTenantId, defaultTenantId),
+    [activeTenantId, defaultTenantId, tenants],
+  );
+
+  useEffect(() => {
+    if (selectedTenantId && selectedTenantId !== activeTenantId) {
+      setActiveTenantId(selectedTenantId);
+    }
+  }, [activeTenantId, selectedTenantId, setActiveTenantId]);
+
+  const handleTenantChange = (tenantId: string) => {
+    if (!tenants.some((tenant) => tenant.id === tenantId && tenant.status === "active")) return;
+    clearTenantScopedQueryCache(queryClient);
+    setActiveTenantId(tenantId);
+  };
 
   const breadcrumbItems = useMemo<BreadcrumbTrailItem[]>(() => {
     if (!userInfo?.menus) return [];
@@ -93,6 +120,24 @@ const AppNavbar = () => {
         </Tooltip>
 
         <Separator orientation="vertical" className="mx-0.5 data-vertical:h-3.5" />
+        {tenants.length > 0 && (
+          <label className="text-muted-foreground flex items-center gap-2 text-xs">
+            <span className="hidden sm:inline">租户</span>
+            <select
+              aria-label="当前租户"
+              className="border-input bg-background text-foreground h-8 max-w-52 rounded-md border px-2 text-sm"
+              value={selectedTenantId ?? ""}
+              onChange={(event) => handleTenantChange(event.target.value)}
+              disabled={tenantsQuery.isLoading}
+            >
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id} disabled={tenant.status !== "active"}>
+                  {tenant.name} ({tenant.code})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <Breadcrumb>
           <BreadcrumbList>
             {breadcrumbItems.map((item, index) => {

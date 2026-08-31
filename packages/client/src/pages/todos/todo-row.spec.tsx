@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest";
-
 import type { PersonalTodo } from "@buildingai/services/web";
 import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
 
 import { TodoRow } from "./todo-row";
 
@@ -44,5 +43,31 @@ describe("TodoRow", () => {
     );
     expect(html).toContain("完成：");
     expect(html).toContain("100%");
+  });
+
+  it("shows an accessible overdue warning only for unfinished past-due records", () => {
+    const overdueHtml = renderToStaticMarkup(
+      <TodoRow todo={{ ...baseTodo, plannedCompletionDate: "2000-01-01" }} />,
+    );
+    expect(overdueHtml).toContain("已逾期");
+    expect(overdueHtml).toContain('aria-label="已逾期"');
+
+    const completedHtml = renderToStaticMarkup(
+      <TodoRow
+        todo={{
+          ...baseTodo,
+          status: "completed",
+          progress: 100,
+          plannedCompletionDate: "2000-01-01",
+          completedAt: "2026-08-22T08:00:00.000Z",
+        }}
+      />,
+    );
+    expect(completedHtml).not.toContain("已逾期");
+
+    const undatedHtml = renderToStaticMarkup(
+      <TodoRow todo={{ ...baseTodo, plannedCompletionDate: null }} />,
+    );
+    expect(undatedHtml).not.toContain("已逾期");
   });
 });

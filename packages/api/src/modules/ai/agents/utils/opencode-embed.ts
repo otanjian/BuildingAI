@@ -55,7 +55,7 @@ export function buildBuildingAIReportBase(
     conversationId: string,
 ): string {
     const origin = normalizeHttpOrigin(webOrigin);
-    if (!origin) throw new Error("BuildingAI web origin must use http or https");
+    if (!origin) throw new Error("Bowi AI web origin must use http or https");
     return `${origin}/agents/${encodeURIComponent(agentId)}/c/${encodeURIComponent(conversationId)}/reports/`;
 }
 

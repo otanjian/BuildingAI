@@ -4,12 +4,37 @@ import {
   canChangeTodoLifecycle,
   canEditTodo,
   isTodoConflict,
+  isTodoOverdue,
   validateTodoForm,
 } from "./todo-policy";
 
 const todo = { creatorId: "creator", assigneeId: "assignee" };
 
 describe("todo form and action policy", () => {
+  it("derives overdue state from an in-progress planned date and calendar-day boundary", () => {
+    expect(
+      isTodoOverdue({ status: "in_progress", plannedCompletionDate: "2026-08-28" }, "2026-08-29"),
+    ).toBe(true);
+    expect(
+      isTodoOverdue({ status: "in_progress", plannedCompletionDate: "2026-08-29" }, "2026-08-29"),
+    ).toBe(false);
+    expect(
+      isTodoOverdue({ status: "in_progress", plannedCompletionDate: "2026-08-30" }, "2026-08-29"),
+    ).toBe(false);
+  });
+
+  it("does not mark completed, undated, or invalid records overdue", () => {
+    expect(
+      isTodoOverdue({ status: "completed", plannedCompletionDate: "2026-08-28" }, "2026-08-29"),
+    ).toBe(false);
+    expect(
+      isTodoOverdue({ status: "in_progress", plannedCompletionDate: null }, "2026-08-29"),
+    ).toBe(false);
+    expect(
+      isTodoOverdue({ status: "in_progress", plannedCompletionDate: "2026-02-30" }, "2026-03-01"),
+    ).toBe(false);
+  });
+
   it("keeps definition and deletion controls creator-only", () => {
     expect(canEditTodo(todo, "creator")).toBe(true);
     expect(canEditTodo(todo, "assignee")).toBe(false);

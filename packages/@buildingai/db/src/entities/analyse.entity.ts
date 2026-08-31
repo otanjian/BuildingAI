@@ -25,6 +25,14 @@ export enum AnalyseActionType {
  */
 @AppEntity({ name: "analyse", comment: "行为分析统计" })
 export class Analyse extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    @Index()
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    @Index()
+    projectId: string | null;
+
     /**
      * 用户ID（可为空，支持匿名访问）
      */

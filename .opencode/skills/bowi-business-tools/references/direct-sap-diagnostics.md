@@ -49,7 +49,7 @@ sap-pyrfc_sap_disconnect({ connection_id })
 ```
 
 - Call `sap-pyrfc_healthcheck` without a connection ID only to inspect SDK/backend readiness.
-- In a BuildingAI-managed session, omit `password` or pass `[masked]` so the credential bridge can inject it. Never ask the user to paste a password into chat.
+- In a Bowi AI-managed session, omit `password` or pass `[masked]` so the credential bridge can inject it. Never ask the user to paste a password into chat.
 - Inspect `connected`, `ping_error`, and error fields returned by `sap_connect`; a returned `connection_id` does not by itself prove that the live ping succeeded.
 - Reuse one `connection_id` for the diagnostic conversation. Do not reconnect for every operation, share it between users, print it, persist it, or pass it to Bowi.
 - Direct schemas differ from Bowi: `parameters_json` is a JSON string, `fields` is a comma-separated string, and names such as `table_name` and `function_name` use upstream snake_case.

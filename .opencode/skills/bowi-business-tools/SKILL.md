@@ -1,6 +1,6 @@
 ---
 name: bowi-business-tools
-description: Use BuildingAI personal Todo and SAP business tools through Bowi MCP. Also use for explicitly requested administrator diagnostics of the direct sap-abap or sap-pyrfc MCP servers.
+description: Use Bowi AI personal Todo and SAP business tools through Bowi MCP. Also use for explicitly requested administrator diagnostics of the direct sap-abap or sap-pyrfc MCP servers.
 ---
 
 # Bowi Business Tools
@@ -20,7 +20,7 @@ Use only tools exposed in the current catalog; capability filtering is intention
 
 ## Personal Todo through Bowi
 
-- The verified BuildingAI subject is the actor. Never ask for or pass `userId`, `creatorId`, or another identity field.
+- The verified Bowi AI subject is the actor. Never ask for or pass `userId`, `creatorId`, or another identity field.
 - Search with `bowi_todo_search`. Visibility is already limited to items created by or assigned to the current user.
 - Before `bowi_todo_update`, `bowi_todo_set_progress`, or `bowi_todo_delete`, search for the item and pass its current `id` and `updatedAt` as `todoId` and `expectedUpdatedAt`.
 - Use `bowi_todo_search_assignees` to resolve an assignee; do not invent an `assigneeId`.

@@ -42,6 +42,59 @@ export class MemoryConfigDto {
     maxAgentMemories?: number;
 }
 
+export class AgentDelegationConfigDto {
+    @IsOptional()
+    @IsBoolean()
+    enabled?: boolean;
+
+    @IsOptional()
+    @IsArray()
+    @IsUUID("4", { each: true })
+    allowedAgentIds?: string[];
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(3)
+    maxCallsPerTurn?: number;
+
+    @IsOptional()
+    @IsInt()
+    @Min(1000)
+    @Max(60000)
+    timeoutMs?: number;
+}
+
+export class ToolConfigDto {
+    @IsOptional()
+    @IsBoolean()
+    requireApproval?: boolean;
+
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    @Max(120000)
+    toolTimeout?: number;
+
+    /** Existing Direct-agent tool-loop settings retained for backward compatibility. */
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    @Max(120000)
+    streamIdleTimeoutMs?: number;
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(100000)
+    maxResultChars?: number;
+
+    @IsOptional()
+    @ValidateNested()
+    @Type(() => AgentDelegationConfigDto)
+    agentDelegation?: AgentDelegationConfigDto;
+}
+
 export class UpdateAgentDto {
     @IsOptional()
     @IsString()
@@ -154,6 +207,8 @@ export class UpdateAgentDto {
 
     @IsOptional()
     @IsObject()
+    @ValidateNested()
+    @Type(() => ToolConfigDto)
     toolConfig?: ToolConfig;
 
     @IsOptional()

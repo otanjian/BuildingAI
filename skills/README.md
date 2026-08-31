@@ -238,7 +238,7 @@ performance patterns, and advanced features.
 
 ### project-architecture
 
-**Purpose**: BuildingAI monorepo project structure and architecture guide.
+**Purpose**: Bowi AI monorepo project structure and architecture guide.
 
 **Use Cases**:
 

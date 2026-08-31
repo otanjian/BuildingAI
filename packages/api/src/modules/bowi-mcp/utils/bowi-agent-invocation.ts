@@ -15,6 +15,7 @@ export function buildBowiMcpHeaders(input: {
     invocation?: {
         userId: string;
         agentId: string;
+        tenantId?: string;
         agentName: string;
         conversationId?: string;
         authSource: RequestAuthSource;
@@ -27,6 +28,7 @@ export function buildBowiMcpHeaders(input: {
         "x-buildingai-bowi-invocation": createBowiInvocationAssertion({
             userId: input.invocation.userId,
             agentId: input.invocation.agentId,
+            tenantId: input.invocation.tenantId,
             conversationId: input.invocation.conversationId,
             authSource: input.invocation.authSource,
             capabilities: [

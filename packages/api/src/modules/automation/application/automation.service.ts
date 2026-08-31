@@ -41,6 +41,10 @@ export interface UpdateAutomationInput {
     name?: string;
     prompt?: string;
     schedule?: AutomationSchedule;
+    deleteAfterRun?: boolean;
+    missedRunPolicy?: "fire_once" | "skip" | "catch_up";
+    overlapPolicy?: "skip" | "queue_one" | "allow";
+    timeoutSeconds?: number;
     expectedUpdatedAt?: string;
 }
 
@@ -311,10 +315,7 @@ export class AutomationService {
         return run;
     }
 
-    async findInScope(
-        context: AutomationScopeContext,
-        id: string,
-    ): Promise<AutomationJob> {
+    async findInScope(context: AutomationScopeContext, id: string): Promise<AutomationJob> {
         const account = await this.findScopeAccount(context);
         if (!account) throw HttpErrorFactory.notFound("Task not found");
         this.assertAccountTenant(account, context.tenantId);
@@ -332,12 +333,18 @@ export class AutomationService {
         return job;
     }
 
-    async findForCreator(creatorId: string, id: string): Promise<AutomationJob> {
+    async findForCreator(
+        creatorId: string,
+        id: string,
+        options: { withDeleted?: boolean } = {},
+    ): Promise<AutomationJob> {
         const ownedAgents = await this.agentRepository.find({ where: { createBy: creatorId } });
         const job = await this.jobRepository.findOne({
-            where: automationCreatorFilters(creatorId, ownedAgents.map((agent) => String(agent.id))).map(
-                (filter) => ({ id, ...filter }),
-            ),
+            ...(options.withDeleted ? { withDeleted: true } : {}),
+            where: automationCreatorFilters(
+                creatorId,
+                ownedAgents.map((agent) => String(agent.id)),
+            ).map((filter) => ({ id, ...filter })),
         });
         if (!job) throw HttpErrorFactory.notFound("Task not found");
         return job;
@@ -356,13 +363,20 @@ export class AutomationService {
     ): Promise<Record<string, unknown>> {
         if (!["pause", "resume", "cancel"].includes(operation))
             throw HttpErrorFactory.badRequest("Unsupported task operation");
-        const job = await this.findForCreator(creatorId, id);
+        const job = await this.findForCreator(creatorId, id, {
+            withDeleted: operation === "cancel",
+        });
         this.assertExpectedUpdatedAt(job, expectedUpdatedAt);
         if (operation === "pause" && job.status === "active") job.status = "paused";
         if (operation === "resume" && job.status === "paused") job.status = "active";
         if (operation === "cancel" && !["cancelled", "completed"].includes(job.status))
             job.status = "cancelled";
         const saved = await this.jobRepository.save(job);
+        if (operation === "cancel" && saved.status === "cancelled" && !saved.deletedAt) {
+            // Web deletion keeps the cancelled terminal state and audit rows while hiding the
+            // task definition from subsequent creator-workspace reads.
+            await this.jobRepository.softRemove(saved);
+        }
         return (await this.toPublicTasks([saved]))[0] || {};
     }
 
@@ -659,6 +673,7 @@ export class AutomationService {
                 name: job.name,
                 updatedAt: job.updatedAt,
                 agentId: job.agentId,
+                prompt: job.prompt,
                 scheduleKind: job.scheduleKind,
                 schedule: job.schedule,
                 timezone: job.timezone,
@@ -672,6 +687,10 @@ export class AutomationService {
                 lastRunResultPreview: run?.resultPreview || null,
                 lastRunErrorPreview: run?.errorPreview || null,
                 dispatchStatus: dispatch?.status,
+                deleteAfterRun: job.deleteAfterRun,
+                missedRunPolicy: job.missedRunPolicy,
+                overlapPolicy: job.overlapPolicy,
+                timeoutSeconds: job.timeoutSeconds,
             };
         });
     }
@@ -716,6 +735,29 @@ export class AutomationService {
                       ? schedule.timezone || "UTC"
                       : "UTC";
             job.nextRunAt = nextRunAt;
+        }
+        if (input.deleteAfterRun !== undefined) job.deleteAfterRun = input.deleteAfterRun;
+        if (input.missedRunPolicy !== undefined) {
+            if (!["fire_once", "skip", "catch_up"].includes(input.missedRunPolicy)) {
+                throw HttpErrorFactory.badRequest("Unsupported missed run policy");
+            }
+            job.missedRunPolicy = input.missedRunPolicy;
+        }
+        if (input.overlapPolicy !== undefined) {
+            if (!["skip", "queue_one", "allow"].includes(input.overlapPolicy)) {
+                throw HttpErrorFactory.badRequest("Unsupported overlap policy");
+            }
+            job.overlapPolicy = input.overlapPolicy;
+        }
+        if (input.timeoutSeconds !== undefined) {
+            if (
+                !Number.isInteger(input.timeoutSeconds) ||
+                input.timeoutSeconds < 1 ||
+                input.timeoutSeconds > 86_400
+            ) {
+                throw HttpErrorFactory.badRequest("Timeout must be between 1 and 86400 seconds");
+            }
+            job.timeoutSeconds = input.timeoutSeconds;
         }
         return this.jobRepository.save(job);
     }

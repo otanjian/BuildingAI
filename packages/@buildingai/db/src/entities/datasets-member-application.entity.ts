@@ -25,6 +25,9 @@ export enum MemberApplicationStatus {
 @Index(["datasetId", "status"])
 @Index(["userId", "status"])
 export class DatasetMemberApplication extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 知识库ID
      */

@@ -1,4 +1,4 @@
-# BuildingAI API 开发规范
+# Bowi AI API 开发规范
 
 ## 技术栈
 

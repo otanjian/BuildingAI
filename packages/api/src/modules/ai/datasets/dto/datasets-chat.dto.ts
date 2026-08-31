@@ -175,6 +175,8 @@ export interface DatasetsChatCompletionParams {
     regenerateParentId?: string;
     parentId?: string;
     feature?: Record<string, boolean>;
+    tenantId?: string;
+    projectId?: string;
 }
 
 export class DatasetsChatRequestDto {

@@ -5,7 +5,7 @@ import {
 import type { RetrievalConfig } from "@buildingai/types/ai/retrieval-config.interface";
 
 import { AppEntity } from "../decorators/app-entity.decorator";
-import { Column, JoinTable, ManyToMany, OneToMany, type Relation } from "../typeorm";
+import { Column, Index, JoinTable, ManyToMany, OneToMany, type Relation } from "../typeorm";
 import { BaseEntity } from "./base";
 import { DatasetsChatRecord } from "./datasets-chat-record.entity";
 import { DatasetsDocument } from "./datasets-document.entity";
@@ -20,6 +20,7 @@ export { SquarePublishStatus };
  * 知识库实体
  */
 @AppEntity({ name: "datasets", comment: "知识库管理" })
+@Index("idx_datasets_tenant_project", ["tenantId", "projectId"])
 export class Datasets extends BaseEntity {
     /**
      * 知识库名称
@@ -64,6 +65,27 @@ export class Datasets extends BaseEntity {
      */
     @Column({ type: "uuid", comment: "创建者ID" })
     createdBy: string;
+
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "所属租户" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id", comment: "所属项目" })
+    projectId: string | null;
+
+    @Column({ type: "varchar", length: 64, nullable: true, default: "internal", comment: "数据分类" })
+    classification: string | null;
+
+    @Column({ type: "jsonb", nullable: true, name: "acl_policy", comment: "知识库 ACL 策略" })
+    aclPolicy: { allowUserIds?: string[]; denyUserIds?: string[] } | null;
+
+    @Column({ type: "integer", default: 1, name: "source_version", comment: "来源版本" })
+    sourceVersion: number;
+
+    @Column({ type: "varchar", length: 100, nullable: true, name: "index_version", comment: "有效索引版本" })
+    indexVersion: string | null;
+
+    @Column({ type: "varchar", length: 32, default: "ready", name: "index_status", comment: "索引状态" })
+    indexStatus: "ready" | "building" | "unavailable" | "incompatible";
 
     /**
      * 文档数量

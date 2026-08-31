@@ -22,7 +22,7 @@ describe("SAP MCP adapters", () => {
         process.env.BOWI_SAP_ADT_SERVICE_PROFILE_ENABLED = "true";
         try {
             const client = { call: jest.fn().mockResolvedValue({ results: [] }) };
-            const profiles = new SapConnectionProfileService({} as never);
+            const profiles = new SapConnectionProfileService({} as never, undefined);
             const adapter = new SapAdtMcpAdapter(profiles, client as never);
 
             await expect(

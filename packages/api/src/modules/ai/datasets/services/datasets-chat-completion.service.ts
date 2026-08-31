@@ -111,7 +111,13 @@ export class DatasetsChatCompletionService {
 
             const datasetsSearch = createDatasetsSearchTool({
                 retrieve: (query) =>
-                    this.datasetsRetrievalService.retrieve(params.datasetId, query),
+                    this.datasetsRetrievalService.retrieve(params.datasetId, query, undefined, undefined, {
+                        tenantId: params.tenantId,
+                        projectId: params.projectId,
+                        actorId: params.userId,
+                        datasetIds: [params.datasetId],
+                        verified: true,
+                    }),
             });
 
             const agent = new ToolLoopAgent({

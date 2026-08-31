@@ -115,7 +115,7 @@ export NODE_TLS_REJECT_UNAUTHORIZED="${NODE_TLS_REJECT_UNAUTHORIZED:-0}"
 STDIO_CMD="node $VENDOR/dist/index.js"
 
 echo "Starting stateful Streamable HTTP gateway on http://${MCP_HOST}:${MCP_PORT}${MCP_PATH}"
-echo "Register in BuildingAI console: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
+echo "Register in Bowi AI console: type=streamable-http, url=http://127.0.0.1:${MCP_PORT}${MCP_PATH}"
 
 exec env -u http_proxy -u https_proxy -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u all_proxy \
   npx -y "supergateway@${SUPERGATEWAY_VERSION}" \

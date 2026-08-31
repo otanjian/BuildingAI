@@ -10,6 +10,9 @@ import { BaseEntity } from "./base";
  */
 @AppEntity({ name: "ai_mcp_tool", comment: "MCP工具" })
 export class AiMcpTool extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 工具名称
      */

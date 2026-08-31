@@ -1,5 +1,5 @@
 /**
- * BuildingAI conversation metadata for detached OpenCode turns.
+ * Bowi AI conversation metadata for detached OpenCode turns.
  */
 
 export type OpencodeTurnStatus =

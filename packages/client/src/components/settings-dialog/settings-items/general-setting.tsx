@@ -1,5 +1,6 @@
 import { useI18n } from "@buildingai/i18n";
-import { type FontSize, useUserConfigStore } from "@buildingai/stores";
+import { useTenantsQuery } from "@buildingai/services/console";
+import { type FontSize, useTenantContextStore, useUserConfigStore } from "@buildingai/stores";
 import { THEME_COLORS, useTheme } from "@buildingai/ui/components/theme-provider";
 import { Button } from "@buildingai/ui/components/ui/button";
 import {
@@ -14,6 +15,7 @@ import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { cn } from "@buildingai/ui/lib/utils";
 import { Check, ChevronsUpDown, Laptop, Moon, Sun } from "lucide-react";
 import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { SettingItem, SettingItemGroup } from "../setting-item";
 
@@ -47,6 +49,14 @@ const GeneralSetting = () => {
     useUserConfigStore((s) => s.userConfig.configs?.appearance?.fontSize as FontSize) ?? "md";
 
   const { theme, setTheme, themeColor, setThemeColor } = useTheme();
+  const queryClient = useQueryClient();
+  const tenantsQuery = useTenantsQuery();
+  const tenants = tenantsQuery.data ?? [];
+  const defaultTenantId = useTenantContextStore((s) => s.tenantContext.defaultTenantId);
+  const activeTenantId = useTenantContextStore((s) => s.tenantContext.activeTenantId);
+  const { setDefaultTenantId, setActiveTenantId } = useTenantContextStore(
+    (s) => s.tenantContextActions,
+  );
 
   const handleFontSizeChange = useCallback(
     (size: FontSize) => {
@@ -212,6 +222,44 @@ const GeneralSetting = () => {
                   )}
                 </DropdownMenuItem>
               ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SettingItem>
+      </SettingItemGroup>
+
+      <SettingItemGroup label="租户">
+        <SettingItem title="默认租户" description="登录后优先打开的租户；只能选择你已加入的租户。">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" disabled={tenantsQuery.isLoading}>
+                {tenants.find((tenant) => tenant.id === defaultTenantId)?.name ?? "自动选择"}
+                <ChevronsUpDown className="text-muted-foreground ml-1 size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+              <DropdownMenuItem
+                onClick={() => setDefaultTenantId(undefined)}
+                className="flex items-center gap-2"
+              >
+                自动选择
+                {!defaultTenantId && <Check className="ml-auto size-4" />}
+              </DropdownMenuItem>
+              {tenants
+                .filter((tenant) => tenant.status === "active")
+                .map((tenant) => (
+                  <DropdownMenuItem
+                    key={tenant.id}
+                    onClick={() => {
+                      setDefaultTenantId(tenant.id);
+                      if (!activeTenantId) setActiveTenantId(tenant.id);
+                      void queryClient.invalidateQueries({ queryKey: ["tenant-admin"] });
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    {tenant.name}
+                    {defaultTenantId === tenant.id && <Check className="ml-auto size-4" />}
+                  </DropdownMenuItem>
+                ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </SettingItem>

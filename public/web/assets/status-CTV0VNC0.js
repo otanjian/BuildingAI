@@ -1,0 +1,1 @@
+var e={active:`待执行`,paused:`已暂停`,cancelled:`已取消`,completed:`已完成`,failed:`失败`};function t(t){return t.status===`active`&&t.lastRunStatus===`running`?`运行中`:e[t.status]}function n(e){return e.status!==`completed`}export{t as n,n as t};

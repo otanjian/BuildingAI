@@ -65,7 +65,7 @@ export interface SubscribeOpencodeSessionEventsOptions {
 }
 
 /**
- * Subscribe to the BuildingAI-proxied OpenCode event SSE and translate the
+ * Subscribe to the Bowi AI-proxied OpenCode event SSE and translate the
  * live stream into a running OpencodeSessionMessage snapshot.
  *
  * The caller can feed the snapshot into `buildOpencodeLivePreview` to render

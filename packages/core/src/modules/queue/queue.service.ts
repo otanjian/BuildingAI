@@ -158,6 +158,29 @@ export class QueueService {
         }
     }
 
+    async pauseQueue(queueName: string) {
+        await this.getQueueByName(queueName).pause();
+        return { queueName, status: "paused" as const };
+    }
+
+    async resumeQueue(queueName: string) {
+        await this.getQueueByName(queueName).resume();
+        return { queueName, status: "running" as const };
+    }
+
+    async replayJob(queueName: string, jobId: string) {
+        const queue = this.getQueueByName(queueName);
+        const job = await queue.getJob(jobId);
+        if (!job) return false;
+        const replay = await queue.add(job.name, job.data, {
+            ...job.opts,
+            jobId: `${job.id}:replay:${Date.now()}`,
+            attempts: job.opts.attempts ?? 3,
+            removeOnComplete: false,
+        });
+        return Boolean(replay.id);
+    }
+
     /**
      * Get queue instance by name
      * @param queueName Queue name

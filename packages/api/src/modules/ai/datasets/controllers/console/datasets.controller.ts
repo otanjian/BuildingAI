@@ -32,7 +32,7 @@ export class DatasetsConsoleController {
     async list(@Query() dto: ListConsoleDatasetsDto) {
         const { page = 1, pageSize = 20, name, status, tagId } = dto;
         const result = await this.datasetsService.listForConsole(
-            { page, pageSize },
+            { page, pageSize, tenantId: dto.tenantId } as typeof dto & { page: number; pageSize: number },
             { name: name?.trim(), status, tagId },
         );
         const creatorIds = [...new Set((result.items as Datasets[]).map((d) => d.createdBy))];

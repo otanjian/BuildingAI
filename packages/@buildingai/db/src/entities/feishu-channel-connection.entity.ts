@@ -48,6 +48,9 @@ export class FeishuChannelConnection extends BaseEntity {
     @Column({ type: "text", nullable: true, name: "app_secret_encrypted" })
     appSecretEncrypted: string | null;
 
+    @Column({ type: "uuid", nullable: true, name: "credential_ref" })
+    credentialRef: string | null;
+
     @Column({ type: "text", nullable: true, name: "agent_access_token_encrypted" })
     agentAccessTokenEncrypted: string | null;
 

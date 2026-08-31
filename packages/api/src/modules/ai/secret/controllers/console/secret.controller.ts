@@ -83,7 +83,7 @@ export class SecretWebController extends BaseController {
     }
 
     /**
-     * 获取单个密钥配置详情（包含敏感信息）
+     * Compatibility route: sensitive values are never returned by console APIs.
      */
     @Get(":id/full")
     @Permissions({

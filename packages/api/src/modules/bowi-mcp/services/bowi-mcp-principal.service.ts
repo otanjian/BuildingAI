@@ -7,6 +7,7 @@ import { timingSafeEqual } from "node:crypto";
 import type { BowiInvocationMeta, BowiPrincipal } from "../types/bowi-mcp.types";
 import { configuredSapCapabilities } from "../sap/sap-capabilities";
 import { verifyBowiInvocationAssertion } from "../utils/bowi-invocation-assertion";
+import { consumeOpencodeServiceToken } from "../../ai/agents/utils/opencode-credential-injection";
 
 type HeaderValue = string | string[] | undefined;
 
@@ -37,6 +38,7 @@ export class BowiMcpPrincipalService {
                 ...(isPersonal ? { subjectUserId: claims.userId } : {}),
                 authSource: claims.authSource,
                 agentId: claims.agentId,
+                ...(claims.tenantId ? { tenantId: claims.tenantId } : {}),
                 conversationId: claims.conversationId,
                 capabilities: new Set([
                     ...(isPersonal ? (["todo.personal"] as const) : []),
@@ -51,8 +53,16 @@ export class BowiMcpPrincipalService {
             };
         }
 
+        const serviceToken = this.header(input.headers, "x-buildingai-opencode-token");
         const suppliedKey = this.header(input.headers, "x-buildingai-opencode-key");
-        if (!suppliedKey || !this.matchesInternalKey(suppliedKey)) {
+        let authenticated = false;
+        if (serviceToken) {
+            try { consumeOpencodeServiceToken(serviceToken); authenticated = true; } catch { authenticated = false; }
+        }
+        if (!authenticated && process.env.NODE_ENV === "production") {
+            throw new Error("Bowi MCP requires a valid short-lived OpenCode service token; internal service identity is not configured");
+        }
+        if (!authenticated && (!suppliedKey || !this.matchesInternalKey(suppliedKey))) {
             throw new Error("Invalid Bowi MCP client credential");
         }
 
@@ -86,6 +96,7 @@ export class BowiMcpPrincipalService {
             subjectUserId: record.userId,
             authSource: "opencode_session",
             agentId: record.agentId,
+            ...(record.tenantId ? { tenantId: record.tenantId } : {}),
             conversationId: record.id,
             sessionId,
             ...(callId ? { callId } : {}),

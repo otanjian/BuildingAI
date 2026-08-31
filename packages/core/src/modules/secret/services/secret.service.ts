@@ -6,7 +6,7 @@ import { Secret } from "@buildingai/db/entities";
 import { Like, Raw, Repository } from "@buildingai/db/typeorm";
 import { PaginationDto } from "@buildingai/dto/pagination.dto";
 import { HttpErrorFactory } from "@buildingai/errors";
-import { buildWhere, decryptValue } from "@buildingai/utils";
+import { buildWhere } from "@buildingai/utils";
 import { Inject, Injectable, Optional } from "@nestjs/common";
 
 import {
@@ -15,6 +15,7 @@ import {
     SecretUsageDto,
     UpdateSecretDto,
 } from "../dto/secret.dto";
+import { CredentialCryptoService } from "../crypto/credential-crypto";
 
 /**
  * AI Provider Service interface for dependency injection
@@ -40,6 +41,7 @@ export class SecretService extends BaseService<Secret> {
         private readonly SecretRepository: Repository<Secret>,
         @InjectRepository(SecretTemplate)
         private readonly SecretTemplateRepository: Repository<SecretTemplate>,
+        private readonly credentialCrypto: CredentialCryptoService,
         @Optional()
         @Inject("AI_PROVIDER_SERVICE")
         private readonly aiProviderService?: IAiProviderService,
@@ -226,9 +228,9 @@ export class SecretService extends BaseService<Secret> {
             throw HttpErrorFactory.notFound("密钥配置不存在");
         }
 
-        // Process field value display - always return decrypted values
+        // Never return plaintext secret values from console metadata endpoints.
         const processedConfig = { ...config };
-        processedConfig.fieldValues = this.decryptFieldValues(config.fieldValues);
+        processedConfig.fieldValues = this.maskSensitiveFields(config.fieldValues || []);
 
         return processedConfig;
     }
@@ -253,10 +255,10 @@ export class SecretService extends BaseService<Secret> {
             },
         });
 
-        // Decrypt field values for each configuration
+        // Return metadata only; runtime callers use getConfigKeyValuePairs.
         return configs.map((config) => ({
             ...config,
-            fieldValues: this.decryptFieldValues(config.fieldValues || []),
+            fieldValues: this.maskSensitiveFields(config.fieldValues || []),
         }));
     }
 
@@ -426,7 +428,9 @@ export class SecretService extends BaseService<Secret> {
             config.fieldValues.forEach((field) => {
                 if (field.name && field.value !== undefined) {
                     // If field is encrypted, decrypt first
-                    const value = field.encrypted ? decryptValue(field.value) : field.value;
+                    const value = field.encrypted
+                        ? this.credentialCrypto.decryptStored(String(field.value))
+                        : field.value;
 
                     // Get field configuration information from template
                     const templateField = templateFieldMap.get(field.name);
@@ -530,7 +534,7 @@ export class SecretService extends BaseService<Secret> {
                     ...fieldValue,
                     encrypted: true,
                     // Should actually encrypt here, simplified for now
-                    value: this.encryptValue(String(processedValue)),
+                    value: this.credentialCrypto.encryptStored(String(processedValue)),
                 };
             }
             return {
@@ -538,16 +542,6 @@ export class SecretService extends BaseService<Secret> {
                 value: processedValue,
             };
         });
-    }
-
-    /**
-     * Encrypt field value (simplified implementation)
-     * @param value Original value
-     * @returns Encrypted value
-     */
-    private encryptValue(value: string): string {
-        // Should use real encryption algorithm here, using Base64 encoding as example for now
-        return Buffer.from(value).toString("base64");
     }
 
     /**
@@ -560,24 +554,11 @@ export class SecretService extends BaseService<Secret> {
             if (fieldValue.encrypted) {
                 return {
                     ...fieldValue,
-                    value: decryptValue(String(fieldValue.value)),
+                    value: this.credentialCrypto.decryptStored(String(fieldValue.value)),
                 };
             }
             return fieldValue;
         });
-    }
-
-    /**
-     * Decrypt field value (simplified implementation)
-     * @param encryptedValue Encrypted value
-     * @returns Decrypted value
-     */
-    private decryptValue(encryptedValue: string): string {
-        try {
-            return Buffer.from(encryptedValue, "base64").toString();
-        } catch {
-            return encryptedValue; // Return original value if decryption fails
-        }
     }
 
     /**

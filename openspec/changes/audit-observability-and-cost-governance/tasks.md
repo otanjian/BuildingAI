@@ -21,4 +21,4 @@
 - [x] 4.1 Add tests for correlation continuity, redaction, audit durability, missing-audit fail-closed behavior, quota inheritance, replay, and reconciliation.
 - [x] 4.2 Run load and failure tests for audit/outbox/telemetry backpressure, provider errors, queue recovery, and high-cardinality metrics.
 - [x] 4.3 Run typecheck, lint, focused API/Worker tests, dashboard review, backup/restore rehearsal, and cost-ledger month-end dry run.
-- [ ] 4.4 Using browser control and resettable usage/budget fixtures, verify scoped audit search, pagination/filter/refresh consistency, quota denial/alert, reconciliation and retention status, redacted export, and read-only/cross-tenant denial; API/database checks alone do not close this task.
+- [x] 4.4 Using browser control and resettable usage/budget fixtures, verify scoped audit search, pagination/filter/refresh consistency, quota denial/alert, reconciliation and retention status, redacted export, and read-only/cross-tenant denial; API/database checks alone do not close this task.

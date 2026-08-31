@@ -1,4 +1,10 @@
-import { type McpServer, useMcpServerQuery, useMcpServersAllQuery } from "@buildingai/services/web";
+import {
+  type McpServer,
+  useMcpServerQuery,
+  useMcpServersAllQuery,
+  useMyAgentsInfiniteQuery,
+} from "@buildingai/services/web";
+import type { AgentDelegationConfig } from "@buildingai/types";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
 import { Checkbox } from "@buildingai/ui/components/ui/checkbox";
@@ -14,7 +20,7 @@ import {
 import { Input } from "@buildingai/ui/components/ui/input";
 import { ScrollArea } from "@buildingai/ui/components/ui/scroll-area";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
-// import { Switch } from "@buildingai/ui/components/ui/switch";
+import { Switch } from "@buildingai/ui/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@buildingai/ui/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@buildingai/ui/components/ui/tooltip";
 import { cn } from "@buildingai/ui/lib/utils";
@@ -29,6 +35,7 @@ import {
   Trash2,
   Wrench,
   X,
+  Bot,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -49,21 +56,43 @@ export type ToolConfigValue = {
   /** 是否开启工具执行前人工审批 */
   requireApproval?: boolean;
   toolTimeout?: number;
+  agentDelegation?: AgentDelegationConfig;
 };
 
 export const McpTools = memo(
   ({
+    agentId,
     value,
     onChange,
     toolConfig,
     onToolConfigChange,
   }: {
+    agentId?: string;
     value: string[];
     onChange: (value: string[]) => void;
     toolConfig?: ToolConfigValue | null;
     onToolConfigChange?: (v: ToolConfigValue | null) => void;
   }) => {
     const { data: servers = [], isLoading } = useMcpServersAllQuery();
+    const { data: agentsData } = useMyAgentsInfiniteQuery({ pageSize: 100, status: "all" });
+    const currentAgent = useMemo(
+      () =>
+        (agentsData?.pages.flatMap((page) => page.items ?? []) ?? []).find(
+          (item) => item.id === agentId,
+        ),
+      [agentId, agentsData],
+    );
+    const directAgents = useMemo(
+      () =>
+        (agentsData?.pages.flatMap((page) => page.items ?? []) ?? []).filter(
+          (item) =>
+            item.createMode === "direct" &&
+            item.id !== agentId &&
+            (!currentAgent?.tenantId || item.tenantId === currentAgent.tenantId) &&
+            (!currentAgent?.projectId || item.projectId === currentAgent.projectId),
+        ),
+      [agentId, agentsData, currentAgent],
+    );
 
     const [selectedIds, setSelectedIds] = useState<string[]>(() => coerceIds(value));
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -76,6 +105,10 @@ export const McpTools = memo(
     const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
     const [draftRequireApproval, setDraftRequireApproval] = useState(false);
     const [draftToolTimeout, setDraftToolTimeout] = useState<number>(30000);
+    const [draftDelegationEnabled, setDraftDelegationEnabled] = useState(false);
+    const [draftAllowedAgentIds, setDraftAllowedAgentIds] = useState<string[]>([]);
+    const [draftDelegationMaxCalls, setDraftDelegationMaxCalls] = useState(3);
+    const [draftDelegationTimeout, setDraftDelegationTimeout] = useState(30000);
 
     const { data: toolsDialogServerDetail, isLoading: isToolsDialogLoading } = useMcpServerQuery(
       toolsDialogServer?.id ?? "",
@@ -110,6 +143,10 @@ export const McpTools = memo(
           ? toolConfig.toolTimeout
           : 30000,
       );
+      setDraftDelegationEnabled(toolConfig?.agentDelegation?.enabled ?? false);
+      setDraftAllowedAgentIds(toolConfig?.agentDelegation?.allowedAgentIds ?? []);
+      setDraftDelegationMaxCalls(toolConfig?.agentDelegation?.maxCallsPerTurn ?? 3);
+      setDraftDelegationTimeout(toolConfig?.agentDelegation?.timeoutMs ?? 30000);
       setSettingsDialogOpen(true);
     }, [toolConfig]);
 
@@ -117,12 +154,23 @@ export const McpTools = memo(
       const next: ToolConfigValue = {
         requireApproval: draftRequireApproval || undefined,
         toolTimeout: draftToolTimeout > 0 ? draftToolTimeout : undefined,
+        agentDelegation:
+          draftDelegationEnabled && draftAllowedAgentIds.length > 0
+            ? {
+                enabled: true,
+                allowedAgentIds: draftAllowedAgentIds,
+                maxCallsPerTurn: Math.min(Math.max(draftDelegationMaxCalls, 1), 3),
+                timeoutMs: Math.min(Math.max(draftDelegationTimeout, 1000), 60000),
+              }
+            : undefined,
       };
       onToolConfigChange?.(
-        next.requireApproval === undefined && next.toolTimeout === undefined ? null : next,
+        next.requireApproval === undefined && next.toolTimeout === undefined && !next.agentDelegation
+          ? null
+          : next,
       );
       setSettingsDialogOpen(false);
-    }, [draftRequireApproval, draftToolTimeout, onToolConfigChange]);
+    }, [draftDelegationEnabled, draftDelegationMaxCalls, draftDelegationTimeout, draftAllowedAgentIds, draftRequireApproval, draftToolTimeout, onToolConfigChange]);
 
     const handleToggleSelect = useCallback((id: string) => {
       setDraftIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -484,6 +532,68 @@ export const McpTools = memo(
                   }}
                 />
                 <p className="text-muted-foreground text-xs">默认 30000，即 30 秒</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Bot className="text-muted-foreground h-4 w-4" />
+                    <div>
+                      <label className="text-sm font-medium">调用其他 Direct 智能体</label>
+                      <p className="text-muted-foreground text-xs">仅调用下方明确勾选的智能体。</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={draftDelegationEnabled}
+                    onCheckedChange={setDraftDelegationEnabled}
+                    disabled={directAgents.length === 0}
+                  />
+                </div>
+                {draftDelegationEnabled && (
+                  <div className="mt-3 space-y-2">
+                    {directAgents.length === 0 ? (
+                      <p className="text-muted-foreground text-xs">暂无可调用的 Direct 智能体。</p>
+                    ) : (
+                      directAgents.map((item) => (
+                        <label key={item.id} className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={draftAllowedAgentIds.includes(item.id)}
+                            onCheckedChange={(checked) =>
+                              setDraftAllowedAgentIds((current) =>
+                                checked
+                                  ? Array.from(new Set([...current, item.id]))
+                                  : current.filter((id) => id !== item.id),
+                              )
+                            }
+                          />
+                          <span className="truncate">{item.name}</span>
+                        </label>
+                      ))
+                    )}
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <label className="grid gap-1 text-xs">
+                        每轮最多调用
+                        <Input
+                          type="number"
+                          min={1}
+                          max={3}
+                          value={draftDelegationMaxCalls}
+                          onChange={(event) => setDraftDelegationMaxCalls(Number(event.target.value) || 1)}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs">
+                        超时（毫秒）
+                        <Input
+                          type="number"
+                          min={1000}
+                          max={60000}
+                          step={1000}
+                          value={draftDelegationTimeout}
+                          onChange={(event) => setDraftDelegationTimeout(Number(event.target.value) || 1000)}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>

@@ -3,11 +3,13 @@ import {
   type CreateUserDto,
   type Role,
   type UpdateUserDto,
-  useCreateUserMutation,
+  useCreateTenantUserMutation,
   useRolesQuery,
+  useTenantsQuery,
   useUpdateUserMutation,
   useUserDetailQuery,
 } from "@buildingai/services/console";
+import { useTenantContextStore } from "@buildingai/stores";
 import { Button } from "@buildingai/ui/components/ui/button";
 import {
   Dialog,
@@ -69,6 +71,7 @@ const formSchema = z
     status: z.boolean().optional(),
     power: z.number().optional(),
     realName: z.string().max(50, "真实姓名不能超过50个字符").optional(),
+    tenantId: z.string().optional(),
   })
   .refine(
     () => {
@@ -92,6 +95,8 @@ type UserFormDialogProps = {
  */
 export const UserFormDialog = ({ open, onOpenChange, userId, onSuccess }: UserFormDialogProps) => {
   const isEditMode = !!userId;
+  const activeTenantId = useTenantContextStore((state) => state.tenantContext.activeTenantId);
+  const { data: tenants } = useTenantsQuery();
   const [balanceDialogOpen, setBalanceDialogOpen] = useState(false);
   const [membershipDialogOpen, setMembershipDialogOpen] = useState(false);
 
@@ -113,6 +118,7 @@ export const UserFormDialog = ({ open, onOpenChange, userId, onSuccess }: UserFo
       roleId: "",
       status: true,
       realName: "",
+      tenantId: activeTenantId ?? "",
     },
   });
 
@@ -143,12 +149,13 @@ export const UserFormDialog = ({ open, onOpenChange, userId, onSuccess }: UserFo
           status: true,
           power: 0,
           realName: "",
+          tenantId: activeTenantId ?? "",
         });
       }
     }
   }, [open, userDetail, form]);
 
-  const createMutation = useCreateUserMutation({
+  const createTenantUserMutation = useCreateTenantUserMutation({
     onSuccess: () => {
       toast.success("用户创建成功");
       onOpenChange(false);
@@ -164,7 +171,7 @@ export const UserFormDialog = ({ open, onOpenChange, userId, onSuccess }: UserFo
     },
   });
 
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  const isPending = updateMutation.isPending || createTenantUserMutation.isPending;
 
   const handleSubmit = (values: FormValues) => {
     const { power: _power, ...submitValues } = values;
@@ -202,7 +209,22 @@ export const UserFormDialog = ({ open, onOpenChange, userId, onSuccess }: UserFo
       if (submitValues.roleId === "no-role") {
         dto.roleId = "";
       }
-      createMutation.mutate(dto);
+      const selectedTenantId = submitValues.tenantId || activeTenantId;
+      if (selectedTenantId) {
+        createTenantUserMutation.mutate({
+          tenantId: selectedTenantId,
+          username: dto.username,
+          password: dto.password,
+          nickname: dto.nickname,
+          email: dto.email,
+          phone: dto.phone,
+          avatar: dto.avatar,
+          realName: dto.realName,
+          roleCode: "member",
+        });
+      } else {
+        toast.error("请选择所属租户");
+      }
     }
   };
 
@@ -285,6 +307,38 @@ export const UserFormDialog = ({ open, onOpenChange, userId, onSuccess }: UserFo
                   </FormItem>
                 )}
               />
+
+              {!isEditMode && (
+                <FormField
+                  control={form.control}
+                  name="tenantId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel required>所属租户</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="选择所属租户" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {tenants
+                            ?.filter(
+                              (tenant) => tenant.status === "active" && tenant.isAdministrator,
+                            )
+                            .map((tenant) => (
+                              <SelectItem key={tenant.id} value={tenant.id}>
+                                {tenant.name} ({tenant.code})
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>新用户将以普通成员身份加入该租户。</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {!isEditMode && (
                 <FormField

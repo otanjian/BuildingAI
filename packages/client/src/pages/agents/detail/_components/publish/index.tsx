@@ -199,6 +199,7 @@ export default function Publish() {
   const agentId = id ?? "";
   const [activeTab, setActiveTab] = useState<PublishTab>("all");
   const [dialogType, setDialogType] = useState<PublishDialogType>(null);
+  const [siteAccessToken, setSiteAccessToken] = useState<string>();
 
   const { data: agent, isLoading } = useAgentDetailQuery(agentId, {
     refetchOnWindowFocus: false,
@@ -206,15 +207,27 @@ export default function Publish() {
 
   const updatePublishConfigMutation = useUpdatePublishConfigMutation(agentId);
 
+  const updatePublishConfig = useCallback(
+    (payload: Parameters<typeof updatePublishConfigMutation.mutate>[0]) => {
+      updatePublishConfigMutation.mutate(payload, {
+        onSuccess: (result) => {
+          if (result.publishLinkToken) setSiteAccessToken(result.publishLinkToken);
+        },
+      });
+    },
+    [updatePublishConfigMutation],
+  );
+
   const siteOrigin = useMemo(() => getSiteOrigin(), []);
 
   const publicLink = useMemo(() => {
-    if (!agent?.publishConfig?.accessToken || !siteOrigin) return "";
+    const accessToken = siteAccessToken ?? agent?.publishConfig?.accessToken;
+    if (!accessToken || !siteOrigin) return "";
     return joinUrl(
       siteOrigin,
-      `/agents/${agent.id}/${encodeURIComponent(agent.publishConfig.accessToken)}`,
+      `/agents/${agent.id}/${encodeURIComponent(accessToken)}`,
     );
-  }, [agent?.publishConfig?.accessToken, siteOrigin]);
+  }, [agent?.id, agent?.publishConfig?.accessToken, siteAccessToken, siteOrigin]);
 
   const embedCode = useMemo(() => buildEmbedCode(publicLink || "<PUBLIC_AGENT_URL>"), [publicLink]);
   const floatingEmbedCode = useMemo(
@@ -307,14 +320,22 @@ export default function Publish() {
                       onSecondaryAction={handleOpenPublicLink}
                       switchChecked={agent?.publishConfig?.enableSite ?? false}
                       onSwitchChange={(checked) =>
-                        updatePublishConfigMutation.mutate({ enableSite: checked })
+                        updatePublishConfig({ enableSite: checked })
                       }
                       onRegenerate={() =>
-                        updatePublishConfigMutation.mutate({ regenerateAccessToken: true })
+                        updatePublishConfig({ regenerateAccessToken: true })
                       }
                       showRegenerate={agent?.publishConfig?.enableSite ?? false}
                       isRegeneratePending={updatePublishConfigMutation.isPending}
                     />
+                    {publicLink ? (
+                      <a
+                        href={publicLink}
+                        className="text-primary self-start text-sm underline-offset-4 hover:underline"
+                      >
+                        打开公开页面
+                      </a>
+                    ) : null}
                     <ChannelCard
                       icon={SquareCode}
                       title="JS 嵌入"

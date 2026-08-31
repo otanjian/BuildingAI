@@ -37,6 +37,12 @@ Provisioning SHALL enable WebAPP publish (`enableSite` + `accessToken`) on the E
 
 When the user sends「开始检查」inside the embedded publish chat, the extension web client SHALL NOT call `GET /rules` or loop rules. The platform agent SHALL use **bowi-mcp** tools (`bowi_start_full_check`, `bowi_get_check_progress`, `bowi_cancel_check`, `bowi_ingest_rule_result`, `bowi_sql_query`, `bowi_sql_execute`) with `appId: "ehcs-ai"` plus ERP MCP for business data.
 
+#### Scenario: Start a full check from published chat
+
+- **WHEN** the user sends「开始检查」inside the embedded publish chat
+- **THEN** the platform agent runs the bowi-mcp full-check flow with `appId: "ehcs-ai"`
+- **AND** the extension web client does not fetch or iterate the rule list itself
+
 ### Requirement: bowi-mcp tools visible in platform UI
 
 When「更新 EHCS 智能体」runs, the extension SHALL upsert all catalog tools into `ai_mcp_tool` for the shared `bowi-mcp` server so the agent configuration UI shows the correct tool count (not 0 while connectable).

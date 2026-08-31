@@ -3,6 +3,7 @@ import { InjectRepository } from "@buildingai/db/@nestjs/typeorm";
 import { DatasetsDocument } from "@buildingai/db/entities";
 import { In, Repository } from "@buildingai/db/typeorm";
 import { Injectable, Logger } from "@nestjs/common";
+import { DatasetsIngestionService } from "./datasets-ingestion.service";
 
 @Injectable()
 export class VectorizationTriggerService {
@@ -12,9 +13,21 @@ export class VectorizationTriggerService {
         private readonly queueService: QueueService,
         @InjectRepository(DatasetsDocument)
         private readonly documentRepository: Repository<DatasetsDocument>,
+        private readonly ingestionService: DatasetsIngestionService,
     ) {}
 
     async triggerDocument(datasetId: string, documentId: string): Promise<void> {
+        const document = await this.documentRepository.findOne({ where: { id: documentId, datasetId }, select: ["id", "tenantId", "projectId"] });
+        if (document?.tenantId) {
+            await this.ingestionService.enqueue({
+                tenantId: document.tenantId,
+                projectId: document.projectId,
+                datasetId,
+                documentId,
+                stage: "parse",
+            });
+            return;
+        }
         await this.queueService.addToQueue(
             "vectorization",
             "vectorize_document",

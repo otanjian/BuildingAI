@@ -1,9 +1,9 @@
 ---
 name: project-architecture
-description: Navigate the BuildingAI pnpm monorepo, locate implementation files, understand package relationships, and choose project import patterns. Use when a task spans packages, needs file discovery, or requires architecture conventions.
+description: Navigate the Bowi AI pnpm monorepo, locate implementation files, understand package relationships, and choose project import patterns. Use when a task spans packages, needs file discovery, or requires architecture conventions.
 ---
 
-# BuildingAI Project Architecture
+# Bowi AI Project Architecture
 
 Use this as a navigation map, not a substitute for the source. Before editing, verify paths, exports, and package scripts with `rg`, `find`, and the relevant `package.json`.
 

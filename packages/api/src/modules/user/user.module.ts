@@ -1,5 +1,6 @@
 import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { User } from "@buildingai/db/entities";
+import { TenantMembership } from "@buildingai/db/entities";
 import { Agent } from "@buildingai/db/entities";
 import {
     AccountLog,
@@ -42,6 +43,7 @@ import { UserCapacityService } from "./services/user-capacity.service";
             File,
             Department,
             DepartmentUserIndex,
+            TenantMembership,
         ]),
         AuthModule,
         SmsModule,

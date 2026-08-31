@@ -14,6 +14,9 @@ import { DatasetsChatRecord } from "./datasets-chat-record.entity";
 @AppEntity({ name: "datasets_chat_message", comment: "知识库调试对话消息" })
 @Index(["conversationId", "createdAt"])
 export class DatasetsChatMessage extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     @Column({
         type: "uuid",
         comment: "所属对话ID",

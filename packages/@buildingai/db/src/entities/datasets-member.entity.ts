@@ -12,6 +12,9 @@ import { User } from "./user.entity";
 @AppEntity({ name: "dataset_members", comment: "知识库团队成员" })
 @Index(["datasetId", "userId"], { unique: true }) // 确保用户在同一知识库中只能有一个角色
 export class DatasetMember extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id", comment: "Owning tenant" })
+    tenantId: string | null;
+
     /**
      * 知识库ID
      */

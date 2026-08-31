@@ -142,7 +142,7 @@ export function OpencodeIframePanel({
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
         <AlertTriangle className="text-destructive size-5" />
         <p className="text-muted-foreground max-w-sm text-sm">
-          OpenCode 当前不可用，会话记录仍保留在 BuildingAI 中。
+          OpenCode 当前不可用，会话记录仍保留在 Bowi AI 中。
         </p>
         <Button type="button" variant="outline" size="sm" onClick={() => void embedQuery.refetch()}>
           <RefreshCw className="mr-1.5 size-3.5" /> 重试

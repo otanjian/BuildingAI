@@ -63,7 +63,7 @@ const AGENT_ID = "11111111-1111-4111-8111-111111111111";
 const CONVERSATION_ID = "22222222-2222-4222-8222-222222222222";
 const USER_ID = "33333333-3333-4333-8333-333333333333";
 
-describe("AgentChatWebController pure BuildingAI history", () => {
+describe("AgentChatWebController pure Bowi AI history", () => {
     function harness() {
         const records = {
             getConversation: jest.fn(async (): Promise<any> => ({
@@ -422,7 +422,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
         await new Promise<void>((resolve) => setImmediate(resolve));
     });
 
-    it("does not overwrite a meaningful BuildingAI title from OpenCode", async () => {
+    it("does not overwrite a meaningful Bowi AI title from OpenCode", async () => {
         const test = harness();
 
         await test.controller.getOpencodeEmbed(
@@ -436,7 +436,7 @@ describe("AgentChatWebController pure BuildingAI history", () => {
         expect(test.records.syncGeneratedOpencodeTitle).not.toHaveBeenCalled();
     });
 
-    it("returns conversation list and detail from BuildingAI while OpenCode is unavailable", async () => {
+    it("returns conversation list and detail from Bowi AI while OpenCode is unavailable", async () => {
         const test = harness();
         await expect(
             test.controller.listConversations(

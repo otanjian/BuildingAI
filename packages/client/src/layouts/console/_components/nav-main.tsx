@@ -30,17 +30,7 @@ import dynamicIconImports from "lucide-react/dynamicIconImports";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-/**
- * Filter visible menu items (type !== 3 && isHidden !== 1)
- */
-function filterVisibleMenus(menus: MenuItem[]): MenuItem[] {
-  return menus
-    .filter((menu) => menu.type !== 3 && menu.isHidden !== 1)
-    .map((menu) => ({
-      ...menu,
-      children: menu.children ? filterVisibleMenus(menu.children) : [],
-    }));
-}
+import { filterVisibleMenus } from "./nav-menu-utils";
 
 /**
  * Get visible children for a menu item (type 1 or 2 with component)
@@ -189,7 +179,31 @@ export function NavMain() {
 
   const menuGroups = useMemo(() => {
     if (!userInfo?.menus) return [];
-    return filterVisibleMenus(userInfo.menus);
+    const visible = filterVisibleMenus(userInfo.menus);
+    const system = visible.find((group) => group.name === "系统管理" && group.type === 0);
+    if (system && !(system.children ?? []).some((item) => item.path === "audit")) {
+      system.children = [
+        ...(system.children ?? []),
+        {
+          id: "fallback-audit",
+          code: "fallback-audit",
+          name: "审计与成本治理",
+          path: "audit",
+          icon: "shield-check",
+          component: "/console/audit",
+          permissionCode: "",
+          parentId: system.id,
+          createdAt: "",
+          updatedAt: "",
+          sort: 999,
+          isHidden: 0,
+          type: 1,
+          sourceType: 0,
+          children: [],
+        } as MenuItem,
+      ];
+    }
+    return visible;
   }, [userInfo?.menus]);
 
   return (

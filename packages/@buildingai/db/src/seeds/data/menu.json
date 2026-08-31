@@ -100,6 +100,18 @@
                 ]
             },
             {
+                "name": "评估与生产就绪",
+                "code": "ai-evaluation",
+                "path": "evaluation",
+                "icon": "flask-conical",
+                "component": "/console/evaluation",
+                "permissionCode": "evaluation:dashboard",
+                "sort": 250,
+                "isHidden": 1,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
                 "name": "MCP",
                 "code": "ai-config-mcp-server",
                 "path": "mcp",
@@ -119,6 +131,18 @@
                 "component": "/console/ai/provider/list",
                 "permissionCode": "ai-providers:list",
                 "sort": 400,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
+                "name": "工具网关",
+                "code": "ai-tool-gateway",
+                "path": "tool-gateway",
+                "icon": "shield-check",
+                "component": "/console/ai/tool-gateway/list",
+                "permissionCode": "tool-gateway:list",
+                "sort": 350,
                 "isHidden": 0,
                 "type": 2,
                 "sourceType": 1
@@ -300,6 +324,18 @@
                 ]
             },
             {
+                "name": "租户管理",
+                "code": "tenant",
+                "path": "tenant",
+                "icon": "building-2",
+                "component": "/console/tenant/index",
+                "permissionCode": "tenant:list",
+                "sort": 650,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
+            },
+            {
                 "name": "订单管理",
                 "code": null,
                 "path": "order",
@@ -410,6 +446,18 @@
                         "isHidden": 0,
                         "type": 2,
                         "sourceType": 1
+                    },
+                    {
+                        "name": "企业微信机器人",
+                        "code": "channel-wecom-aibot",
+                        "path": "wecom-aibot",
+                        "icon": "",
+                        "component": "/console/channel/wecom-aibot/index",
+                        "permissionCode": "wecom-aibot-channel:list",
+                        "sort": 20,
+                        "isHidden": 0,
+                        "type": 2,
+                        "sourceType": 1
                     }
                 ]
             },
@@ -450,6 +498,18 @@
                         "sourceType": 1
                     }
                 ]
+            },
+            {
+                "name": "审计与成本治理",
+                "code": "audit-governance",
+                "path": "audit",
+                "icon": "shield-check",
+                "component": "/console/audit",
+                "permissionCode": "audit:dashboard",
+                "sort": 1200,
+                "isHidden": 0,
+                "type": 2,
+                "sourceType": 1
             },
             {
                 "name": "权限管理",

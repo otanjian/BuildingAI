@@ -12,8 +12,15 @@ export type AutomationRunStatus = (typeof AUTOMATION_RUN_STATUSES)[number];
 @Index("uq_automation_run_occurrence", ["jobId", "occurrenceKey"], { unique: true })
 @Index("idx_automation_run_job_created", ["jobId", "createdAt"])
 @Index("idx_automation_run_status", ["status", "createdAt"])
+@Index("idx_automation_run_tenant_project", ["tenantId", "projectId"])
 @Check("ck_automation_run_status", `"status" IN ('pending', 'queued', 'running', 'succeeded', 'failed', 'timed_out', 'cancelled', 'unknown', 'skipped')`)
 export class AutomationRun extends BaseEntity {
+    @Column({ type: "uuid", nullable: true, name: "tenant_id" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id" })
+    projectId: string | null;
+
     @Column({ type: "uuid", name: "job_id" })
     jobId: string;
 

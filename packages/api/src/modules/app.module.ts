@@ -57,6 +57,10 @@ import { TagModule } from "./tag/tag.module";
 import { TodoModule } from "./todo/todo.module";
 import { UploadModule } from "./upload/upload.module";
 import { UserModule } from "./user/user.module";
+import { TenantModule } from "./tenant/tenant.module";
+import { ToolGatewayModule } from "./tool-gateway/tool-gateway.module";
+import { AuditModule } from "./audit/audit.module";
+import { TenantContextGuard } from "@common/guards/tenant-context.guard";
 @Module({})
 export class AppModule {
     static async register(): Promise<DynamicModule> {
@@ -126,6 +130,9 @@ export class AppModule {
                 AnalyseModule,
                 SecretModule,
                 UserModule,
+                TenantModule,
+                ToolGatewayModule,
+                AuditModule,
                 CloudStorageModule,
                 ScheduleModule,
                 AutomationModule,
@@ -147,6 +154,10 @@ export class AppModule {
                 {
                     provide: APP_GUARD,
                     useClass: AgentGuard,
+                },
+                {
+                    provide: APP_GUARD,
+                    useClass: TenantContextGuard,
                 },
                 {
                     provide: APP_GUARD,

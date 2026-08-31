@@ -22,6 +22,7 @@ import {
     UserSubscription,
 } from "@buildingai/db/entities";
 import { Module } from "@nestjs/common";
+import { ToolGatewayModule } from "@modules/tool-gateway/tool-gateway.module";
 
 import { UserModule } from "../../user/user.module";
 import { FollowUpSuggestionsHandler } from "../agents/handlers/follow-up-suggestions";
@@ -55,6 +56,7 @@ import { ChatConfigService } from "./services/chat-config.service";
     imports: [
         AiMemoryModule,
         UserModule,
+        ToolGatewayModule,
         TypeOrmModule.forFeature([
             Agent,
             AgentChatRecord,

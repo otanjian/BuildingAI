@@ -1,6 +1,6 @@
 # @buildingai/upgrade
 
-Version upgrade scripts package for BuildingAI.
+Version upgrade scripts package for Bowi AI.
 
 ## Overview
 

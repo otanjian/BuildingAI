@@ -230,6 +230,15 @@ export interface ToolConfig {
     requireApproval?: boolean;
     /** 单个工具执行超时（毫秒，默认 30000） */
     toolTimeout?: number;
+    /** Controlled synchronous delegation to explicitly allowlisted Direct agents. */
+    agentDelegation?: AgentDelegationConfig;
+}
+
+export interface AgentDelegationConfig {
+    enabled?: boolean;
+    allowedAgentIds?: string[];
+    maxCallsPerTurn?: number;
+    timeoutMs?: number;
 }
 
 /**

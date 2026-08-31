@@ -525,7 +525,7 @@ export class OpencodeApiService {
 
     /**
      * List pending permission prompts (`GET /permission`).
-     * Headless serve has no TUI — BuildingAI must reply or the turn hangs.
+     * Headless serve has no TUI — Bowi AI must reply or the turn hangs.
      */
     async listPendingPermissions(
         params: {

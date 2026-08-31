@@ -5,8 +5,11 @@ import {
   useDeleteUserMutation,
   type User,
   useSetUserStatusMutation,
+  useTenantMembersQuery,
+  useTenantsQuery,
   useUsersListQuery,
 } from "@buildingai/services/console";
+import { useAuthStore, useTenantContextStore } from "@buildingai/stores";
 import { PermissionGuard } from "@buildingai/ui/components/auth/permission-guard";
 import { Avatar, AvatarImage } from "@buildingai/ui/components/ui/avatar";
 import { Badge } from "@buildingai/ui/components/ui/badge";
@@ -60,6 +63,10 @@ import { resolveUserListAvatar } from "./user-avatar";
 const PAGE_SIZE = 25;
 
 const UserListIndexPage = () => {
+  const activeTenantId = useTenantContextStore((state) => state.tenantContext.activeTenantId);
+  const { data: tenants } = useTenantsQuery();
+  const isRoot = useAuthStore((state) => Boolean(state.auth.userInfo?.isRoot));
+  const { data: activeTenantMembers } = useTenantMembersQuery(activeTenantId ?? "");
   const { copy, isCopying } = useCopy();
   const { confirm } = useAlertDialog();
   const [keyword, setKeyword] = useState("");
@@ -150,6 +157,14 @@ const UserListIndexPage = () => {
     }));
   };
 
+  const handleTenantChange = (value: string) => {
+    setQueryParams((prev) => ({
+      ...prev,
+      tenantId: value === "all" ? undefined : value,
+      page: 1,
+    }));
+  };
+
   return (
     <PageContainer>
       <div className="flex flex-1 flex-col gap-4">
@@ -170,6 +185,21 @@ const UserListIndexPage = () => {
               <SelectItem value={String(BooleanNumber.NO)}>已禁用</SelectItem>
             </SelectContent>
           </Select>
+          {isRoot && (
+            <Select value={queryParams.tenantId ?? "all"} onValueChange={handleTenantChange}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="所属租户" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部租户</SelectItem>
+                {tenants?.map((tenant) => (
+                  <SelectItem key={tenant.id} value={tenant.id}>
+                    {tenant.name}（{tenant.code}）
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         <div className="flex-1">
@@ -354,6 +384,13 @@ const UserListIndexPage = () => {
                     {user.role && <Badge variant="secondary">{user.role.name}</Badge>}
                     {user.isRoot === BooleanNumber.YES && (
                       <Badge variant="default">超级管理员</Badge>
+                    )}
+                    {activeTenantId && (
+                      <Badge variant="outline">
+                        {activeTenantMembers?.some((member) => member.user?.id === user.id)
+                          ? "当前租户成员"
+                          : "非当前租户成员"}
+                      </Badge>
                     )}
                     {user.membershipLevel && (
                       <Badge variant="secondary">

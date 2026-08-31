@@ -65,7 +65,9 @@ describe("AutomationBowiProvider", () => {
             "automation_run",
             "automation_delete",
         ]);
-        expect(provider.tools.every((tool) => tool.inputSchema.additionalProperties === false)).toBe(true);
+        expect(
+            provider.tools.every((tool) => tool.inputSchema.additionalProperties === false),
+        ).toBe(true);
     });
 
     it("binds create to the verified principal scope instead of model-supplied identity", async () => {
@@ -133,21 +135,45 @@ describe("AutomationBowiProvider", () => {
         const { provider, service } = harness();
         const p = principal();
         await provider.tools.find((item) => item.name === "automation_search")!.execute({}, p);
-        await provider.tools.find((item) => item.name === "automation_update")!.execute(
-            { taskId: "job-1", name: "Updated", expectedUpdatedAt: "2026-08-28T00:00:00.000Z" },
-            p,
-        );
-        await provider.tools.find((item) => item.name === "automation_run")!.execute(
-            { taskId: "job-1", idempotencyKey: "run-1" },
-            p,
-        );
-        await provider.tools.find((item) => item.name === "automation_delete")!.execute(
-            { taskId: "job-1", expectedUpdatedAt: "2026-08-28T00:00:00.000Z" },
-            p,
-        );
+        await provider.tools
+            .find((item) => item.name === "automation_update")!
+            .execute(
+                {
+                    taskId: "job-1",
+                    name: "Updated",
+                    prompt: "Updated prompt",
+                    deleteAfterRun: true,
+                    missedRunPolicy: "catch_up",
+                    overlapPolicy: "queue_one",
+                    timeoutSeconds: 1800,
+                    expectedUpdatedAt: "2026-08-28T00:00:00.000Z",
+                },
+                p,
+            );
+        await provider.tools
+            .find((item) => item.name === "automation_run")!
+            .execute({ taskId: "job-1", idempotencyKey: "run-1" }, p);
+        await provider.tools
+            .find((item) => item.name === "automation_delete")!
+            .execute({ taskId: "job-1", expectedUpdatedAt: "2026-08-28T00:00:00.000Z" }, p);
         expect(service.listForScope).toHaveBeenCalled();
-        expect(service.update).toHaveBeenCalled();
+        expect(service.update).toHaveBeenCalledWith(
+            expect.anything(),
+            "job-1",
+            expect.objectContaining({
+                prompt: "Updated prompt",
+                deleteAfterRun: true,
+                missedRunPolicy: "catch_up",
+                overlapPolicy: "queue_one",
+                timeoutSeconds: 1800,
+            }),
+        );
         expect(service.runOnce).toHaveBeenCalled();
-        expect(service.transitionForScope).toHaveBeenCalledWith(expect.anything(), "job-1", "cancel", "2026-08-28T00:00:00.000Z");
+        expect(service.transitionForScope).toHaveBeenCalledWith(
+            expect.anything(),
+            "job-1",
+            "cancel",
+            "2026-08-28T00:00:00.000Z",
+        );
     });
 });

@@ -6,6 +6,7 @@ import {
   useAutomationTasksQuery,
   useDeleteAutomationTaskMutation,
   useRunAutomationTaskMutation,
+  useUpdateAutomationTaskMutation,
 } from "@buildingai/services/web";
 import { Badge } from "@buildingai/ui/components/ui/badge";
 import { Button } from "@buildingai/ui/components/ui/button";
@@ -17,11 +18,12 @@ import {
 } from "@buildingai/ui/components/ui/empty";
 import { Skeleton } from "@buildingai/ui/components/ui/skeleton";
 import { useAlertDialog } from "@buildingai/ui/hooks/use-alert-dialog";
-import { CalendarClock, Play, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { CalendarClock, Pencil, Play, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { canDeleteAutomationTask, getAutomationStatusLabel } from "./status";
+import { EditAutomationDialog } from "./edit-automation-dialog";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -53,6 +55,7 @@ function statusVariant(status: AutomationJobStatus): "secondary" | "destructive"
 
 function TaskCard({ task }: { task: AutomationTask }) {
   const { confirm } = useAlertDialog();
+  const [editOpen, setEditOpen] = useState(false);
   const lifecycle = useAutomationTaskMutation({
     onSuccess: () => toast.success("任务状态已更新"),
     onError: (error) => toast.error(`操作失败：${error.message}`),
@@ -64,6 +67,13 @@ function TaskCard({ task }: { task: AutomationTask }) {
   const run = useRunAutomationTaskMutation({
     onSuccess: () => toast.success("任务已加入执行队列"),
     onError: (error) => toast.error(`执行失败：${error.message}`),
+  });
+  const update = useUpdateAutomationTaskMutation({
+    onSuccess: () => {
+      toast.success("任务已更新");
+      setEditOpen(false);
+    },
+    onError: (error) => toast.error(`更新失败：${error.message}`),
   });
 
   const action = useMemo(() => {
@@ -143,6 +153,17 @@ function TaskCard({ task }: { task: AutomationTask }) {
             <Button
               size="sm"
               variant="outline"
+              disabled={update.isPending}
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="size-3.5" />
+              编辑
+            </Button>
+          )}
+          {!["cancelled", "completed"].includes(task.status) && (
+            <Button
+              size="sm"
+              variant="outline"
               disabled={run.isPending}
               onClick={() => run.mutate({ id: task.id, idempotencyKey: crypto.randomUUID() })}
             >
@@ -163,6 +184,13 @@ function TaskCard({ task }: { task: AutomationTask }) {
           )}
         </div>
       </div>
+      <EditAutomationDialog
+        task={task}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSave={(input) => update.mutate({ id: task.id, ...input })}
+        isPending={update.isPending}
+      />
     </article>
   );
 }

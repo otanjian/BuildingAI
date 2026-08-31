@@ -18,6 +18,8 @@ import { StreamableMcpClient } from "./sap/streamable-mcp-client";
 import { PersonalTodoBowiProvider } from "../todo/mcp/personal-todo-bowi.provider";
 import { AutomationModule } from "../automation/automation.module";
 import { AutomationBowiProvider } from "../automation/mcp/automation-bowi.provider";
+import { SecretModule } from "@buildingai/core/modules";
+import { CredentialRuntimeResolver } from "@buildingai/core/modules";
 
 @Module({
     imports: [
@@ -25,6 +27,7 @@ import { AutomationBowiProvider } from "../automation/mcp/automation-bowi.provid
         DiscoveryModule,
         TodoModule,
         forwardRef(() => AutomationModule),
+        SecretModule,
     ],
     controllers: [BowiMcpController],
     providers: [
@@ -46,6 +49,7 @@ import { AutomationBowiProvider } from "../automation/mcp/automation-bowi.provid
         BowiMcpRegistry,
         BowiMcpRuntimeService,
         BowiMcpCatalogSyncService,
+        { provide: "CREDENTIAL_RUNTIME_RESOLVER", useExisting: CredentialRuntimeResolver },
     ],
     exports: [BowiMcpRegistry, BowiMcpRuntimeService],
 })

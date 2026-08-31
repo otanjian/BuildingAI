@@ -1,6 +1,5 @@
 import {
     closeMcpClients,
-    createClientsFromServerConfigs,
     getProvider,
     getReasoningOptions,
     type McpClient,
@@ -25,7 +24,7 @@ import {
     type ProcessFilesWriter,
     stripLocalhostFileParts,
 } from "@buildingai/ai-toolkit/utils";
-import { SecretService } from "@buildingai/core/modules";
+import { CredentialRuntimeResolver, SecretService } from "@buildingai/core/modules";
 import type { Agent, AiModel } from "@buildingai/db/entities";
 import { In } from "@buildingai/db/typeorm";
 import { HttpErrorFactory } from "@buildingai/errors";
@@ -36,7 +35,9 @@ import type { RequestAuthSource } from "@common/types/request-auth-context";
 import { buildBowiMcpHeaders } from "@modules/bowi-mcp/utils/bowi-agent-invocation";
 import type { BowiAutomationScope } from "@modules/bowi-mcp/types/bowi-mcp.types";
 import { UserService } from "@modules/user/services/user.service";
+import { ToolGatewayMcpBoundary } from "@modules/tool-gateway/services/tool-gateway-mcp-boundary.service";
 import { Injectable, Logger } from "@nestjs/common";
+import { ModuleRef } from "@nestjs/core";
 import type { LanguageModel, Tool, UIMessage } from "ai";
 import {
     convertToModelMessages,
@@ -48,8 +49,10 @@ import {
 } from "ai";
 import type { ServerResponse } from "http";
 import { validate as isUUID } from "uuid";
+import { z } from "zod";
 
 import { DatasetsRetrievalService } from "../../datasets/services/datasets-retrieval.service";
+import { buildRetrievalContext } from "../../datasets/services/tenant-aware-retrieval";
 import { AiMcpServerService } from "../../mcp/services/ai-mcp-server.service";
 import { MemoryService } from "../../memory/services/memory.service";
 import { MemoryExtractionService } from "../../memory/services/memory-extraction.service";
@@ -75,6 +78,7 @@ import { createSensitiveWordTransformStreamFromFilter } from "../utils/sensitive
 import { AgentChatMessageService } from "./agent-chat-message.service";
 import { AgentChatRecordService } from "./agent-chat-record.service";
 import { AgentsService } from "./agents.service";
+import { AgentVersionService } from "./agent-version.service";
 import type { UnattendedToolPolicy } from "../../../automation/domain/automation.types";
 
 type DataWriter = {
@@ -115,6 +119,12 @@ export interface AgentChatCompletionParams {
     mcpAuthSource?: RequestAuthSource;
     mcpConversationId?: string;
     mcpAutomationScope?: BowiAutomationScope;
+    tenantId?: string;
+    projectId?: string;
+    internalInvocation?: {
+        disableDelegation?: boolean;
+        billingConversationId?: string;
+    };
 }
 
 interface ResolvedModel {
@@ -159,6 +169,10 @@ export class AgentChatCompletionService {
         private readonly difyChatProvider: DifyChatProvider,
         private readonly opencodeChatProvider: OpencodeChatProvider,
         private readonly userService: UserService,
+        private readonly credentialResolver: CredentialRuntimeResolver,
+        private readonly toolGatewayMcpBoundary: ToolGatewayMcpBoundary,
+        private readonly agentVersionService: AgentVersionService,
+        private readonly moduleRef: ModuleRef,
     ) {}
 
     async streamChat(params: AgentChatCompletionParams, response: ServerResponse): Promise<void> {
@@ -174,6 +188,35 @@ export class AgentChatCompletionService {
                 where: { id: params.agentId },
             });
             if (!agent) throw HttpErrorFactory.notFound("智能体不存在");
+            // Resolve the immutable runtime snapshot first. Legacy agents are lazily
+            // reconciled to v1, so existing behavior remains unchanged until a release
+            // pointer is explicitly promoted.
+            try {
+                const version = await this.agentVersionService.resolve(params.agentId, {
+                    tenantId: params.tenantId ?? agent.tenantId ?? undefined,
+                    projectId: params.projectId ?? agent.projectId ?? undefined,
+                    actorId: params.userId,
+                    environment: "production",
+                });
+                if (version.snapshot && typeof version.snapshot === "object") {
+                    // Snapshots intentionally redact credentials. Apply only runtime-safe
+                    // configuration and retain live credential-bearing integration fields.
+                    const snapshot = version.snapshot as Record<string, unknown>;
+                    const safeKeys = [
+                        "name", "description", "rolePrompt", "modelConfig", "modelRouting",
+                        "contextConfig", "voiceConfig", "toolConfig", "memoryConfig",
+                        "annotationConfig", "showContext", "showReference", "enableWebSearch",
+                        "enableFileUpload", "autoQuestions", "openingStatement", "openingQuestions",
+                        "quickCommands", "formFields", "formFieldsInputs", "datasetIds", "mcpServerIds",
+                        "maxSteps",
+                    ];
+                    for (const key of safeKeys) {
+                        if (snapshot[key] !== undefined) (agent as unknown as Record<string, unknown>)[key] = snapshot[key];
+                    }
+                }
+            } catch (error) {
+                this.logger.warn(`Agent version resolution failed; preserving legacy runtime: ${String(error)}`);
+            }
             const policyFilter = createSensitiveWordFilter(agent.sensitiveWordConfig, agent.id);
             const turnParams = { ...params, sensitiveWordFilter: policyFilter };
             if (
@@ -421,6 +464,8 @@ export class AgentChatCompletionService {
                             userId: params.mcpUserId ?? params.userId,
                             agentId: params.agentId,
                             agentName: agent.name,
+                            tenantId: agent.tenantId || undefined,
+                            projectId: agent.projectId || undefined,
                             conversationId: params.mcpConversationId ?? conversationId,
                             authSource: params.mcpAuthSource ?? params.authSource ?? "anonymous",
                             automationScope: params.mcpAutomationScope,
@@ -450,6 +495,14 @@ export class AgentChatCompletionService {
                                 useToolForDocuments ? documentContents : undefined,
                                 planningContext,
                                 params.automationToolPolicy,
+                                {
+                                    id: params.userId,
+                                    tenantId: params.tenantId ?? agent.tenantId ?? undefined,
+                                    projectId: params.projectId ?? agent.projectId ?? undefined,
+                                    authSource: params.authSource,
+                                    parentConversationId: conversationId,
+                                    disableDelegation: params.internalInvocation?.disableDelegation,
+                                },
                             ),
                         };
 
@@ -516,8 +569,8 @@ export class AgentChatCompletionService {
                                         : baseUsage;
                                     if (
                                         !hasPendingApproval &&
-                                        saveConversation &&
-                                        conversationId &&
+                                        ((saveConversation && conversationId) ||
+                                            params.internalInvocation?.billingConversationId) &&
                                         params.userId &&
                                         chatModel?.dbModel?.billingRule &&
                                         billingUsage
@@ -526,7 +579,9 @@ export class AgentChatCompletionService {
                                             userConsumedPower =
                                                 await this.agentBillingHandler.deduct({
                                                     userId: params.userId,
-                                                    conversationId,
+                                                    conversationId:
+                                                        params.internalInvocation?.billingConversationId ??
+                                                        conversationId!,
                                                     agentId: params.agentId,
                                                     usage: billingUsage,
                                                     billingRule: chatModel.dbModel.billingRule,
@@ -826,8 +881,49 @@ export class AgentChatCompletionService {
         documentContents?: Array<{ filename: string; content: string }>,
         planningContext?: PlanningContext,
         automationToolPolicy?: UnattendedToolPolicy,
+        retrievalActor?: {
+            id: string;
+            tenantId?: string;
+            projectId?: string;
+            authSource?: RequestAuthSource;
+            parentConversationId?: string;
+            disableDelegation?: boolean;
+        },
     ): Record<string, Tool> {
         const tools: Record<string, Tool> = { ...mcpTools };
+
+        const invocationService =
+            !retrievalActor?.disableDelegation
+                ? this.moduleRef.get("AGENT_INVOCATION_SERVICE", { strict: false })
+                : undefined;
+        const delegationPolicy = invocationService?.getPolicy(agent);
+        if (agent.createMode === "direct" && delegationPolicy && delegationPolicy.allowedAgentIds.size > 0) {
+            let callCount = 0;
+            const allowedAgentIds = [...delegationPolicy.allowedAgentIds] as [string, ...string[]];
+            tools.invoke_agent = {
+                description:
+                    `Delegate a focused task to one explicitly allowlisted Direct agent. Use only when the child agent has the required specialization. The allowed target agent IDs are exact UUIDs: ${[...delegationPolicy.allowedAgentIds].join(", ")}. Never invent or substitute an ID.`,
+                inputSchema: z.object({
+                    agentId: z.enum(allowedAgentIds),
+                    task: z.string().min(1).max(4000),
+                    context: z.record(z.string(), z.unknown()).optional(),
+                }),
+                execute: async (input: { agentId: string; task: string; context?: Record<string, unknown> }) =>
+                    invocationService.invoke({
+                        parentAgent: agent,
+                        targetAgentId: input.agentId,
+                        task: input.task,
+                        context: input.context,
+                        userId: retrievalActor?.id ?? "",
+                        tenantId: retrievalActor?.tenantId,
+                        projectId: retrievalActor?.projectId,
+                        authSource: retrievalActor?.authSource ?? "login",
+                        parentConversationId: retrievalActor?.parentConversationId,
+                        callId: generateId(),
+                        callCount: callCount++,
+                    }),
+            } as Tool;
+        }
 
         tools.getWeather = getWeather;
 
@@ -840,10 +936,21 @@ export class AgentChatCompletionService {
                 retrieve: async (query: string) => {
                     const results = await Promise.all(
                         agent.datasetIds!.map((id) =>
-                            this.datasetsRetrievalService.retrieve(id, query).catch(() => ({
-                                chunks: [],
-                                totalTime: 0,
-                            })),
+                            this.datasetsRetrievalService
+                                .retrieve(
+                                    id,
+                                    query,
+                                    undefined,
+                                    undefined,
+                                    buildRetrievalContext({
+                                        tenantId: retrievalActor?.tenantId,
+                                        projectId: retrievalActor?.projectId,
+                                        actorId: retrievalActor?.id,
+                                        datasetIds: [id],
+                                        verified: true,
+                                    }),
+                                )
+                                .catch(() => ({ chunks: [], totalTime: 0 })),
                         ),
                     );
                     return {
@@ -1017,6 +1124,8 @@ export class AgentChatCompletionService {
             userId: string;
             agentId: string;
             agentName: string;
+            tenantId?: string;
+            projectId?: string;
             conversationId?: string;
             authSource: RequestAuthSource;
             automationScope?: BowiAutomationScope;
@@ -1029,24 +1138,34 @@ export class AgentChatCompletionService {
                 where: { id: In(mcpServerIds), isDisabled: false },
             });
 
-            const serverConfigs: McpServerConfig[] = mcpServers
+            const serverConfigs: McpServerConfig[] = await Promise.all(mcpServers
                 .filter((s) => s.url && s.communicationType)
-                .map((s) => ({
+                .map(async (s) => ({
                     id: s.id,
                     name: s.name,
                     description: s.description ?? undefined,
                     url: s.url,
                     communicationType: s.communicationType,
-                    headers: buildBowiMcpHeaders({
+                    headers: s.credentialRef
+                        ? {
+                              Authorization: `Bearer ${await this.credentialResolver.resolve(s.credentialRef, {
+                                  tenantId: invocation?.tenantId || s.tenantId || (() => { throw new Error("MCP credential tenant scope is missing"); })(),
+                                  projectId: invocation?.projectId ?? s.projectId,
+                                  environment: "production",
+                                  resource: "mcp",
+                                  action: "connect",
+                              })}`,
+                          }
+                        : buildBowiMcpHeaders({
                         serverName: s.name,
                         existing: s.headers ?? undefined,
                         invocation,
                     }),
-                }));
+                })));
 
             if (!serverConfigs.length) return { clients: [], tools: {} };
 
-            const clients = await createClientsFromServerConfigs(serverConfigs);
+            const clients = await this.toolGatewayMcpBoundary.createClients(serverConfigs);
             const tools = await mergeMcpTools(clients);
             return { clients, tools };
         } catch (error) {

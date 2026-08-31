@@ -1,4 +1,5 @@
 import type { FeishuChannelConfig } from "./feishu-channel.types";
+import { parsePublishedAgentStreamEvent } from "../shared/published-agent-chat.client";
 
 export interface AgentStreamEvent {
     type?: string;
@@ -54,15 +55,7 @@ export function buildFeishuAnonymousIdentifier(agentId: string, chatId: string):
 
 /** Parse one UI-message SSE data line from the published agent endpoint. */
 export function parseAgentStreamEvent(line: string): AgentStreamEvent | undefined {
-    const match = line.match(/^data:\s*(.+)$/);
-    if (!match || match[1] === "[DONE]") return undefined;
-    try {
-        const parsed = JSON.parse(match[1]) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-        return parsed as AgentStreamEvent;
-    } catch {
-        return undefined;
-    }
+    return parsePublishedAgentStreamEvent(line);
 }
 
 /** Build a Feishu CardKit card configured for native typewriter updates. */

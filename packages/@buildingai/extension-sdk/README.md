@@ -1,6 +1,6 @@
 # @buildingai/extension-sdk
 
-BuildingAI 插件开发 SDK,提供统一的配置和工具函数。
+Bowi AI 插件开发 SDK,提供统一的配置和工具函数。
 
 ## 功能
 

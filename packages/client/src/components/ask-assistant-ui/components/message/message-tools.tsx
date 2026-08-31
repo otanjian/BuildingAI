@@ -8,6 +8,7 @@ import { GenericTool } from "../tools/generic-tool";
 import { ImageGenerationTool } from "../tools/image-generation-tool";
 import { KnowledgeReferences } from "../tools/knowledge-references";
 import { PlanTool } from "../tools/plan-tool";
+import { DelegatedAgentTool } from "../tools/delegated-agent-tool";
 import { WeatherTool } from "../tools/weather-tool";
 import {
   isInteractiveQuestionToolPart,
@@ -111,6 +112,14 @@ function renderToolPart(
         addToolApprovalResponse={addToolApprovalResponse}
       />
     );
+  }
+
+  const isDelegatedAgent =
+    part.type === "tool-invoke_agent" ||
+    (part.type === "dynamic-tool" &&
+      (part as unknown as { toolName?: string }).toolName === "invoke_agent");
+  if (isDelegatedAgent) {
+    return <DelegatedAgentTool key={key} toolPart={toolPart} />;
   }
 
   const toolName =

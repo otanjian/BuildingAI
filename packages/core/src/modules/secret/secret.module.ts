@@ -2,10 +2,13 @@ import { TypeOrmModule } from "@buildingai/db/@nestjs/typeorm";
 import { AiProvider } from "@buildingai/db/entities";
 import { SecretTemplate } from "@buildingai/db/entities";
 import { Secret } from "@buildingai/db/entities";
+import { Credential, CredentialVersion } from "@buildingai/db/entities";
 import { Global, Module } from "@nestjs/common";
 
 import { SecretService } from "./services/secret.service";
 import { SecretTemplateService } from "./services/secret-template.service";
+import { CredentialCryptoService } from "./crypto/credential-crypto";
+import { CredentialRuntimeResolver } from "./services/credential-runtime-resolver.service";
 
 /**
  * Secret Module (Global)
@@ -28,12 +31,14 @@ import { SecretTemplateService } from "./services/secret-template.service";
  */
 @Global()
 @Module({
-    imports: [TypeOrmModule.forFeature([Secret, SecretTemplate, AiProvider])],
-    providers: [SecretTemplateService, SecretService],
+    imports: [TypeOrmModule.forFeature([Secret, SecretTemplate, AiProvider, Credential, CredentialVersion])],
+    providers: [SecretTemplateService, SecretService, CredentialCryptoService, CredentialRuntimeResolver],
     exports: [
         SecretTemplateService,
         SecretService,
-        TypeOrmModule.forFeature([Secret, SecretTemplate, AiProvider]),
+        CredentialCryptoService,
+        CredentialRuntimeResolver,
+        TypeOrmModule.forFeature([Secret, SecretTemplate, AiProvider, Credential, CredentialVersion]),
     ],
 })
 export class SecretModule {}

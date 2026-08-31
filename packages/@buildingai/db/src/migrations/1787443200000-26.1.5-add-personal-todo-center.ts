@@ -21,7 +21,7 @@ export interface PersonalTodoMenuConfig {
 }
 
 export function addPersonalTodoMenu(config: PersonalTodoMenuConfig): boolean {
-    if (!Array.isArray(config.menus)) return false;
+    if (!Array.isArray(config?.menus)) return false;
     if (config.menus.some((item) => item.id === TODO_MENU_ID)) return false;
     const historyIndex = config.menus.findIndex((item) => item.id === "menu_history_fixed");
     config.menus.splice(historyIndex >= 0 ? historyIndex : config.menus.length, 0, TODO_MENU);
@@ -29,7 +29,7 @@ export function addPersonalTodoMenu(config: PersonalTodoMenuConfig): boolean {
 }
 
 export function removePersonalTodoMenu(config: PersonalTodoMenuConfig): boolean {
-    if (!Array.isArray(config.menus)) return false;
+    if (!Array.isArray(config?.menus)) return false;
     const next = config.menus.filter((item) => item.id !== TODO_MENU_ID);
     if (next.length === config.menus.length) return false;
     config.menus = next;

@@ -37,7 +37,7 @@ describe("SapConnectionProfileService", () => {
                 sap_language: "EN",
             }),
         };
-        const service = new SapConnectionProfileService(userDict as never);
+        const service = new SapConnectionProfileService(userDict as never, undefined);
 
         const profile = await service.resolvePyrfc(principal("user-1"));
 
@@ -61,7 +61,7 @@ describe("SapConnectionProfileService", () => {
                 sap_client: "300",
             }),
         };
-        const service = new SapConnectionProfileService(userDict as never);
+        const service = new SapConnectionProfileService(userDict as never, undefined);
 
         const profile = await service.resolvePyrfc(principal("user-1"));
 
@@ -81,7 +81,7 @@ describe("SapConnectionProfileService", () => {
 
     it("rejects missing subjects and incomplete profiles", async () => {
         const userDict = { getGroupValues: jest.fn().mockResolvedValue({}) };
-        const service = new SapConnectionProfileService(userDict as never);
+        const service = new SapConnectionProfileService(userDict as never, undefined);
 
         await expect(service.resolvePyrfc(principal())).rejects.toBeInstanceOf(SapProfileError);
         await expect(service.resolvePyrfc(principal("user-1"))).rejects.toMatchObject({
@@ -90,7 +90,7 @@ describe("SapConnectionProfileService", () => {
     });
 
     it("requires an explicit switch before using the ADT service profile", () => {
-        const service = new SapConnectionProfileService({} as never);
+        const service = new SapConnectionProfileService({} as never, undefined);
         expect(() => service.requireAdtServiceProfile(principal("user-1"))).toThrow(
             "ADT service profile is disabled",
         );

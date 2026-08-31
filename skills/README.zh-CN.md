@@ -221,7 +221,7 @@ pnpm skills lint
 
 ### project-architecture
 
-**作用**：BuildingAI monorepo 项目结构和架构指南。
+**作用**：Bowi AI monorepo 项目结构和架构指南。
 
 **使用场景**：
 

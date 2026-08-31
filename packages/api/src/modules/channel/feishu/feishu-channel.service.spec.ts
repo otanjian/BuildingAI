@@ -156,6 +156,70 @@ describe("FeishuChannelService", () => {
         ).rejects.toThrow("Agent access token is required");
     });
 
+    it("tests a saved connection without recursing through the legacy test entrypoint", async () => {
+        const connection = {
+            id: "connection-1",
+            agentId: "agent-1",
+            appId: "cli_1234567890abcdef",
+            appSecretEncrypted: "app-secret-ciphertext",
+            agentAccessTokenEncrypted: "agent-token-ciphertext",
+            credentialRef: null,
+            enabled: true,
+            onlyMentioned: true,
+            migrationStatus: "legacy",
+            agent: { id: "agent-1", name: "Agent", createMode: "direct" },
+        };
+        const repository = {
+            findOne: jest.fn().mockResolvedValue(connection),
+            find: jest.fn().mockResolvedValue([connection]),
+        };
+        const service = new FeishuChannelService(
+            {} as never,
+            {} as never,
+            { findOne: jest.fn().mockResolvedValue(connection.agent) } as never,
+            undefined,
+            repository as never,
+            undefined,
+        );
+        (service as any).decryptSecret = jest.fn((value: string) =>
+            value === connection.appSecretEncrypted ? "app-secret" : "agent-token",
+        );
+        const fetchMock = jest
+            .spyOn(global, "fetch")
+            .mockResolvedValue(new Response(JSON.stringify({ code: 0 }), { status: 200 }));
+
+        await expect(
+            service.testConnection({ connectionId: connection.id }),
+        ).resolves.toEqual({ success: true });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        fetchMock.mockRestore();
+    });
+
+    it("returns a timeout error when Feishu credential auth does not respond", async () => {
+        const { service } = makeService();
+        jest.useFakeTimers();
+        const fetchMock = jest
+            .spyOn(global, "fetch")
+            .mockImplementation((_url, init) =>
+                new Promise<Response>((_resolve, reject) => {
+                    init?.signal?.addEventListener("abort", () =>
+                        reject(new DOMException("Aborted", "AbortError")),
+                    );
+                }),
+            );
+        const resultPromise = service.test({
+            agentId: "agent-1",
+            appId: "cli_1234567890abcdef",
+            appSecret: "secret",
+            agentAccessToken: "token",
+        });
+        const result = resultPromise.catch((error) => error);
+        await jest.advanceTimersByTimeAsync(10_001);
+        await expect(result).resolves.toMatchObject({ message: expect.stringMatching(/timed out/i) });
+        fetchMock.mockRestore();
+        jest.useRealTimers();
+    });
+
     it("does not route an OpenCode event to the public endpoint", async () => {
         const { service } = makeService({
             id: "agent-legacy",
@@ -280,7 +344,7 @@ describe("FeishuChannelService", () => {
         expect(redisService.set).toHaveBeenCalledWith("feishu:event:agent-1:event-1", "1", 600);
     });
 
-    it("maps the Feishu sender name to a BuildingAI user for the current turn", async () => {
+    it("maps the Feishu sender name to a Bowi AI user for the current turn", async () => {
         const previousSecret = process.env.BOWI_MCP_INVOCATION_SECRET;
         const previousDomain = process.env.APP_DOMAIN;
         process.env.BOWI_MCP_INVOCATION_SECRET = "feishu-test-secret";
@@ -540,6 +604,46 @@ describe("FeishuChannelService", () => {
             expect.objectContaining({ data: expect.objectContaining({ msg_type: "text" }) }),
         );
         fetchMock.mockRestore();
+    });
+
+    it("releases the event claim when both processing and the fallback reply fail", async () => {
+        const { service, redisService } = makeService();
+        const callAgent = jest.spyOn(service as any, "callAgentStreaming") as jest.Mock;
+        callAgent
+            .mockRejectedValueOnce(new Error("upstream unavailable"))
+            .mockResolvedValueOnce({ answer: "answer" });
+        const reply = jest
+            .fn()
+            .mockRejectedValueOnce(new Error("Feishu reply unavailable"))
+            .mockResolvedValue(undefined);
+        const client = { im: { v1: { message: { reply } } } };
+        const event = {
+            event_id: "event-retry-1",
+            message: {
+                message_id: "message-retry-1",
+                chat_id: "chat-1",
+                chat_type: "p2p",
+                message_type: "text",
+                content: JSON.stringify({ text: "你能做什么" }),
+            },
+        };
+        const config = {
+            agentId: "agent-1",
+            appId: "cli_1234567890abcdef",
+            appSecret: "secret",
+            agentAccessToken: "token",
+            enabled: true,
+            onlyMentioned: false,
+        };
+
+        await (service as any).handleEvent(config, client, event);
+        await (service as any).handleEvent(config, client, event);
+
+        expect(callAgent).toHaveBeenCalledTimes(2);
+        expect(reply).toHaveBeenCalledTimes(2);
+        expect(redisService.del).toHaveBeenCalledWith(
+            "feishu:event:agent-1:event-retry-1",
+        );
     });
 
     it("reports an invalid Feishu app ID instead of hanging in connecting", async () => {

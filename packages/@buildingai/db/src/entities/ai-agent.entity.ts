@@ -16,7 +16,7 @@ import type {
 
 import { AppEntity } from "../decorators/app-entity.decorator";
 import { NormalizeFileUrl } from "../decorators/file-url.decorator";
-import { Column, JoinTable, ManyToMany } from "../typeorm";
+import { Column, Index, JoinTable, ManyToMany } from "../typeorm";
 import { BaseEntity } from "./base";
 import { SquarePublishStatus } from "./square-publish-status.enum";
 import type { Tag } from "./tag.entity";
@@ -25,6 +25,7 @@ import type { Tag } from "./tag.entity";
  * 智能体实体
  */
 @AppEntity({ name: "ai_agent", comment: "智能体管理" })
+@Index("idx_ai_agent_tenant_project", ["tenantId", "projectId"])
 export class Agent extends BaseEntity {
     /**
      * 智能体名称
@@ -325,6 +326,13 @@ export class Agent extends BaseEntity {
     })
     createBy: string;
 
+    /** Verified enterprise scope. Nullable during the compatibility migration window. */
+    @Column({ type: "uuid", nullable: true, name: "tenant_id" })
+    tenantId: string | null;
+
+    @Column({ type: "uuid", nullable: true, name: "project_id" })
+    projectId: string | null;
+
     /**
      * 广场可见性
      *
@@ -338,8 +346,12 @@ export class Agent extends BaseEntity {
     publishConfig?: {
         enableSite?: boolean;
         accessToken?: string | null;
+        accessTokenHash?: string | null;
+        accessTokenCredentialRef?: string | null;
         enableApiKey?: boolean;
         apiKey?: string | null;
+        apiKeyHash?: string | null;
+        apiKeyCredentialRef?: string | null;
         allowCopy?: boolean;
         wxcomConfig?: AgentWxcomConfig;
     };

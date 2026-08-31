@@ -2,7 +2,7 @@
 
 ## Purpose
 
-BuildingAI application extension `ehcs-ai`: console API under `/ehcs-ai/console`, web SPA under `/extension/ehcs-ai`, registered in app center as `/apps/ehcs-ai` (iframe).
+Bowi AI application extension `ehcs-ai`: console API under `/ehcs-ai/console`, web SPA under `/extension/ehcs-ai`, registered in app center as `/apps/ehcs-ai` (iframe).
 ## Requirements
 ### Requirement: Extension package exists and is registrable
 
@@ -30,4 +30,3 @@ Extension REST controllers SHALL be served under `/ehcs-ai/console` using `@Exte
 
 - **WHEN** an authenticated user calls `GET /ehcs-ai/console/dashboard/summary`
 - **THEN** the response is JSON from the ehcs-ai module (not 404)
-
